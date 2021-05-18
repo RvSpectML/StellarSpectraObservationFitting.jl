@@ -352,7 +352,7 @@ function initialize!(tfom::TFOrderModel, tfd::TFData; min::Number=0, max::Number
 	tfom.star.lm.μ[:] = make_template(flux_star; min=μ_min, max=μ_max)
 	_, M_star, s_star, rvs_notel =
 	    DEMPCA(flux_star, tfom.star.λ, 1 ./ vars_star; template=tfom.star.lm.μ, num_components=n_comp_star, kwargs...)
-	fracvar_star = fracvar(flux_star .- tfom.star.lm.μ, M_star, s_star)
+	fracvar_star = fracvar(flux_star .- tfom.star.lm.μ, M_star, s_star, 1 ./ vars_star)
 
 	# telluric model with updated stellar template
 	if use_gp
@@ -366,7 +366,7 @@ function initialize!(tfom::TFOrderModel, tfd::TFData; min::Number=0, max::Number
 	tfom.tel.lm.μ[:] = make_template(flux_tel; min=μ_min, max=μ_max)
 	Xtmp = flux_tel .- tfom.tel.lm.μ
 	EMPCA!(tfom.tel.lm.M, Xtmp, tfom.tel.lm.s, 1 ./ vars_tel; kwargs...)
-	fracvar_tel = fracvar(Xtmp, tfom.tel.lm.M, tfom.tel.lm.s)
+	fracvar_tel = fracvar(Xtmp, tfom.tel.lm.M, tfom.tel.lm.s, 1 ./ vars_tel)
 
 	tfom.star.lm.M[:, :], tfom.star.lm.s[:] = M_star[:, 2:end], s_star[2:end, :]
 	tfom.rv.lm.M[:, :], tfom.rv.lm.s[:] = M_star[:, 1], s_star[1, :]'

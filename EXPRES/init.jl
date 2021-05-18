@@ -129,10 +129,9 @@ tf_data = SSOF.TFData(flux_obs, var_obs, log_λ_obs, log_λ_star)
 star_model_res = 2 * sqrt(2) * obs_resolution
 tel_model_res = 2 * sqrt(2) * obs_resolution
 
-@time tf_model = tf.TFOrderModel(tf_data, star_model_res, tel_model_res, "EXPRES", desired_order; n_comp_tel=10, n_comp_star=10)
-@time rvs_notel, rvs_naive, fracvar_tel, fracvar_star = tf.initialize!(tf_model, tf_data; use_gp=true)
-tf_model = tf.downsize(tf_model, tf.n_comps_needed(tf_model.tel), tf.n_comps_needed(tf_model.star))
-# tf_model = tf.downsize(tf_model, 1, 1)
+@time tf_model = SSOF.TFOrderModel(tf_data, star_model_res, tel_model_res, "EXPRES", desired_order; n_comp_tel=10, n_comp_star=10)
+@time rvs_notel, rvs_naive, fracvar_tel, fracvar_star = SSOF.initialize!(tf_model, tf_data; use_gp=true)
+
 
 @save expres_data_path * star * ".jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 

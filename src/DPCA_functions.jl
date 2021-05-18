@@ -179,3 +179,7 @@ function fracvar(X::AbstractVecOrMat, M::AbstractVecOrMat, s::AbstractVecOrMat)
 	var_tot = sum(abs2, X)
 	return [sum(abs2, X - view(M, :, 1:i) * view(s, 1:i, :)) for i in 1:size(M, 2)] ./ var_tot
 end
+function fracvar(X::AbstractVecOrMat, M::AbstractVecOrMat, s::AbstractVecOrMat, weights::AbstractVecOrMat)
+	var_tot = sum(abs2, X .* weights)
+	return [sum(abs2, (X - view(M, :, 1:i) * view(s, 1:i, :)) .* weights) for i in 1:size(M, 2)] ./ var_tot
+end
