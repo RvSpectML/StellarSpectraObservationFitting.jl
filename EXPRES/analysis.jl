@@ -9,7 +9,7 @@ import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 using Plots
 
 stars = ["10700", "26965"]
-star = stars[1]
+star = stars[2]
 plot_stuff = true
 plot_stuff_fit = true
 use_telstar = true
@@ -83,7 +83,7 @@ plot_telluric_model_bases(tf_model)
 
 ## Plots
 
-
+@save expres_data_path * star * ".jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 if plot_stuff
     include("../src/_plot_functions.jl")
     fig_dir = "EXPRES/figs/" * star * "_"
@@ -104,7 +104,3 @@ if plot_stuff
     predict_plot = plot_telluric_model_scores(tf_model)
     png(predict_plot, fig_dir * "model_tel_weights.png")
 end
-
-std(rvs_naive)
-std(rvs_notel)
-std(rvs_notel_opt)

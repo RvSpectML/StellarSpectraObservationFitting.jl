@@ -141,6 +141,7 @@ struct TFSubmodel{T<:Number}
 end
 (tfsm::TFSubmodel)(inds::AbstractVecOrMat) =
 	TFSubmodel(tfsm.log_λ, tfsm.λ, tfsm.lm(inds))
+(tfsm::TFSubmodel)() = tfsm.lm()
 
 function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 	n_obs = size(log_λ_obs_from, 2)
@@ -277,7 +278,6 @@ function build_gp(θ)
 end
 
 SOAP_gp = build_gp([3.3270754364467443, 9.021560480866474e-5])
-
 
 function _spectra_interp_gp!(fluxes, vars, log_λ, flux_obs, var_obs, log_λ_obs; gp_mean::Number=1.)
 	for i in 1:size(flux_obs, 2)
