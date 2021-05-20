@@ -62,17 +62,20 @@ if !tf_model.todo[:reg_improved]
     @save expres_data_path * star * ".jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 end
 
-@time for i in 1:8
-    SSOF.train_TFOrderModel!(tf_workspace)
-    rvs_notel_opt[:] = (tf_model.rv.lm.s .* light_speed_nu)'
+if !tf_model.todo[:optimized]
+    @time for i in 1:8
+        SSOF.train_TFOrderModel!(tf_workspace)
+        rvs_notel_opt[:] = (tf_model.rv.lm.s .* light_speed_nu)'
 
-    append!(resid_stds, [std(rvs_notel_opt)])
-    append!(losses, [loss()])
-    if plot_stuff_fit; status_plot(tf_output, tf_data) end
-    tracker += 1
-    println("guess $tracker")
-    println("loss   = $(losses[end])")
-    println("rv std = $(round(std(rvs_notel_opt), digits=5))")
+        append!(resid_stds, [std(rvs_notel_opt)])
+        append!(losses, [loss()])
+        if plot_stuff_fit; status_plot(tf_output, tf_data) end
+        tracker += 1
+        println("guess $tracker")
+        println("loss   = $(losses[end])")
+        println("rv std = $(round(std(rvs_notel_opt), digits=5))")
+    end
+    @save expres_data_path * star * ".jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 end
 
 plot(0:tracker, resid_stds; xlabel="iter", ylabel="predicted RV - active RV RMS", legend=false)
@@ -83,7 +86,6 @@ plot_telluric_model_bases(tf_model)
 
 ## Plots
 
-@save expres_data_path * star * ".jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 if plot_stuff
     include("../src/_plot_functions.jl")
     fig_dir = "EXPRES/figs/" * star * "_"
