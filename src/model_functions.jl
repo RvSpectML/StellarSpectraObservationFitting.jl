@@ -104,6 +104,8 @@ struct FullLinearModel{T<:Number} <: LinearModel
 		return new{T}(M, s, μ)
 	end
 end
+LinearModel(flm::FullLinearModel, inds::AbstractVecOrMat) =
+	FullLinearModel(flm.M, view(flm.s, :, inds), flm.μ)
 # Base (no mean) linear model
 struct BaseLinearModel{T<:Number} <: LinearModel
 	M::AbstractMatrix{T}
@@ -113,12 +115,15 @@ struct BaseLinearModel{T<:Number} <: LinearModel
 		return new{T}(M, s)
 	end
 end
-_eval_lm(M, s) = M * s
-_eval_full_lm(M, s, μ) = _eval_lm(M, s) .+ μ
-(flm::FullLinearModel)() = _eval_full_lm(flm.M, flm.s, flm.μ)
-(blm::BaseLinearModel)() = _eval_lm(blm.M, blm.s)
-(flm::FullLinearModel)(inds::AbstractVecOrMat) = FullLinearModel(flm.M, view(flm.s, :, inds), flm.μ)
-(blm::BaseLinearModel)(inds::AbstractVecOrMat) = BaseLinearModel(blm.M, view(blm.s, :, inds))
+LinearModel(blm::BaseLinearModel, inds::AbstractVecOrMat) =
+	BaseLinearModel(blm.M, view(blm.s, :, inds))
+_eval_blm(M::AbstractVecOrMat, s::AbstractVecOrMat) = M * s
+_eval_flm(M::AbstractVecOrMat, s::AbstractVecOrMat, μ::AbstractVector) =
+	_eval_blm(M, s) .+ μ
+(flm::FullLinearModel)() = _eval_flm(flm.M, flm.s, flm.μ)
+(blm::BaseLinearModel)() = _eval_blm(blm.M, blm.s)
+(flm::FullLinearModel)(inds::AbstractVecOrMat) = _eval_flm(view(flm.M, inds, :), flm.s, flm.μ)
+(blm::BaseLinearModel)(inds::AbstractVecOrMat) = _eval_blm(view(blm.M, inds, :), blm.s)
 
 struct TFSubmodel{T<:Number}
     log_λ::AbstractVector{T}
@@ -140,7 +145,7 @@ struct TFSubmodel{T<:Number}
     end
 end
 (tfsm::TFSubmodel)(inds::AbstractVecOrMat) =
-	TFSubmodel(tfsm.log_λ, tfsm.λ, tfsm.lm(inds))
+	TFSubmodel(tfsm.log_λ, tfsm.λ, LinearModel(tfsm.lm, inds))
 (tfsm::TFSubmodel)() = tfsm.lm()
 
 function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
@@ -198,7 +203,7 @@ struct TFOrderModel{T<:Number}
 			(:L1_μ₊_factor, 2), (:L2_M, 1e7), (:L1_M, 1e4)])
 		reg_star = Dict([(:L2_μ, 1e3), (:L1_μ, 1e-1),
 			(:L1_μ₊_factor, 2), (:L2_M, 1e7), (:L1_M, 1e6)])
-		todo = Dict([(:reg_improved, false), (:extra_chop, false)])
+		todo = Dict([(:reg_improved, false), (:extra_chop, false), (:optimized, false)])
         return TFOrderModel(tel, star, rv, reg_tel, reg_star, lih_t2b, lih_b2t,
 			lih_o2b, lih_b2o, lih_t2o, lih_o2t, todo, instrument, order)
     end
@@ -234,20 +239,20 @@ star_prior(tfom::TFOrderModel) = model_prior(tfom.star.lm, tfom.reg_star)
 spectra_interp(og_vals::AbstractMatrix, lih) =
     (og_vals[lih.li] .* (1 .- lih.ratios)) + (og_vals[lih.li .+ 1] .* (lih.ratios))
 
-tel_model(tfom) = spectra_interp(tfom.tel.lm(), tfom.lih_t2o)
-star_model(tfom) = spectra_interp(tfom.star.lm(), tfom.lih_b2o)
-rv_model(tfom) = spectra_interp(tfom.rv.lm(), tfom.lih_b2o)
+tel_model(tfom) = spectra_interp(tfom.tel(), tfom.lih_t2o)
+star_model(tfom) = spectra_interp(tfom.star(), tfom.lih_b2o)
+rv_model(tfom) = spectra_interp(tfom.rv(), tfom.lih_b2o)
 
 
 function fix_FullLinearModel_s!(flm, min::Number, max::Number)
 	@assert all(min .< flm.μ .< max)
 	result = ones(typeof(flm.μ[1]), length(flm.μ))
 	for i in 1:size(flm.s, 2)
-		result[:] = _eval_full_lm(flm.M, flm.s[:, i], flm.μ)
+		result[:] = _eval_flm(flm.M, flm.s[:, i], flm.μ)
 		while any(result .> max) || any(result .< min)
 			# println("$i, old s: $(lm.s[:, i]), min: $(minimum(result)), max:  $(maximum(result))")
 			flm.s[:, i] ./= 2
-			result[:] = _eval_full_lm(flm.M, flm.s[:, i], flm.μ)
+			result[:] = _eval_flm(flm.M, flm.s[:, i], flm.μ)
 			# println("$i, new s: $(lm.s[:, i]), min: $(minimum(result)), max:  $(maximum(result))")
 		end
 	end
