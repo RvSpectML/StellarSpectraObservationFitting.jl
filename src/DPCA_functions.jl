@@ -175,11 +175,15 @@ function DEMPCA(spectra::Matrix{T}, λs::Vector{T}, weights::Matrix{T};
     return fit_empca_rv(spectra, doppler_comp, weights; mu=template, kwargs...)
 end
 
+_fracvar(X::AbstractVecOrMat, Y::AbstractVecOrMat; var_tot=sum(abs2, X)) =
+	sum(abs2, X - Y) / var_tot
+_fracvar(X::AbstractVecOrMat, Y::AbstractVecOrMat, weights::AbstractVecOrMat; var_tot=sum(abs2, X .* weights)) =
+	sum(abs2, (X - Y) .* weights) / var_tot
 function fracvar(X::AbstractVecOrMat, M::AbstractVecOrMat, s::AbstractVecOrMat)
 	var_tot = sum(abs2, X)
-	return [sum(abs2, X - view(M, :, 1:i) * view(s, 1:i, :)) for i in 1:size(M, 2)] ./ var_tot
+	return [_fracvar(X, view(M, :, 1:i) * view(s, 1:i, :); var_tot=var_tot) for i in 1:size(M, 2)]
 end
 function fracvar(X::AbstractVecOrMat, M::AbstractVecOrMat, s::AbstractVecOrMat, weights::AbstractVecOrMat)
 	var_tot = sum(abs2, X .* weights)
-	return [sum(abs2, (X - view(M, :, 1:i) * view(s, 1:i, :)) .* weights) for i in 1:size(M, 2)] ./ var_tot
+	return [_fracvar(X, view(M, :, 1:i) * view(s, 1:i, :), weights; var_tot=var_tot) for i in 1:size(M, 2)]
 end
