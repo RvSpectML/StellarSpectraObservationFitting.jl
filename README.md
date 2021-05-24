@@ -5,7 +5,7 @@ StellarSpectraObservationFitting (SSOF) is a Julia package for creating data-dri
 
 # Installation
 
-This package is in rapid development so do not expect any stability yet, but the current version can be installed with the
+This package is in rapid development so do not expect any stability yet, but the current version can be installed with the following
 
 ```julia]
 using Pkg
