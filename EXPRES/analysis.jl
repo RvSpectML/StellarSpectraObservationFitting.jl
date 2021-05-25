@@ -14,10 +14,10 @@ plot_stuff = true
 plot_stuff_fit = true
 use_telstar = true
 expres_data_path = "E:/telfitting/"
-
+desired_order = 47  # 68 has a bunch of tels, 47 has very few
 ## Setting up necessary variables and functions
 
-@load expres_data_path * star * ".jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
+@load expres_data_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 
 tf_output = SSOF.TFOutput(tf_model)
 
@@ -28,20 +28,7 @@ else
 end
 
 if plot_stuff_fit
-    plot_spectrum(; kwargs...) = plot(; xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux", dpi = 400, kwargs...)
-    plot_rv(; kwargs...) = plot(; xlabel = "Time (d)", ylabel = "RV (m/s)", dpi = 400, kwargs...)
-
-    function status_plot(tfo::SSOF.TFOutput, tfd::SSOF.TFData; plot_epoch::Int=10, tracker::Int=0)
-        obs_λ = exp.(tfd.log_λ_obs[:, plot_epoch])
-        l = @layout [a; b]
-        predict_plot = plot_spectrum(; legend = :bottomleft, size=(800,1200), layout = l)
-        plot!(predict_plot[1], obs_λ, tfd.flux[:, plot_epoch] ./ (tfo.star[:, plot_epoch] + tfo.rv[:, plot_epoch]), label="predicted tel", alpha = 0.5)
-        plot!(predict_plot[1], obs_λ, tfo.tel[:, plot_epoch], label="model tel: $tracker", alpha = 0.5)
-        plot_star_λs = exp.(tfd.log_λ_star[:, plot_epoch])
-        plot!(predict_plot[2], plot_star_λs, tfd.flux[:, plot_epoch] ./ tfo.tel[:, plot_epoch], label="predicted star", alpha = 0.5)
-        plot!(predict_plot[2], plot_star_λs, tfo.star[:, plot_epoch] + tfo.rv[:, plot_epoch], label="model star: $tracker", alpha = 0.5)
-        display(predict_plot)
-    end
+    include("../src/_plot_functions.jl")
     status_plot(tf_output, tf_data)
 end
 
@@ -53,13 +40,14 @@ tracker = 0
 println("guess $tracker, std=$(round(std(rvs_notel), digits=5))")
 rvs_notel_opt = copy(rvs_notel)
 
-if !tf_model.todo[:reg_improved]
+@time if !tf_model.todo[:reg_improved]
     using StatsBase
     n_obs_train = Int(round(0.75 * n_obs))
     training_inds = sort(sample(1:n_obs, n_obs_train; replace=false))
     SSOF.fit_regularization!(tf_model, tf_data, training_inds; use_telstar=use_telstar)
     tf_model.todo[:reg_improved] = true
-    @save expres_data_path * star * ".jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
+    tf_model.todo[:optimized] = false
+    @save expres_data_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 end
 
 if !tf_model.todo[:optimized]
@@ -75,7 +63,8 @@ if !tf_model.todo[:optimized]
         println("loss   = $(losses[end])")
         println("rv std = $(round(std(rvs_notel_opt), digits=5))")
     end
-    @save expres_data_path * star * ".jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
+    tf_model.todo[:optimized] = true
+    @save expres_data_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 end
 
 plot(0:tracker, resid_stds; xlabel="iter", ylabel="predicted RV - active RV RMS", legend=false)
@@ -88,10 +77,18 @@ plot_telluric_model_bases(tf_model)
 
 if plot_stuff
     include("../src/_plot_functions.jl")
-    fig_dir = "EXPRES/figs/" * star * "_"
+    fig_dir = "EXPRES/figs/" * star * "/$(desired_order)/"
+    mkpath(fig_dir)
+
+    using CSV, DataFrames
+    expres_output = CSV.read(expres_data_path * star* "_activity.csv", DataFrame)
+    eo_rv = expres_output."CBC RV [m/s]"
+    eo_rv_σ = expres_output."CBC RV Err. [m/s]"
+    eo_time = expres_output."Time [MJD]"
 
     # Compare RV differences to actual RVs from activity
-    predict_plot = plot_model_rvs(times_nu, rvs_naive, rvs_notel, rvs_notel_opt)
+    rvs_notel_opt = (tf_model.rv.lm.s .* light_speed_nu)'
+    predict_plot = plot_model_rvs(times_nu, rvs_naive, rvs_notel, rvs_notel_opt, eo_time, eo_rv, eo_rv_σ)
     png(predict_plot, fig_dir * "model_rvs.png")
 
     predict_plot = plot_stellar_model_bases(tf_model)
@@ -105,4 +102,31 @@ if plot_stuff
 
     predict_plot = plot_telluric_model_scores(tf_model)
     png(predict_plot, fig_dir * "model_tel_weights.png")
+
+    predict_plot = plot_stellar_model_bases(tf_model; inds=1:3)
+    png(predict_plot, fig_dir * "model_star_basis_few.png")
+
+    predict_plot = plot_stellar_model_scores(tf_model; inds=1:3)
+    png(predict_plot, fig_dir * "model_star_weights_few.png")
+
+    predict_plot = plot_telluric_model_bases(tf_model; inds=1:3)
+    png(predict_plot, fig_dir * "model_tel_basis_few.png")
+
+    predict_plot = plot_telluric_model_scores(tf_model; inds=1:3)
+    png(predict_plot, fig_dir * "model_tel_weights_few.png")
+
+    predict_plot = status_plot(tf_output, tf_data)
+    png(predict_plot, fig_dir * "status_plot")
 end
+## TODO ERES presentation plots
+
+hmm = status_plot(tf_output, tf_data)
+png(hmm, "status_plot")
+plot_stellar_model_bases(tf_model; inds=1:3)
+hmm = plot_telluric_model_bases(tf_model; inds=1:3)
+png(hmm, "telluric_plot")
+anim = @animate for i in 1:40
+    plt = plot_spectrum()
+    plot!(plt, exp.(tf_data.log_λ_obs[:, i]), view(tf_output.tel, :, i), label="", yaxis=[0.95, 1.005])
+end
+gif(anim, "show_telluric_var.gif", fps = 10)

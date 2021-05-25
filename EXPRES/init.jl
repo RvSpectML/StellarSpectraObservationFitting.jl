@@ -79,7 +79,7 @@ airmasses = [parse(Float64, md[:airmass]) for md in pipeline_plan.cache[:extract
 
 n_obs = length(all_spectra)
 obs_resolution = 150000
-desired_order = 68
+desired_order = 47  # 68 has a bunch of tels, 47 has very few
 mask_inds = inds[desired_order]
 # inst = all_spectra[1].inst
 # extra_chop = 0
@@ -133,7 +133,7 @@ tel_model_res = 2 * sqrt(2) * obs_resolution
 @time rvs_notel, rvs_naive, fracvar_tel, fracvar_star = SSOF.initialize!(tf_model, tf_data; use_gp=true)
 
 
-@save expres_data_path * star * ".jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
+@save expres_data_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 
 include("../src/_plot_functions.jl")
 plot_stellar_model_bases(tf_model)

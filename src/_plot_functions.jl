@@ -2,36 +2,45 @@ using LinearAlgebra
 using Plots
 
 _plt_dpi = 400
-_plt_size = (750, 500)
-plot_spectrum(; kwargs...) = plot(; xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux", dpi = _plt_dpi, size = _plt_size, kwargs...)
-plot_rv(; kwargs...) = plot(; xlabel = "Time (d)", ylabel = "RV (m/s)", dpi = _plt_dpi, size = _plt_size, kwargs...)
-plot_scores(; kwargs...) = plot(; xlabel = "Time (d)", ylabel = "Weights", dpi = _plt_dpi, size = _plt_size, kwargs...)
-plt_colors = palette(:default).colors.colors
-
-function plot_model_rvs(times_nu::AbstractVector{T}, rvs_naive::AbstractVector{T}, rvs_notel::AbstractVecOrMat{T}, rvs_notel_opt::AbstractVecOrMat{T}) where {T<:Real}
+_plt_size = (1920,1080)
+_thickness_scaling = 2
+_theme = :juno
+_my_plot(; dpi = _plt_dpi, size = _plt_size, thickness_scaling=_thickness_scaling, kwargs...) =
+    plot(; dpi=dpi, size=size, thickness_scaling=thickness_scaling, kwargs...)
+plot_spectrum(; xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const", kwargs...) =
+    _my_plot(; xlabel=xlabel, ylabel=ylabel, kwargs...)
+plot_rv(; xlabel = "Time (d)", ylabel = "RV (m/s)", kwargs...) =
+    _my_plot(; xlabel=xlabel, ylabel=ylabel, kwargs...)
+plot_scores(; xlabel = "Time (d)", ylabel = "Weights + Const", kwargs...) =
+    _my_plot(; xlabel=xlabel, ylabel=ylabel, kwargs...)
+theme(_theme)
+# plt_colors = palette(:default).colors.colors
+plt_colors = PlotThemes._themes[_theme].defaults[:palette].colors.colors
+function plot_model_rvs(times_nu::AbstractVector{T}, rvs_naive::AbstractVector{T}, rvs_notel::AbstractVecOrMat{T}, rvs_notel_opt::AbstractVecOrMat{T}, eo_times::AbstractVector{T}, eo_rv::AbstractVector{T}, eo_rv_σ::AbstractVector{T}) where {T<:Real}
     predict_plot = plot_rv()
-    plot!(predict_plot, times_nu, rvs_naive, st=:scatter, ms=3, color=:red, label="Naive, std: $(round(std(rvs_naive), digits=3))")
-    plot!(predict_plot, times_nu, rvs_notel, st=:scatter, ms=3, color=:lightgreen, label="Before optimization, std: $(round(std(rvs_notel), digits=3))")
-    plot!(predict_plot, times_nu, rvs_notel_opt, st=:scatter, ms=3, color=:darkgreen, label="After optimization, std: $(round(std(rvs_notel_opt), digits=3))")
+    scatter!(predict_plot, times_nu, rvs_naive, label="Naive, std: $(round(std(rvs_naive), digits=3))", alpha = 0.2)
+    scatter!(predict_plot, times_nu, rvs_notel, label="Before optimization, std: $(round(std(rvs_notel), digits=3))", alpha = 0.2)
+    scatter!(eo_time, eo_rv; yerror=eo_rv_σ, label="EXPRES RVs, std: $(round(std(eo_rv), digits=3))")
+    scatter!(predict_plot, times_nu, rvs_notel_opt, label="After optimization, std: $(round(std(rvs_notel_opt), digits=3))", alpha = 0.7)
     display(predict_plot)
     return predict_plot
 end
 
 function plot_stellar_model_bases(tfom::StellarSpectraObservationFitting.TFOrderModel; inds::UnitRange=1:size(tfom.star.lm.M, 2))
-    predict_plot = plot_spectrum(; title="Stellar model bases", legend=:outerright)
+    predict_plot = plot_spectrum(; title="Stellar Model Bases", legend=:outerright)
     plot!(tfom.star.λ, tfom.star.lm.μ; label="μ")
     shift = 0.2
     for i in reverse(inds)
-        plot!(tfom.star.λ, (tfom.star.lm.M[:, i] ./ norm(tfom.star.lm.M[:, i])) .- shift * (i - 1); label="basis $i", color=plt_colors[i - inds[1] + 2])
+        plot!(tfom.star.λ, (tfom.star.lm.M[:, i] ./ norm(tfom.star.lm.M[:, i])) .- shift * (i - 1); label="Basis $i", color=plt_colors[i - inds[1] + 2])
     end
     display(predict_plot)
     return predict_plot
 end
 function plot_stellar_model_scores(tfom::StellarSpectraObservationFitting.TFOrderModel; inds::UnitRange=1:size(tfom.star.lm.M, 2))
-    predict_plot = plot_scores(; title="Stellar model scores", legend=:outerright)
+    predict_plot = plot_scores(; title="Stellar Model Weights", legend=:outerright)
     shift = 5 * maximum([std(tfom.star.lm.s[inds[i], :] .* norm(tfom.star.lm.M[:, inds[i]])) for i in inds])
     for i in reverse(inds)
-        scatter!(times_nu, (tfom.star.lm.s[i, :] .* norm(tfom.star.lm.M[:, i])) .- shift * (i - 1); label="weights $i", color=plt_colors[i - inds[1] + 2])
+        scatter!(times_nu, (tfom.star.lm.s[i, :] .* norm(tfom.star.lm.M[:, i])) .- shift * (i - 1); label="Weights $i", color=plt_colors[i - inds[1] + 2])
         hline!([-shift * (i - 1)]; label="", color=plt_colors[i - inds[1] + 2], lw=3, alpha=0.4)
     end
     display(predict_plot)
@@ -39,24 +48,48 @@ function plot_stellar_model_scores(tfom::StellarSpectraObservationFitting.TFOrde
 end
 
 function plot_telluric_model_bases(tfom::StellarSpectraObservationFitting.TFOrderModel; inds::UnitRange=1:size(tfom.tel.lm.M, 2))
-    predict_plot = plot_spectrum(; title="Telluric model bases", legend=:outerright)
+    predict_plot = plot_spectrum(; title="Telluric Model Bases", legend=:outerright)
     plot!(tfom.tel.λ, tfom.tel.lm.μ; label="μ")
     shift = 0.2
     for i in reverse(inds)
-        plot!(tfom.tel.λ, (tfom.tel.lm.M[:, i] ./ norm(tfom.tel.lm.M[:, i])) .- shift * (i - 1); label="basis $i", color=plt_colors[i - inds[1] + 2])
+        plot!(tfom.tel.λ, (tfom.tel.lm.M[:, i] ./ norm(tfom.tel.lm.M[:, i])) .- shift * (i - 1); label="Basis $i", color=plt_colors[i - inds[1] + 2])
     end
     display(predict_plot)
     return predict_plot
 end
 function plot_telluric_model_scores(tfom::StellarSpectraObservationFitting.TFOrderModel; inds::UnitRange=1:size(tfom.tel.lm.M, 2))
-    predict_plot = plot_scores(; title="Telluric model scores", legend=:outerright)
-    scatter!(times_nu, airmasses; label="airmasses")
+    predict_plot = plot_scores(; title="Telluric Model Weights", legend=:outerright)
+    scatter!(times_nu, airmasses; label="Airmasses")
     hline!([1]; label="", color=plt_colors[1], lw=3, alpha=0.4)
     shift = 5 * maximum([std(tfom.tel.lm.s[inds[i], :] .* norm(tfom.tel.lm.M[:, inds[i]])) for i in inds])
     for i in reverse(inds)
-        scatter!(times_nu, (tfom.tel.lm.s[i, :] .* norm(tfom.tel.lm.M[:, i])) .- shift * (i - 1); label="weights $i", color=plt_colors[i - inds[1] + 2])
-        hline!([-shift * (i - 1)]; label="", color=plt_colors[i - inds[1] + 2], lw=3, alpha=0.4)
+        scatter!(times_nu, (tfom.tel.lm.s[i, :] .* norm(tfom.tel.lm.M[:, i])) .- shift * (i - 0.5); label="Weights $i", color=plt_colors[i - inds[1] + 2])
+        hline!([-shift * (i - 0.5)]; label="", color=plt_colors[i - inds[1] + 2], lw=3, alpha=0.4)
     end
+    display(predict_plot)
+    return predict_plot
+end
+
+function status_plot(tfo::StellarSpectraObservationFitting.TFOutput, tfd::StellarSpectraObservationFitting.TFData; plot_epoch::Int=10, tracker::Int=0)
+    obs_λ = exp.(tfd.log_λ_obs[:, plot_epoch])
+    plot_star_λs = exp.(tfd.log_λ_star[:, plot_epoch])
+    predict_plot = plot_spectrum(; legend = :bottomright, ylabel="", layout = grid(2, 1, heights=[0.85, 0.15]))
+    plot!(predict_plot[1], obs_λ, tfo.tel[:, plot_epoch], label="Telluric Model")
+    plot!(predict_plot[1], obs_λ, tfo.star[:, plot_epoch] + tfo.rv[:, plot_epoch] .- 0.4, label="Stellar Model")
+    scatter!(predict_plot[1], obs_λ, tfd.flux[:, plot_epoch] .- 1.2, label="Observed Data", color=:white, alpha=0.3, xlabel="")
+    plot!(predict_plot[1], obs_λ, tfo.tel[:, plot_epoch] + tfo.star[:, plot_epoch] + tfo.rv[:, plot_epoch] .- (1 + 1.2), label="Full Model", ls=:dash, color=:white)
+    scatter!(predict_plot[2], obs_λ, tfd.flux[:, plot_epoch] - (tfo.tel[:, plot_epoch] + tfo.star[:, plot_epoch] + tfo.rv[:, plot_epoch] .- 1), ylabel="Residuals", label="", alpha=0.5, color=:white)
+    return predict_plot
+end
+
+function separate_status_plot(tfo::StellarSpectraObservationFitting.TFOutput, tfd::StellarSpectraObservationFitting.TFData; plot_epoch::Int=10, tracker::Int=0)
+    obs_λ = exp.(tfd.log_λ_obs[:, plot_epoch])
+    plot_star_λs = exp.(tfd.log_λ_star[:, plot_epoch])
+    predict_plot = plot_spectrum(; legend = :bottomleft, size=(800,800))
+    plot!(predict_plot[1], obs_λ, tfd.flux[:, plot_epoch] ./ (tfo.star[:, plot_epoch] + tfo.rv[:, plot_epoch]), label="predicted tel", alpha = 0.5, title="Tellurics")
+    plot!(predict_plot[1], obs_λ, tfo.tel[:, plot_epoch], label="model tel: $tracker", alpha = 0.5)
+    plot!(predict_plot[2], plot_star_λs, tfd.flux[:, plot_epoch] ./ tfo.tel[:, plot_epoch], label="predicted star", alpha = 0.5)
+    plot!(predict_plot[2], plot_star_λs, tfo.star[:, plot_epoch] + tfo.rv[:, plot_epoch], label="model star: $tracker", alpha = 0.5)
     display(predict_plot)
     return predict_plot
 end
