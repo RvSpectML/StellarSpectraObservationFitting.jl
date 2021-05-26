@@ -173,3 +173,47 @@ tf_model.tel.lm.M[tfm_inds[2]:end, :] .= 0
 
 plot_stellar_model_bases(tf_model)
 plot_telluric_model_bases(tf_model)
+
+##  Continuum GIF, do before SSOF.process!
+function fit_continuum_gif(x::AbstractVector, y::AbstractVector, σ²::AbstractVector; order::Int=6, nsigma::Vector{<:Real}=[0.3,3.0], maxniter::Int=50, filename::String="show_continuum_fit.gif")
+    A = StellarSpectraObservationFitting.vander(x .- mean(x), order)
+    m = fill(true, length(x))
+    μ = ones(length(x))
+	ex = exp.(x)
+    anim = @animate for i in 1:maxniter
+        m[σ² .== Inf] .= false  # mask out the bad pixels
+        w = StellarSpectraObservationFitting.general_lst_sq(view(A, m, :), view(y, m), view(σ², m))
+        μ[:] = A * w
+		plt = plot_spectrum(; ylabel = "Blaze Normalized Flux")
+		my_scatter!(plt, ex[m], y[m]; label="")
+		my_scatter!(plt, ex[.!m], y[.!m]; label="")
+		plot!(plt, ex, μ; label="")
+        resid = y - μ
+        # sigma = median(abs.(resid))
+		sigma = std(resid)
+        m_new = (-nsigma[1]*sigma) .< resid .< (nsigma[2]*sigma)
+        if sum(m) == sum(m_new); break end
+        m = m_new
+    end
+	gif(anim, filename, fps = 3)
+    return μ
+end
+
+include("../src/_plot_functions.jl")
+i=10
+fit_continuum_gif(tf_data.log_λ_obs[:, i], tf_data.flux[:, i], tf_data.var[:, i]; order=6)
+
+## Wavelength calibration plot
+plt = _my_plot(;xlabel="MJD", ylabel="Observer Frame Wavelength (Å)", title="Wavelength Calibration", thickness_scaling=3)
+for i in 1:5
+    scatter!(plt, times_nu, exp.(log_λ_obs[i, :]); label="Pixel $(mask_inds[i])", markerstrokewidth=0)
+end
+display(plt)
+png("obs.png")
+
+plt = _my_plot(;xlabel="MJD", ylabel="Barycentric Frame Wavelength (Å)", title="Wavelength Calibration", thickness_scaling=3, markerstrokestyle=:dash)
+for i in 1:5
+    scatter!(plt, times_nu, exp.(log_λ_star[i, :]); label="Pixel $(mask_inds[i])", markerstrokewidth=0)
+end
+display(plt)
+png("bary.png")
