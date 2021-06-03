@@ -12,7 +12,7 @@ stars = ["10700", "26965"]
 star = stars[2]
 plot_stuff = true
 plot_stuff_fit = true
-use_telstar = true
+use_total_opt = true
 expres_data_path = "E:/telfitting/"
 expres_save_path = "E:/telfitting/"
 desired_order = 47  # 68 has a bunch of tels, 47 has very few
@@ -22,10 +22,10 @@ desired_order = 47  # 68 has a bunch of tels, 47 has very few
 
 tf_output = SSOF.TFOutput(tf_model)
 
-if use_telstar
-    tf_workspace, loss = SSOF.TFWorkspaceTelStar(tf_model, tf_output, tf_data; return_loss_f=true)
+if use_total_opt
+    tf_workspace, loss = SSOF.TFWorkspaceTotal(tf_model, tf_output, tf_data; return_loss_f=true)
 else
-    tf_workspace, loss = SSOF.TFWorkspace(tf_model, tf_output, tf_data; return_loss_f=true)
+    tf_workspace, loss = SSOF.TFWorkspaceTelStar(tf_model, tf_output, tf_data; return_loss_f=true)
 end
 
 if plot_stuff_fit

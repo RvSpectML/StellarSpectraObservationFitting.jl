@@ -1,18 +1,28 @@
 _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, tfd::TFData) =
     sum((((tel .* (star + rv)) - tfd.flux) .^ 2) ./ tfd.var)
-loss(tfo::TFOutput, tfd) = _loss(tfo.tel, tfo.star, tfo.rv, tfd)
-loss(tfom::TFOrderModel, tfd) = _loss(tel_model(tfom), star_model(tfom), rv_model(tfom), tfd)
-loss_tel(tfo::TFOutput, tfom::TFOrderModel, tfd) = _loss(tel_model(tfom), tfo.star, tfo.rv, tfd) + tel_prior(tfom)
-loss_star(tfo::TFOutput, tfom::TFOrderModel, tfd) = _loss(tfo.tel, star_model(tfom), tfo.rv, tfd) + star_prior(tfom)
-loss_telstar(tfo::TFOutput, tfom::TFOrderModel, tfd) = _loss(tel_model(tfom), star_model(tfom), tfo.rv, tfd) + star_prior(tfom) + tel_prior(tfom)
-loss_rv(tfo::TFOutput, tfom::TFOrderModel, tfd) = _loss(tfo.tel, tfo.star, rv_model(tfom), tfd)
+loss(tfo::TFOutput, tfd::TFData) = _loss(tfo.tel, tfo.star, tfo.rv, tfd)
+loss(tfom::TFOrderModel, tfd::TFData) = _loss(tel_model(tfom), star_model(tfom), rv_model(tfom), tfd)
+loss_tel(tfo::TFOutput, tfom::TFOrderModel, tfd::TFData) = _loss(tel_model(tfom), tfo.star, tfo.rv, tfd) + tel_prior(tfom)
+loss_star(tfo::TFOutput, tfom::TFOrderModel, tfd::TFData) = _loss(tfo.tel, star_model(tfom), tfo.rv, tfd) + star_prior(tfom)
+loss_telstar(tfo::TFOutput, tfom::TFOrderModel, tfd::TFData) = _loss(tel_model(tfom), star_model(tfom), tfo.rv, tfd) + star_prior(tfom) + tel_prior(tfom)
+loss_rv(tfo::TFOutput, tfom::TFOrderModel, tfd::TFData) = _loss(tfo.tel, tfo.star, rv_model(tfom), tfd)
+loss_opt(tfom::TFOrderModel, tfd::TFData) =
+    _loss(tel_model(tfom),
+        star_model(tfom),
+        spectra_interp(
+            _eval_blm(
+                calc_doppler_component_RVSKL(tfom.star.λ, tfom.star.lm.μ; flux_compatible=true),
+                tfom.rv.lm.s),
+            tfom.lih_b2o),
+        tfd) + star_prior(tfom) + tel_prior(tfom)
 function loss_funcs(tfo::TFOutput, tfom::TFOrderModel, tfd::TFData)
     l() = loss(tfo, tfd)
     l_tel() = loss_tel(tfo, tfom, tfd)
     l_star() = loss_star(tfo, tfom, tfd)
     l_telstar() = loss_telstar(tfo, tfom, tfd)
     l_rv() = loss_rv(tfo, tfom, tfd)
-    return l, l_tel, l_star, l_telstar, l_rv
+    l_opt() = loss_opt(tfom, tfd)
+    return l, l_tel, l_star, l_telstar, l_rv, l_opt
 end
 
 
@@ -44,6 +54,14 @@ struct TFOptimSubWorkspace
         end
         return TFOptimSubWorkspace(θ, loss)
     end
+    function TFOptimSubWorkspace(tfsm1::TFSubmodel, tfsm2::TFSubmodel, tfsm3::TFSubmodel, loss::Function, only_s::Bool)
+        if only_s
+            θ = Flux.params(tfsm1.lm.s, tfsm2.lm.s, tfsm3.lm.s)
+        else
+            θ = Flux.params(tfsm1.lm.M, tfsm1.lm.s, tfsm1.lm.μ, tfsm2.lm.M, tfsm2.lm.s, tfsm2.lm.μ, tfsm3.lm.s)
+        end
+        return TFOptimSubWorkspace(θ, loss)
+    end
     function TFOptimSubWorkspace(θ, obj, opt, optstate, p0)
         len = 0
         for i in 1:length(θ)
@@ -64,7 +82,7 @@ struct TFWorkspace <: TFOptimWorkspace
     tfo::TFOutput
     tfd::TFData
     function TFWorkspace(tfom::TFOrderModel, tfo::TFOutput, tfd::TFData; return_loss_f::Bool=false, only_s::Bool=false)
-        loss, loss_tel, loss_star, _, loss_rv = loss_funcs(tfo, tfom, tfd)
+        loss, loss_tel, loss_star, _, loss_rv, _ = loss_funcs(tfo, tfom, tfd)
         tel = TFOptimSubWorkspace(tfom.tel, loss_tel, only_s)
         star = TFOptimSubWorkspace(tfom.star, loss_star, only_s)
         rv = TFOptimSubWorkspace(tfom.rv, loss_rv, true)
@@ -94,7 +112,7 @@ struct TFWorkspaceTelStar <: TFOptimWorkspace
     tfo::TFOutput
     tfd::TFData
     function TFWorkspaceTelStar(tfom::TFOrderModel, tfo::TFOutput, tfd::TFData; return_loss_f::Bool=false, only_s::Bool=false)
-        loss, _, _, loss_telstar, loss_rv = loss_funcs(tfo, tfom, tfd)
+        loss, _, _, loss_telstar, loss_rv, _ = loss_funcs(tfo, tfom, tfd)
         telstar = TFOptimSubWorkspace(tfom.tel, tfom.star, loss_telstar, only_s)
         rv = TFOptimSubWorkspace(tfom.rv, loss_rv, true)
         tfow = TFWorkspaceTelStar(telstar, rv, tfom, tfo, tfd)
@@ -114,6 +132,32 @@ struct TFWorkspaceTelStar <: TFOptimWorkspace
         new(telstar, rv, tfom, tfo, tfd)
     end
 end
+
+struct TFWorkspaceTotal <: TFOptimWorkspace
+    total::TFOptimSubWorkspace
+    tfom::TFOrderModel
+    tfo::TFOutput
+    tfd::TFData
+    function TFWorkspaceTotal(tfom::TFOrderModel, tfo::TFOutput, tfd::TFData; return_loss_f::Bool=false, only_s::Bool=false)
+        loss, _, _, _, _, loss_opt = loss_funcs(tfo, tfom, tfd)
+        total = TFOptimSubWorkspace(tfom.tel, tfom.star, tfom.rv, loss_opt, only_s)
+        tfow = TFWorkspaceTotal(total, tfom, tfo, tfd)
+        if return_loss_f
+            return tfow, loss
+        else
+            return tfow
+        end
+    end
+    TFWorkspaceTotal(tfom::TFOrderModel, tfd::TFData, inds::AbstractVecOrMat; kwargs...) =
+        TFWorkspaceTotal(tfom(inds), tfd(inds); kwargs...)
+    TFWorkspaceTotal(tfom::TFOrderModel, tfd::TFData; kwargs...) =
+        TFWorkspaceTotal(tfom, TFOutput(tfom), tfd; kwargs...)
+    function TFWorkspaceTotal(total, tfom, tfo, tfd)
+        @assert (length(total.θ) == 3) || (length(total.θ) == 7)
+        new(total, tfom, tfo, tfd)
+    end
+end
+
 
 function _Flux_optimize!(θ::Flux.Params, obj::OnceDifferentiable, p0::Vector,
     opt::Optim.FirstOrderOptimizer, optstate::Optim.AbstractOptimizerState,
@@ -153,8 +197,20 @@ function train_TFOrderModel!(tfow::TFWorkspaceTelStar; options::Optim.Options=Op
     tfow.tfo.rv[:, :] = rv_model(tfow.tfom)
 end
 
+function train_TFOrderModel!(tfow::TFWorkspaceTotal; options::Optim.Options=Optim.Options(iterations=20, f_tol=1e-3, g_tol=1e5))
+    # optimize tellurics and star
+    _Flux_optimize!(tfow.total, options)
+    tfow.tfom.rv.lm.M[:] = calc_doppler_component_RVSKL(tfow.tfom.star.λ, tfow.tfom.star.lm.μ)
+    tfow.tfo.star[:, :] = star_model(tfow.tfom)
+    tfow.tfo.tel[:, :] = tel_model(tfow.tfom)
+    tfow.tfo.rv[:, :] = rv_model(tfow.tfom)
+end
+
 function train_TFOrderModel!(tfow::TFOptimWorkspace, n::Int; kwargs...)
     for i in 1:n
         train_TFOrderModel!(tfow; kwargs...)
     end
 end
+
+train_TFOrderModel!(tfow::TFWorkspaceTotal, n::Int; kwargs...) =
+    train_TFOrderModel!(tfow; options=Optim.Options(iterations=n, kwargs...))
