@@ -14,10 +14,11 @@ plot_stuff = true
 plot_stuff_fit = true
 use_telstar = true
 expres_data_path = "E:/telfitting/"
+expres_save_path = "E:/telfitting/"
 desired_order = 47  # 68 has a bunch of tels, 47 has very few
 ## Setting up necessary variables and functions
 
-@load expres_data_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
+@load expres_save_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 
 tf_output = SSOF.TFOutput(tf_model)
 
@@ -40,14 +41,14 @@ tracker = 0
 println("guess $tracker, std=$(round(std(rvs_notel), digits=5))")
 rvs_notel_opt = copy(rvs_notel)
 
-@time if !tf_model.todo[:reg_improved]
+if !tf_model.todo[:reg_improved]
     using StatsBase
     n_obs_train = Int(round(0.75 * n_obs))
     training_inds = sort(sample(1:n_obs, n_obs_train; replace=false))
-    SSOF.fit_regularization!(tf_model, tf_data, training_inds; use_telstar=use_telstar)
+    @time SSOF.fit_regularization!(tf_model, tf_data, training_inds; use_telstar=use_telstar)
     tf_model.todo[:reg_improved] = true
     tf_model.todo[:optimized] = false
-    @save expres_data_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
+    @save expres_save_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 end
 
 if !tf_model.todo[:optimized]
@@ -64,14 +65,11 @@ if !tf_model.todo[:optimized]
         println("rv std = $(round(std(rvs_notel_opt), digits=5))")
     end
     tf_model.todo[:optimized] = true
-    @save expres_data_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
+    @save expres_save_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 end
 
-plot(0:tracker, resid_stds; xlabel="iter", ylabel="predicted RV - active RV RMS", legend=false)
-plot(0:tracker, losses; xlabel="iter", ylabel="loss", legend=false)
-
-plot_stellar_model_bases(tf_model)
-plot_telluric_model_bases(tf_model)
+# plot(0:tracker, resid_stds; xlabel="iter", ylabel="predicted RV - active RV RMS", legend=false)
+# plot(0:tracker, losses; xlabel="iter", ylabel="loss", legend=false)
 
 ## Plots
 

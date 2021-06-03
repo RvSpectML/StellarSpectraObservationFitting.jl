@@ -19,6 +19,7 @@ fits_target_str = star
 paths_to_search_for_param = ["EXPRES"]
 
 expres_data_path = "E:/telfitting/"
+expres_save_path = "E:/telfitting/"
 
 # NOTE: make_manifest does not update its paths_to_search when default_paths_to_search is defined here, so if you change the line above, you must also include "paths_to_search=default_paths_to_search" in the make_manifest() function call below
 pipeline_plan = PipelinePlan()
@@ -70,7 +71,7 @@ end
 # Something buggy if include order 1.  Order 86 essentially ignored due to tellurics. First and last orders have NaN issues
 #max_orders = 12:83
 lfc_orders = 43:72
-order_list_timeseries = extract_orders(all_spectra,pipeline_plan; orders_to_use=lfc_orders, recalc=true)
+order_list_timeseries = extract_orders(all_spectra, pipeline_plan; orders_to_use=lfc_orders, recalc=true)
 
 times_nu = pipeline_plan.cache[:extract_orders].times
 airmasses = [parse(Float64, md[:airmass]) for md in pipeline_plan.cache[:extract_orders].metadata]
@@ -86,6 +87,7 @@ mask_inds = inds[desired_order]
 # mask_inds = (min_col_default(inst, desired_order) + extra_chop):(max_col_default(inst, desired_order) - extra_chop)  # 850:6570
 # mask_inds = 2270:5150
 
+# using Plots
 # plot(all_spectra[1].metadata[:tellurics][:, desired_order])
 
 len_obs = length(mask_inds)
@@ -102,6 +104,7 @@ end
 tf_data = SSOF.TFData(flux_obs, var_obs, log_λ_obs, log_λ_star)
 # i=10
 # SSOF.fit_continuum(tf_data.log_λ_obs[:, i], tf_data.flux[:, i], tf_data.var[:, i]; order=6, plot_stuff=true)
+
 @time SSOF.process!(tf_data; order=6)
 
 # using Plots
@@ -133,7 +136,7 @@ tel_model_res = 2 * sqrt(2) * obs_resolution
 @time rvs_notel, rvs_naive, fracvar_tel, fracvar_star = SSOF.initialize!(tf_model, tf_data; use_gp=true)
 
 
-@save expres_data_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
+@save expres_save_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 
 include("../src/_plot_functions.jl")
 plot_stellar_model_bases(tf_model)
