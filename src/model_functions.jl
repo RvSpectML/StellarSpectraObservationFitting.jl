@@ -412,7 +412,7 @@ function model_prior(lm, reg::Dict{Symbol, <:Real})
 	end
 	if haskey(reg, :L2_M); val += L2(lm.M) * reg[:L2_M] end
 	if haskey(reg, :L1_M); val += L1(lm.M) * reg[:L1_M] end
-	if haskey(reg, :L1_M) || haskey(reg, :L2_M); val += L1(lm.s) end
+	if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0); val += L1(lm.s) end
 	return val
 end
 

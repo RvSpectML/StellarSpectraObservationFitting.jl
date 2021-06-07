@@ -1,3 +1,4 @@
+using LineSearches
 _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, tfd::TFData) =
     sum((((tel .* (star + rv)) - tfd.flux) .^ 2) ./ tfd.var)
 loss(tfo::TFOutput, tfd::TFData) = _loss(tfo.tel, tfo.star, tfo.rv, tfd)
@@ -34,6 +35,7 @@ struct TFOptimSubWorkspace
     p0::Vector
     function TFOptimSubWorkspace(θ::Flux.Params, loss::Function)
         _, _, _, p0, obj = opt_funcs(loss, θ)
+        # opt = LBFGS(alphaguess = LineSearches.InitialHagerZhang(α0=1.0))
         opt = LBFGS()
         # initial_state(method::LBFGS, ...) doesn't use the options for anything
         return TFOptimSubWorkspace(θ, obj, opt, Optim.initial_state(opt, Optim.Options(), obj, p0), p0)
@@ -164,8 +166,10 @@ function _Flux_optimize!(θ::Flux.Params, obj::OnceDifferentiable, p0::Vector,
     options::Optim.Options)
 
     # Optim.optimize(obj, p0, LBFGS(); options)
-    Optim.optimize(obj, p0, opt, options, optstate)
+    result = Optim.optimize(obj, p0, opt, options)
+    # result = Optim.optimize(obj, p0, opt, options, optstate)
     copyto!(p0, θ)
+    return result
 end
 _Flux_optimize!(tfosw::TFOptimSubWorkspace, options::Optim.Options) =
     _Flux_optimize!(tfosw.θ, tfosw.obj, tfosw.p0, tfosw.opt, tfosw.optstate, options)
@@ -188,8 +192,8 @@ end
 
 _print_stuff_def = false
 _iter_def = 20
-_f_tol_def = 1e-3
-_g_tol_def = 1e5
+_f_tol_def = 1e-6
+_g_tol_def = 100
 
 function train_TFOrderModel!(tfow::TFWorkspace; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def, kwargs...)
     optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
@@ -210,16 +214,18 @@ end
 
 function train_TFOrderModel!(tfow::TFWorkspaceTelStar; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def, kwargs...)
     optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
-    options = Optim.Options(iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
+    options = Optim.Options(iterations=iterations, f_tol=f_tol, g_tol=_g_tol_def*sqrt(length(tfow.telstar.p0)), callback=optim_cb_local, allow_f_increases=true, kwargs...)
     # optimize tellurics and star
-    _Flux_optimize!(tfow.telstar, options)
+    result_telstar = _Flux_optimize!(tfow.telstar, options)
     tfow.tfo.star[:, :] = star_model(tfow.tfom)
     tfow.tfo.tel[:, :] = tel_model(tfow.tfom)
 
     # optimize RVs
+    options = Optim.Options(callback=optim_cb_local, allow_f_increases=true, g_tol=_g_tol_def*sqrt(length(tfow.telstar.p0)), iterations=iterations, kwargs...)
     tfow.tfom.rv.lm.M[:] = calc_doppler_component_RVSKL(tfow.tfom.star.λ, tfow.tfom.star.lm.μ)
-    _Flux_optimize!(tfow.rv, options)
+    result_rv = _Flux_optimize!(tfow.rv, options)
     tfow.tfo.rv[:, :] = rv_model(tfow.tfom)
+    return result_telstar, result_rv
 end
 
 function train_TFOrderModel!(tfow::TFWorkspaceTotal; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def, kwargs...)

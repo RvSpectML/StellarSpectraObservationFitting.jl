@@ -1174,7 +1174,7 @@ uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
 version = "0.9.8"
 
 [[StellarSpectraObservationFitting]]
-deps = ["Distributions", "EMPCA", "Flux", "GPLinearODEMaker", "LinearAlgebra", "Optim", "Statistics", "Stheno", "TemporalGPs", "Unitful", "UnitfulAstro", "Zygote"]
+deps = ["Distributions", "EMPCA", "Flux", "GPLinearODEMaker", "LineSearches", "LinearAlgebra", "Optim", "Statistics", "Stheno", "TemporalGPs", "Unitful", "UnitfulAstro", "Zygote"]
 path = "C:\\Users\\Christian\\Dropbox\\GP_research\\julia\\StellarSpectraObservationFitting"
 uuid = "6b1189bd-9150-44f8-8055-f6ca7d16451e"
 version = "0.1.0"
