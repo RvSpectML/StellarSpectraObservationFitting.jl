@@ -185,9 +185,15 @@ function optim_cb(x::OptimizationState; print_stuff::Bool=true)
     return false
 end
 
-optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
 
-function train_TFOrderModel!(tfow::TFWorkspace; options::Optim.Options=Optim.Options(iterations=10, f_tol=1e-3, g_tol=1e5))
+_print_stuff_def = false
+_iter_def = 20
+_f_tol_def = 1e-3
+_g_tol_def = 1e5
+
+function train_TFOrderModel!(tfow::TFWorkspace; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def, kwargs...)
+    optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
+    options = Optim.Options(iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
     # optimize star
     _Flux_optimize!(tfow.star, options)
     tfow.tfo.star[:, :] = star_model(tfow.tfom)
@@ -202,7 +208,9 @@ function train_TFOrderModel!(tfow::TFWorkspace; options::Optim.Options=Optim.Opt
     tfow.tfo.tel[:, :] = tel_model(tfow.tfom)
 end
 
-function train_TFOrderModel!(tfow::TFWorkspaceTelStar; options::Optim.Options=Optim.Options(iterations=10, f_tol=1e-3, g_tol=1e5))
+function train_TFOrderModel!(tfow::TFWorkspaceTelStar; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def, kwargs...)
+    optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
+    options = Optim.Options(iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
     # optimize tellurics and star
     _Flux_optimize!(tfow.telstar, options)
     tfow.tfo.star[:, :] = star_model(tfow.tfom)
@@ -214,7 +222,7 @@ function train_TFOrderModel!(tfow::TFWorkspaceTelStar; options::Optim.Options=Op
     tfow.tfo.rv[:, :] = rv_model(tfow.tfom)
 end
 
-function train_TFOrderModel!(tfow::TFWorkspaceTotal; print_stuff::Bool=false, iterations::Int=20, f_tol::Real=1e-3, g_tol::Real=1e5, kwargs...)
+function train_TFOrderModel!(tfow::TFWorkspaceTotal; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def, kwargs...)
     optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
     options = Optim.Options(iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
     # optimize tellurics and star
