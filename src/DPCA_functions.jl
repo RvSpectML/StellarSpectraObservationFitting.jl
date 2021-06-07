@@ -28,7 +28,7 @@ function calc_deriv_RVSKL_Flux(x::Vector{<:Real})
 		end
 	end
     @assert length(x)>=3
- 	return [helper(x, i) for i in 1:length(x)]
+	return [helper(x, i) for i in 1:length(x)]
 end
 
 
@@ -37,19 +37,24 @@ modified code shamelessly stolen from RvSpectraKitLearn.jl/src/deriv_spectra_sim
 Function to estimate the derivative(s) of the mean spectrum
 doppler_comp = λ * dF/dλ -> units of flux
 """
-function calc_doppler_component_RVSKL(lambda::Vector{T}, flux::Vector{T}; flux_compatible::Bool=false) where {T<:Real}
+function calc_doppler_component_RVSKL(lambda::Vector{T}, flux::Vector{T}) where {T<:Real}
     @assert length(lambda) == length(flux)
-	if flux_compatible
-	    dlambdadpix = calc_deriv_RVSKL_Flux(lambda)
-	    dfluxdpix = calc_deriv_RVSKL_Flux(flux)
-	else
-		dlambdadpix = calc_deriv_RVSKL(lambda)
-	    dfluxdpix = calc_deriv_RVSKL(flux)
-	end
+	dlambdadpix = calc_deriv_RVSKL(lambda)
+    dfluxdpix = calc_deriv_RVSKL(flux)
     return dfluxdpix .* (lambda ./ dlambdadpix)  # doppler basis
 end
 function calc_doppler_component_RVSKL(lambda::Vector{T}, flux::Matrix{T}, kwargs...) where {T<:Real}
     return calc_doppler_component_RVSKL(lambda, vec(mean(flux, dims=2)), kwargs...)
+end
+
+function calc_doppler_component_RVSKL_Flux(lambda::Vector{T}, flux::Vector{T}) where {T<:Real}
+    @assert length(lambda) == length(flux)
+    dlambdadpix = calc_deriv_RVSKL_Flux(lambda)
+    dfluxdpix = calc_deriv_RVSKL_Flux(flux)
+    return dfluxdpix .* (lambda ./ dlambdadpix)  # doppler basis
+end
+function calc_doppler_component_RVSKL_Flux(lambda::Vector{T}, flux::Matrix{T}, kwargs...) where {T<:Real}
+    return calc_doppler_component_RVSKL_Flux(lambda, vec(mean(flux, dims=2)), kwargs...)
 end
 
 

@@ -11,7 +11,7 @@ loss_opt(tfom::TFOrderModel, tfd::TFData) =
         star_model(tfom),
         spectra_interp(
             _eval_blm(
-                calc_doppler_component_RVSKL(tfom.star.λ, tfom.star.lm.μ; flux_compatible=true),
+                calc_doppler_component_RVSKL_Flux(tfom.star.λ, tfom.star.lm.μ),
                 tfom.rv.lm.s),
             tfom.lih_b2o),
         tfd) + star_prior(tfom) + tel_prior(tfom)
@@ -167,8 +167,25 @@ function _Flux_optimize!(θ::Flux.Params, obj::OnceDifferentiable, p0::Vector,
     Optim.optimize(obj, p0, opt, options, optstate)
     copyto!(p0, θ)
 end
-_Flux_optimize!(tfosw::TFOptimSubWorkspace, options) =
+_Flux_optimize!(tfosw::TFOptimSubWorkspace, options::Optim.Options) =
     _Flux_optimize!(tfosw.θ, tfosw.obj, tfosw.p0, tfosw.opt, tfosw.optstate, options)
+
+# ends optimization if true
+function optim_cb(x::OptimizationState; print_stuff::Bool=true)
+    if print_stuff
+        println()
+        if x.iteration > 0
+            println("Iter:  ", x.iteration)
+            println("Time:  ", x.metadata["time"], " s")
+            println("ℓ:     ", x.value)
+            println("l2(∇): ", x.g_norm)
+            println()
+        end
+    end
+    return false
+end
+
+optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
 
 function train_TFOrderModel!(tfow::TFWorkspace; options::Optim.Options=Optim.Options(iterations=10, f_tol=1e-3, g_tol=1e5))
     # optimize star
@@ -197,7 +214,9 @@ function train_TFOrderModel!(tfow::TFWorkspaceTelStar; options::Optim.Options=Op
     tfow.tfo.rv[:, :] = rv_model(tfow.tfom)
 end
 
-function train_TFOrderModel!(tfow::TFWorkspaceTotal; options::Optim.Options=Optim.Options(iterations=20, f_tol=1e-3, g_tol=1e5))
+function train_TFOrderModel!(tfow::TFWorkspaceTotal; print_stuff::Bool=false, iterations::Int=20, f_tol::Real=1e-3, g_tol::Real=1e5, kwargs...)
+    optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
+    options = Optim.Options(iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
     # optimize tellurics and star
     _Flux_optimize!(tfow.total, options)
     tfow.tfom.rv.lm.M[:] = calc_doppler_component_RVSKL(tfow.tfom.star.λ, tfow.tfom.star.lm.μ)
@@ -212,5 +231,5 @@ function train_TFOrderModel!(tfow::TFOptimWorkspace, n::Int; kwargs...)
     end
 end
 
-train_TFOrderModel!(tfow::TFWorkspaceTotal, n::Int; kwargs...) =
-    train_TFOrderModel!(tfow; options=Optim.Options(iterations=n, kwargs...))
+train_TFOrderModel!(tfow::TFWorkspaceTotal, iterations::Int; kwargs...) =
+    train_TFOrderModel!(tfow; iterations=iterations, kwargs...)
