@@ -39,7 +39,7 @@ function plot_stellar_model_bases(tfom::StellarSpectraObservationFitting.TFOrder
 end
 function plot_stellar_model_scores(tfom::StellarSpectraObservationFitting.TFOrderModel; inds::UnitRange=1:size(tfom.star.lm.M, 2))
     plt = plot_scores(; title="Stellar Model Weights", legend=:outerright)
-    shift = 5 * maximum([std(tfom.star.lm.s[inds[i], :] .* norm(tfom.star.lm.M[:, inds[i]])) for i in inds])
+    shift = ceil(10 * maximum([std(tfom.star.lm.s[inds[i], :] .* norm(tfom.star.lm.M[:, inds[i]])) for i in inds])) / 2
     for i in reverse(inds)
         my_scatter!(plt, times_nu, (tfom.star.lm.s[i, :] .* norm(tfom.star.lm.M[:, i])) .- shift * (i - 1); label="Weights $i", color=plt_colors[i - inds[1] + 2])
         hline!([-shift * (i - 1)]; label="", color=plt_colors[i - inds[1] + 2], lw=3, alpha=0.4)
@@ -62,10 +62,11 @@ function plot_telluric_model_scores(tfom::StellarSpectraObservationFitting.TFOrd
     plt = plot_scores(; title="Telluric Model Weights", legend=:outerright)
     my_scatter!(plt, times_nu, airmasses; label="Airmasses")
     hline!([1]; label="", color=plt_colors[1], lw=3, alpha=0.4)
-    shift = 5 * maximum([std(tfom.tel.lm.s[inds[i], :] .* norm(tfom.tel.lm.M[:, inds[i]])) for i in inds])
+    shift = ceil(10 * maximum([std(tfom.tel.lm.s[inds[i], :] .* norm(tfom.tel.lm.M[:, inds[i]])) for i in inds])) / 2
+    half_shift = ceil(shift) / 2
     for i in reverse(inds)
-        my_scatter!(plt, times_nu, (tfom.tel.lm.s[i, :] .* norm(tfom.tel.lm.M[:, i])) .- shift * (i - 0.5); label="Weights $i", color=plt_colors[i - inds[1] + 2])
-        hline!([-shift * (i - 0.5)]; label="", color=plt_colors[i - inds[1] + 2], lw=3, alpha=0.4)
+        my_scatter!(plt, times_nu, (tfom.tel.lm.s[i, :] .* norm(tfom.tel.lm.M[:, i])) .- (shift * (i - 1) + half_shift); label="Weights $i", color=plt_colors[i - inds[1] + 2])
+        hline!([-(shift * (i - 1) + half_shift)]; label="", color=plt_colors[i - inds[1] + 2], lw=3, alpha=0.4)
     end
     display(plt)
     return plt
