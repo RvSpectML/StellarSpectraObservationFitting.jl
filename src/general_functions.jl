@@ -46,3 +46,26 @@ end
 function shift_log_λ(v::Unitful.Velocity, log_λ::Vector{T}) where {T<:Real}
 	return log_λ .+ (log((1.0 + v / light_speed) / (1.0 - v / light_speed)) / 2)
 end
+
+function observation_night_inds(times_in_days::Vector{<:Real})
+    difs = times_in_days[2:end] - times_in_days[1:end-1] .> 0.5
+    obs_in_first_night = findfirst(difs)
+    if isnothing(findfirst(difs))
+        return [1:length(times_in_days)]
+    else
+        night_inds = [1:findfirst(difs)]
+    end
+    i = night_inds[1][end]
+    while i < length(times_in_days)
+        obs_in_night = findfirst(view(difs, i:length(difs)))
+        if isnothing(obs_in_night)
+            i = length(times_in_days)
+        else
+            i += obs_in_night
+            append!(night_inds, [night_inds[end][end]+1:i])
+        end
+    end
+    return night_inds
+end
+observation_night_inds(times::Vector{<:Unitful.Time}) =
+    observation_night_inds(ustrip.(uconvert.(u"d", times)))
