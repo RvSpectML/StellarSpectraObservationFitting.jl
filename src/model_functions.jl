@@ -1,4 +1,5 @@
 using TemporalGPs, Stheno, Distributions
+import Base.copy
 
 struct TFData{T<:Real}
     flux::AbstractMatrix{T}
@@ -104,8 +105,10 @@ struct FullLinearModel{T<:Number} <: LinearModel
 		return new{T}(M, s, μ)
 	end
 end
+Base.copy(flm::FullLinearModel) = FullLinearModel(copy(flm.M), copy(flm.s), copy(flm.μ))
 LinearModel(flm::FullLinearModel, inds::AbstractVecOrMat) =
 	FullLinearModel(flm.M, view(flm.s, :, inds), flm.μ)
+
 # Base (no mean) linear model
 struct BaseLinearModel{T<:Number} <: LinearModel
 	M::AbstractMatrix{T}
@@ -115,6 +118,8 @@ struct BaseLinearModel{T<:Number} <: LinearModel
 		return new{T}(M, s)
 	end
 end
+Base.copy(blm::BaseLinearModel) = BaseLinearModel(copy(blm.M), copy(blm.s))
+
 LinearModel(blm::BaseLinearModel, inds::AbstractVecOrMat) =
 	BaseLinearModel(blm.M, view(blm.s, :, inds))
 _eval_blm(M::AbstractVecOrMat, s::AbstractVecOrMat) = M * s
@@ -147,6 +152,7 @@ end
 (tfsm::TFSubmodel)(inds::AbstractVecOrMat) =
 	TFSubmodel(tfsm.log_λ, tfsm.λ, LinearModel(tfsm.lm, inds))
 (tfsm::TFSubmodel)() = tfsm.lm()
+Base.copy(tfsm::TFSubmodel) = TFSubmodel(tfsm.log_λ, tfsm.λ, copy(tfsm.lm))
 
 function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 	n_obs = size(log_λ_obs_from, 2)
@@ -212,13 +218,22 @@ struct TFOrderModel{T<:Number}
 		return new{T}(tel, star, rv, reg_tel, reg_star, lih_t2b, lih_b2t, lih_o2b, lih_b2o, lih_t2o, lih_o2t, todo, instrument, order)
 	end
 end
-
+Base.copy(tfom::TFOrderModel) = TFOrderModel(copy(tfom.tel), copy(tfom.star), copy(tfom.rv), copy(tfom.reg_tel), copy(tfom.reg_star), tfom.lih_t2b,
+	tfom.lih_b2t, tfom.lih_o2b, tfom.lih_b2o, tfom.lih_t2o, tfom.lih_o2t, copy(tfom.todo), tfom.instrument, tfom.order)
 (tfom::TFOrderModel)(inds::AbstractVecOrMat) =
 	TFOrderModel(tfom.tel(inds), tfom.star(inds), tfom.rv(inds), tfom.reg_tel, tfom.reg_star,
 	tfom.lih_t2b(inds, size(tfom.lih_o2t.li, 1)), tfom.lih_b2t(inds, size(tfom.lih_o2b.li, 1)),
 	tfom.lih_o2b(inds, size(tfom.lih_b2o.li, 1)), tfom.lih_b2o(inds, size(tfom.lih_o2b.li, 1)),
 	tfom.lih_t2o(inds, size(tfom.lih_o2t.li, 1)), tfom.lih_o2t(inds, size(tfom.lih_b2o.li, 1)),
 	tfom.todo, tfom.instrument, tfom.order)
+function zero_regularization(tfom::TFOrderModel)
+	for (key, value) in tfom.reg_tel
+		tfom.reg_tel[key] = 0
+	end
+	for (key, value) in tfom.reg_star
+		tfom.reg_star[key] = 0
+	end
+end
 
 downsize(lm::FullLinearModel, n_comp::Int) =
 	FullLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :], lm.μ[:])

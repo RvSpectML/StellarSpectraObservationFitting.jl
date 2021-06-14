@@ -128,10 +128,18 @@ struct TFWorkspaceTelStar <: TFOptimWorkspace
         TFWorkspaceTelStar(tfom(inds), tfd(inds); kwargs...)
     TFWorkspaceTelStar(tfom::TFOrderModel, tfd::TFData; kwargs...) =
         TFWorkspaceTelStar(tfom, TFOutput(tfom), tfd; kwargs...)
-    function TFWorkspaceTelStar(telstar, rv, tfom, tfo, tfd)
+    function TFWorkspaceTelStar(telstar::TFOptimSubWorkspace,
+        rv::TFOptimSubWorkspace,
+        tfom::TFOrderModel,
+        tfo::TFOutput,
+        tfd::TFData)
+
         @assert (length(telstar.θ) == 2) || (length(telstar.θ) == 6)
         @assert length(rv.θ) == 1
         new(telstar, rv, tfom, tfo, tfd)
+    end
+    function TFWorkspaceTelStar(tfws::TFWorkspaceTelStar)
+        TFWorkspaceTelStar(tfws.telstar, rv, tfom, tfo, tfd)
     end
 end
 
@@ -221,13 +229,19 @@ function train_TFOrderModel!(tfow::TFWorkspace; print_stuff::Bool=_print_stuff_d
     tfow.tfo.tel[:, :] = tel_model(tfow.tfom)
 end
 
-function train_TFOrderModel!(tfow::TFWorkspaceTelStar; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def*sqrt(length(tfow.telstar.p0)), train_telstar::Bool=true, kwargs...)
+function train_TFOrderModel!(tfow::TFWorkspaceTelStar; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def*sqrt(length(tfow.telstar.p0)), train_telstar::Bool=true, ignore_regularization::Bool=false, kwargs...)
     optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
+
+    if ignore_regularization
+        reg_tel_holder = copy(tfow.tfom.reg_tel)
+        reg_star_holder = copy(tfow.tfom.reg_star)
+        zero_regularization(tfow.tfom)
+    end
 
     if train_telstar
         options = Optim.Options(iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
         # optimize tellurics and star
-        result_telstar = _Flux_optimize!(tfow.telstar, options)
+        result_telstar = _Flux_optimize!(tfow.telstar, options; use_optstate=false)
         tfow.tfo.star[:, :] = star_model(tfow.tfom)
         tfow.tfo.tel[:, :] = tel_model(tfow.tfom)
     end
@@ -237,6 +251,11 @@ function train_TFOrderModel!(tfow::TFWorkspaceTelStar; print_stuff::Bool=_print_
     tfow.tfom.rv.lm.M[:] = calc_doppler_component_RVSKL(tfow.tfom.star.λ, tfow.tfom.star.lm.μ)
     result_rv = _Flux_optimize!(tfow.rv, options; use_optstate=false)
     tfow.tfo.rv[:, :] = rv_model(tfow.tfom)
+
+    if ignore_regularization
+        copy_dict!(reg_tel_holder, tfow.tfom.reg_tel)
+        copy_dict!(reg_star_holder, tfow.tfom.reg_star)
+    end
     return result_telstar, result_rv
 end
 

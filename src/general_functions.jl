@@ -69,3 +69,9 @@ function observation_night_inds(times_in_days::Vector{<:Real})
 end
 observation_night_inds(times::Vector{<:Unitful.Time}) =
     observation_night_inds(ustrip.(uconvert.(u"d", times)))
+
+function copy_dict!(from::Dict, to::Dict)
+    for (key, value) in from
+		to[key] = from[key]
+	end
+end
