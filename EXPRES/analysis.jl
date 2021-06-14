@@ -12,25 +12,24 @@ stars = ["10700", "26965"]
 star = stars[2]
 plot_stuff = true
 plot_stuff_fit = true
-use_total_opt = true
+use_telstar = true
 expres_data_path = "E:/telfitting/"
 expres_save_path = "E:/telfitting/"
 desired_order = 47  # 68 has a bunch of tels, 47 has very few
 ## Setting up necessary variables and functions
 
 @load expres_save_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
+tf_model = SSOF.downsize(tf_model, 10, 10)
 
-tf_output = SSOF.TFOutput(tf_model)
-
-if use_total_opt
-    tf_workspace, loss = SSOF.TFWorkspaceTotal(tf_model, tf_output, tf_data; return_loss_f=true)
+if use_telstar
+    tf_workspace, loss = SSOF.TFWorkspaceTelStar(tf_model, tf_data; return_loss_f=true)
 else
-    tf_workspace, loss = SSOF.TFWorkspaceTelStar(tf_model, tf_output, tf_data; return_loss_f=true)
+    tf_workspace, loss = SSOF.TFWorkspaceTotal(tf_model, tf_data; return_loss_f=true)
 end
 
 if plot_stuff_fit
     include("../src/_plot_functions.jl")
-    status_plot(tf_output, tf_data)
+    status_plot(tf_workspace.tfo, tf_data)
 end
 
 light_speed_nu = 299792458
@@ -58,7 +57,7 @@ if !tf_model.todo[:optimized]
 
         append!(resid_stds, [std(rvs_notel_opt)])
         append!(losses, [loss()])
-        if plot_stuff_fit; status_plot(tf_output, tf_data) end
+        if plot_stuff_fit; status_plot(tf_workspace.tfo, tf_data) end
         tracker += 1
         println("guess $tracker")
         println("loss   = $(losses[end])")
@@ -113,18 +112,18 @@ if plot_stuff
     predict_plot = plot_telluric_model_scores(tf_model; inds=1:3)
     png(predict_plot, fig_dir * "model_tel_weights_few.png")
 
-    predict_plot = status_plot(tf_output, tf_data)
+    predict_plot = status_plot(tf_workspace.tfo, tf_data)
     png(predict_plot, fig_dir * "status_plot")
 end
 ## TODO ERES presentation plots
 
-hmm = status_plot(tf_output, tf_data)
+hmm = status_plot(tf_workspace.tfo, tf_data)
 png(hmm, "status_plot")
 plot_stellar_model_bases(tf_model; inds=1:3)
 hmm = plot_telluric_model_bases(tf_model; inds=1:3)
 png(hmm, "telluric_plot")
 anim = @animate for i in 1:40
     plt = plot_spectrum(; title="Telluric Spectrum")
-    plot!(plt, exp.(tf_data.log_λ_obs[:, i]), view(tf_output.tel, :, i), label="", yaxis=[0.95, 1.005])
+    plot!(plt, exp.(tf_data.log_λ_obs[:, i]), view(tf_workspace.tfo.tel, :, i), label="", yaxis=[0.95, 1.005])
 end
 gif(anim, "show_telluric_var.gif", fps = 10)
