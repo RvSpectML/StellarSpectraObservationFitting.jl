@@ -31,14 +31,13 @@ struct TFOptimSubWorkspace
     θ::Flux.Params
     obj::OnceDifferentiable
     opt::Optim.FirstOrderOptimizer
-    optstate::Optim.AbstractOptimizerState
     p0::Vector
     function TFOptimSubWorkspace(θ::Flux.Params, loss::Function; use_cg::Bool=true)
         _, _, _, p0, obj = opt_funcs(loss, θ)
         # opt = LBFGS(alphaguess = LineSearches.InitialHagerZhang(α0=NaN))
         use_cg ? opt = ConjugateGradient() : opt = LBFGS()
         # initial_state(method::LBFGS, ...) doesn't use the options for anything
-        return TFOptimSubWorkspace(θ, obj, opt, Optim.initial_state(opt, Optim.Options(), obj, p0), p0)
+        return TFOptimSubWorkspace(θ, obj, opt, p0)
     end
     function TFOptimSubWorkspace(tfsm::TFSubmodel, loss::Function, only_s::Bool)
         if only_s
@@ -64,13 +63,13 @@ struct TFOptimSubWorkspace
         end
         return TFOptimSubWorkspace(θ, loss; use_cg=!only_s)
     end
-    function TFOptimSubWorkspace(θ, obj, opt, optstate, p0)
+    function TFOptimSubWorkspace(θ, obj, opt, p0)
         len = 0
         for i in 1:length(θ)
             len += length(θ[i])
         end
         @assert len == length(p0)
-        new(θ, obj, opt, optstate, p0)
+        new(θ, obj, opt, p0)
     end
 end
 
@@ -168,27 +167,14 @@ struct TFWorkspaceTotal <: TFOptimWorkspace
     end
 end
 
-
-function _Flux_optimize!(θ::Flux.Params, obj::OnceDifferentiable, p0::Vector,
-    opt::Optim.FirstOrderOptimizer, optstate::Optim.AbstractOptimizerState,
-    options::Optim.Options)
-
-    # Optim.optimize(obj, p0, LBFGS(); options)
-    # result = Optim.optimize(obj, p0, opt, options)
-    result = Optim.optimize(obj, p0, opt, options, optstate)
-    copyto!(p0, θ)
-    return result
-end
 function _Flux_optimize!(θ::Flux.Params, obj::OnceDifferentiable, p0::Vector,
     opt::Optim.FirstOrderOptimizer, options::Optim.Options)
     result = Optim.optimize(obj, p0, opt, options)
     copyto!(p0, θ)
     return result
 end
-_Flux_optimize!(tfosw::TFOptimSubWorkspace, options::Optim.Options; use_optstate::Bool=true) =
-    use_optstate ?
-        _Flux_optimize!(tfosw.θ, tfosw.obj, tfosw.p0, tfosw.opt, tfosw.optstate, options) :
-        _Flux_optimize!(tfosw.θ, tfosw.obj, tfosw.p0, tfosw.opt, options)
+_Flux_optimize!(tfosw::TFOptimSubWorkspace, options::Optim.Options) =
+    _Flux_optimize!(tfosw.θ, tfosw.obj, tfosw.p0, tfosw.opt, options)
 
 
 # ends optimization if true
@@ -241,7 +227,7 @@ function train_TFOrderModel!(tfow::TFWorkspaceTelStar; print_stuff::Bool=_print_
     if train_telstar
         options = Optim.Options(iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
         # optimize tellurics and star
-        result_telstar = _Flux_optimize!(tfow.telstar, options; use_optstate=false)
+        result_telstar = _Flux_optimize!(tfow.telstar, options)
         tfow.tfo.star[:, :] = star_model(tfow.tfom)
         tfow.tfo.tel[:, :] = tel_model(tfow.tfom)
     end
@@ -249,7 +235,7 @@ function train_TFOrderModel!(tfow::TFWorkspaceTelStar; print_stuff::Bool=_print_
     # optimize RVs
     options = Optim.Options(callback=optim_cb_local, g_tol=g_tol*sqrt(length(tfow.rv.p0) / length(tfow.telstar.p0)), kwargs...)
     tfow.tfom.rv.lm.M[:] = calc_doppler_component_RVSKL(tfow.tfom.star.λ, tfow.tfom.star.lm.μ)
-    result_rv = _Flux_optimize!(tfow.rv, options; use_optstate=false)
+    result_rv = _Flux_optimize!(tfow.rv, options)
     tfow.tfo.rv[:, :] = rv_model(tfow.tfom)
 
     if ignore_regularization
@@ -263,7 +249,7 @@ function train_TFOrderModel!(tfow::TFWorkspaceTotal; print_stuff::Bool=_print_st
     optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
     options = Optim.Options(iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
     # optimize tellurics and star
-    result = _Flux_optimize!(tfow.total, options; use_optstate=false)
+    result = _Flux_optimize!(tfow.total, options)
     tfow.tfom.rv.lm.M[:] = calc_doppler_component_RVSKL(tfow.tfom.star.λ, tfow.tfom.star.lm.μ)
     tfow.tfo.star[:, :] = star_model(tfow.tfom)
     tfow.tfo.tel[:, :] = tel_model(tfow.tfom)
