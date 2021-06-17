@@ -21,13 +21,13 @@ paths_to_search_for_param = ["EXPRES"]
 expres_data_path = "E:/telfitting/"
 expres_save_path = "E:/telfitting/"
 
+init_jld2 = expres_save_path * target_subdir * "init.jld2"
 if !isfile(init_jld2)
 	# NOTE: make_manifest does not update its paths_to_search when default_paths_to_search is defined here, so if you change the line above, you must also include "paths_to_search=default_paths_to_search" in the make_manifest() function call below
-init_jld2 = expres_save_path * target_subdir * "init.jld2"
 	pipeline_plan = PipelinePlan()
 	dont_make_plot!(pipeline_plan, :movie)
 	reset_all_needs!(pipeline_plan)
-	masks = Array{UnitRange, 2}(undef, length(readdir(expres_data_path * target_subdir)), 86)
+	masks = Array{UnitRange, 2}(undef, sum(occursin.(r"\.fits$", readdir(expres_data_path * target_subdir))), 86)
 
 	if need_to(pipeline_plan,:read_spectra)
 	    df_files = make_manifest(expres_data_path, target_subdir, EXPRES)
