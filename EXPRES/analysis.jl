@@ -12,13 +12,11 @@ stars = ["10700", "26965"]
 star = stars[2]
 plot_stuff = true
 plot_stuff_fit = true
-use_telstar = true
-expres_data_path = "E:/telfitting/"
-expres_save_path = "E:/telfitting/"
-desired_order = 47  # 68 has a bunch of tels, 47 has very few
-## Setting up necessary variables and functions
+include("data_locs.jl")  # defines expres_data_path and expres_save_path
+use_telstar = SSOF.parse_args(1, Bool, true)
+desired_order = SSOF.parse_args(2, Int, 68)  # 68 has a bunch of tels, 47 has very few
 
-@load expres_save_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
+@load expres_save_path * star * "/$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 tf_model = SSOF.downsize(tf_model, 10, 10)
 
 if use_telstar
@@ -78,7 +76,7 @@ if plot_stuff
     mkpath(fig_dir)
 
     using CSV, DataFrames
-    expres_output = CSV.read(expres_data_path * star* "_activity.csv", DataFrame)
+    expres_output = CSV.read(expres_data_path * star * "_activity.csv", DataFrame)
     eo_rv = expres_output."CBC RV [m/s]"
     eo_rv_σ = expres_output."CBC RV Err. [m/s]"
     eo_time = expres_output."Time [MJD]"

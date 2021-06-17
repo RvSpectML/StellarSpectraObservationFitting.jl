@@ -75,3 +75,11 @@ function copy_dict!(from::Dict, to::Dict)
 		to[key] = from[key]
 	end
 end
+
+function parse_args(ind::Int, type::DataType, default)
+    if length(ARGS) > (ind - 1)
+        return parse(type, ARGS[ind])
+    else
+        return default
+    end
+end

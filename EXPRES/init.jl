@@ -21,9 +21,9 @@ paths_to_search_for_param = ["EXPRES"]
 expres_data_path = "E:/telfitting/"
 expres_save_path = "E:/telfitting/"
 
-init_jld2 = expres_save_path*target_subdir*"init.jld2"
 if !isfile(init_jld2)
 	# NOTE: make_manifest does not update its paths_to_search when default_paths_to_search is defined here, so if you change the line above, you must also include "paths_to_search=default_paths_to_search" in the make_manifest() function call below
+init_jld2 = expres_save_path * target_subdir * "init.jld2"
 	pipeline_plan = PipelinePlan()
 	dont_make_plot!(pipeline_plan, :movie)
 	reset_all_needs!(pipeline_plan)
@@ -134,7 +134,7 @@ tel_model_res = 2 * sqrt(2) * obs_resolution
 @time rvs_notel, rvs_naive, fracvar_tel, fracvar_star = SSOF.initialize!(tf_model, tf_data; use_gp=true)
 
 
-@save expres_save_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
+@save expres_save_path * star * "/$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 
 include("../src/_plot_functions.jl")
 plot_stellar_model_bases(tf_model; inds=1:10)
