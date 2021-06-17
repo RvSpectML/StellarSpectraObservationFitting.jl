@@ -113,15 +113,3 @@ if plot_stuff
     predict_plot = status_plot(tf_workspace.tfo, tf_data)
     png(predict_plot, fig_dir * "status_plot")
 end
-## TODO ERES presentation plots
-
-hmm = status_plot(tf_workspace.tfo, tf_data)
-png(hmm, "status_plot")
-plot_stellar_model_bases(tf_model; inds=1:3)
-hmm = plot_telluric_model_bases(tf_model; inds=1:3)
-png(hmm, "telluric_plot")
-anim = @animate for i in 1:40
-    plt = plot_spectrum(; title="Telluric Spectrum")
-    plot!(plt, exp.(tf_data.log_λ_obs[:, i]), view(tf_workspace.tfo.tel, :, i), label="", yaxis=[0.95, 1.005])
-end
-gif(anim, "show_telluric_var.gif", fps = 10)
