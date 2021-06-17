@@ -83,7 +83,7 @@ if plot_stuff
 
     # Compare RV differences to actual RVs from activity
     rvs_notel_opt = (tf_model.rv.lm.s .* light_speed_nu)'
-    predict_plot = plot_model_rvs(times_nu, rvs_naive, rvs_notel, rvs_notel_opt, eo_time, eo_rv, eo_rv_σ)
+    predict_plot = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ)
     png(predict_plot, fig_dir * "model_rvs.png")
 
     predict_plot = plot_stellar_model_bases(tf_model)

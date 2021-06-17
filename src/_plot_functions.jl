@@ -4,6 +4,7 @@ using Plots
 _plt_dpi = 400
 _plt_size = (1920,1080)
 _thickness_scaling = 2
+# _theme = :default
 _theme = :juno
 _my_plot(; dpi = _plt_dpi, size = _plt_size, thickness_scaling=_thickness_scaling, kwargs...) =
     plot(; dpi=dpi, size=size, thickness_scaling=thickness_scaling, kwargs...)
@@ -15,14 +16,20 @@ plot_scores(; xlabel = "Time (d)", ylabel = "Weights + Const", kwargs...) =
     _my_plot(; xlabel=xlabel, ylabel=ylabel, kwargs...)
 theme(_theme)
 my_scatter!(plt::Union{Plots.AbstractPlot,Plots.AbstractLayout}, x::AbstractVecOrMat, y::AbstractVecOrMat; kwargs...) = scatter!(plt, x, y; markerstrokewidth=0, kwargs...)
-# plt_colors = palette(:default).colors.colors
-plt_colors = PlotThemes._themes[_theme].defaults[:palette].colors.colors
+_theme == :default ? plt_colors = palette(_theme).colors.colors : plt_colors = PlotThemes._themes[_theme].defaults[:palette].colors.colors
 function plot_model_rvs(times_nu::AbstractVector{T}, rvs_naive::AbstractVector{T}, rvs_notel::AbstractVecOrMat{T}, rvs_notel_opt::AbstractVecOrMat{T}, eo_times::AbstractVector{T}, eo_rv::AbstractVector{T}, eo_rv_σ::AbstractVector{T}) where {T<:Real}
     plt = plot_rv()
     my_scatter!(plt, times_nu, rvs_naive, label="Naive, std: $(round(std(rvs_naive), digits=3))", alpha = 0.2)
     my_scatter!(plt, times_nu, rvs_notel, label="Before optimization, std: $(round(std(rvs_notel), digits=3))", alpha = 0.2)
     my_scatter!(plt, eo_time, eo_rv; yerror=eo_rv_σ, label="EXPRES RVs, std: $(round(std(eo_rv), digits=3))")
     my_scatter!(plt, times_nu, rvs_notel_opt, label="After optimization, std: $(round(std(rvs_notel_opt), digits=3))", alpha = 0.7)
+    display(plt)
+    return plt
+end
+function plot_model_rvs_new(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat{T}, model_rvs_σ::AbstractVecOrMat{T}, eo_times::AbstractVector{T}, eo_rvs::AbstractVector{T}, eo_rvs_σ::AbstractVector{T}; kwargs...) where {T<:Real}
+    plt = plot_rv()
+    my_scatter!(plt, eo_times, eo_rvs; yerror=eo_rvs_σ, label="EXPRES RVs, std: $(round(std(eo_rv), digits=3))", kwargs...)
+    my_scatter!(plt, times_nu, model_rvs; yerror=model_rvs_σ, label="Model RVs, std: $(round(std(model_rvs), digits=3))", alpha = 0.7, kwargs...)
     display(plt)
     return plt
 end
