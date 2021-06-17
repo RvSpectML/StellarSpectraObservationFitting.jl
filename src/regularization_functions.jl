@@ -25,7 +25,6 @@ function fit_regularization_helper!(reg_field::Symbol, reg_key::Symbol, tfom::TF
     println("$(test_factor)x regularization eval")
     ℓs[2] = eval_regularization(reg_field, reg_key, reg_hold[2], tfom, tfd, training_inds, testing_inds)
     println()
-
     # need to try decreasing regularization
     if ℓs[2] > ℓs[1]
         while (ℓs[2] > ℓs[1]) && (reg_min < reg_hold[1] < reg_max)
@@ -48,11 +47,12 @@ function fit_regularization_helper!(reg_field::Symbol, reg_key::Symbol, tfom::TF
 end
 
 
+_key_list = [:L2_μ, :L1_μ, :L1_μ₊_factor, :L2_M, :L1_M, :shared_M]
 function check_for_valid_regularization(reg::Dict{Symbol, <:Real})
     reg_keys = reg.keys
     for i in 1:length(reg_keys)
         try
-            @assert reg_keys[i] in [:L1_M, :shared_M, :L2_M, :L2_μ, :L1_μ₊_factor, :L1_μ]
+            @assert reg_keys[i] in _key_list
         catch y
             if !(typeof(y)==UndefRefError); error("The requested regularization isn't valid") end
         end
@@ -60,14 +60,14 @@ function check_for_valid_regularization(reg::Dict{Symbol, <:Real})
 end
 
 
-function fit_regularization!(tfom::TFOrderModel, tfd::TFData, training_inds::AbstractVecOrMat; kwargs...)
+function fit_regularization!(tfom::TFOrderModel, tfd::TFData, training_inds::AbstractVecOrMat; key_list::Vector{Symbol}=_key_list, kwargs...)
     n_obs = size(tfd.flux, 2)
     testing_inds = [i for i in 1:n_obs if !(i in training_inds)]
     println("starting regularization searches")
     # for i in 3
     check_for_valid_regularization(tfom.reg_tel)
     check_for_valid_regularization(tfom.reg_star)
-    for key in [:L2_μ, :L1_μ, :L1_μ₊_factor, :L2_M, :L1_M, :shared_M]
+    for key in key_list
         if key == :L1_μ₊_factor
             test_factor, reg_min, reg_max = 1.2, 1e-1, 1e1
         else
