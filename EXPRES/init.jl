@@ -130,7 +130,7 @@ tf_data = SSOF.TFData(flux_obs, var_obs, log_λ_obs, log_λ_star)
 star_model_res = 2 * sqrt(2) * obs_resolution
 tel_model_res = 2 * sqrt(2) * obs_resolution
 
-@time tf_model = SSOF.TFOrderModel(tf_data, star_model_res, tel_model_res, "EXPRES", desired_order; n_comp_tel=20, n_comp_star=20)
+@time tf_model = SSOF.TFOrderModel(tf_data, star_model_res, tel_model_res, "EXPRES", desired_order, star; n_comp_tel=20, n_comp_star=20)
 @time rvs_notel, rvs_naive, fracvar_tel, fracvar_star = SSOF.initialize!(tf_model, tf_data; use_gp=true)
 
 

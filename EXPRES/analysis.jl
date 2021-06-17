@@ -38,7 +38,7 @@ tracker = 0
 println("guess $tracker, std=$(round(std(rvs_notel), digits=5))")
 rvs_notel_opt = copy(rvs_notel)
 
-if !tf_model.todo[:reg_improved]
+if !tf_model.metadata.todo[:reg_improved]
     using StatsBase
     n_obs_train = Int(round(0.75 * n_obs))
     training_inds = sort(sample(1:n_obs, n_obs_train; replace=false))
@@ -48,7 +48,6 @@ if !tf_model.todo[:reg_improved]
     @save expres_save_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
 end
 
-if !tf_model.todo[:optimized]
     @time for i in 1:8
         SSOF.train_TFOrderModel!(tf_workspace)
         rvs_notel_opt[:] = (tf_model.rv.lm.s .* light_speed_nu)'
@@ -63,6 +62,7 @@ if !tf_model.todo[:optimized]
     end
     tf_model.todo[:optimized] = true
     @save expres_save_path * star * "_$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
+if !tf_model.metadata.todo[:optimized]
 end
 
 # plot(0:tracker, resid_stds; xlabel="iter", ylabel="predicted RV - active RV RMS", legend=false)

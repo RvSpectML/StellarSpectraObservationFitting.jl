@@ -14,6 +14,7 @@ end
 (tfd::TFData)(inds::AbstractVecOrMat) =
 	TFData(view(tfd.flux, :, inds), view(tfd.var, :, inds),
 	view(tfd.log_λ_obs, :, inds), view(tfd.log_λ_star, :, inds))
+Base.copy(tfd::TFData) = TFData(copy(tfd.flux), copy(tfd.var), copy(tfd.log_λ_obs), copy(tfd.log_λ_star))
 
 
 function create_λ_template(log_λ_obs, resolution)
@@ -164,6 +165,11 @@ function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 	return log_λ_model_to
 end
 
+default_reg_tel = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
+	(:L1_μ₊_factor, 6), (:L2_M, 1e-1), (:L1_M, 1e3)])
+default_reg_star = Dict([(:L2_μ, 1e4), (:L1_μ, 1e3),
+	(:L1_μ₊_factor, 7.2), (:L2_M, 1e1), (:L1_M, 1e6)])
+
 struct TFOrderModel{T<:Number}
     tel::TFSubmodel{T}
     star::TFSubmodel{T}
@@ -176,15 +182,14 @@ struct TFOrderModel{T<:Number}
     lih_b2o::LinearInterpolationHelper
     lih_t2o::LinearInterpolationHelper
     lih_o2t::LinearInterpolationHelper
-	todo::Dict{Symbol, Bool}
-	instrument::String
-	order::Int
+	metadata::Dict{Symbol, Any}
     function TFOrderModel(
 		tfd::TFData,
 		star_model_res::Number,
 		tel_model_res::Number,
 		instrument::String,
-		order::Int;
+		order::Int,
+		star::String;
 		n_comp_tel::Int=2,
 		n_comp_star::Int=2)
 
@@ -201,31 +206,24 @@ struct TFOrderModel{T<:Number}
             star_log_λ_tel[:, i] = star.log_λ .+ star_dop[i]
         end
         lih_t2b, lih_b2t = LinearInterpolationHelper_maker(tel.log_λ, star_log_λ_tel)
-		# reg_tel = Dict([(:shared_M, 1e-4), (:L2_μ, 1e4), (:L1_μ, 1e3),
-		# 	(:L1_μ₊_factor, 2), (:L2_M, 1e7), (:L1_M, 1e4)])
-		# reg_star = Dict([(:shared_M, 1e-4), (:L2_μ, 1e3), (:L1_μ, 1e-1),
-		# 	(:L1_μ₊_factor, 2), (:L2_M, 1e7), (:L1_M, 1e6)])
-		reg_tel = Dict([(:L2_μ, 1e5), (:L1_μ, 1e5),
-			(:L1_μ₊_factor, 6), (:L2_M, 1e-1), (:L1_M, 1e6)])
-		reg_star = Dict([(:L2_μ, 1e6), (:L1_μ, 1e5),
-			(:L1_μ₊_factor, 6), (:L2_M, 1e8), (:L1_M, 1e7)])
 		todo = Dict([(:reg_improved, false), (:extra_chop, false), (:optimized, false)])
-        return TFOrderModel(tel, star, rv, reg_tel, reg_star, lih_t2b, lih_b2t,
-			lih_o2b, lih_b2o, lih_t2o, lih_o2t, todo, instrument, order)
+		metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
+        return TFOrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), lih_t2b, lih_b2t,
+			lih_o2b, lih_b2o, lih_t2o, lih_o2t, metadata)
     end
     function TFOrderModel(tel::TFSubmodel{T}, star, rv, reg_tel, reg_star, lih_t2b,
-		lih_b2t, lih_o2b, lih_b2o, lih_t2o, lih_o2t, todo, instrument, order) where {T<:Number}
-		return new{T}(tel, star, rv, reg_tel, reg_star, lih_t2b, lih_b2t, lih_o2b, lih_b2o, lih_t2o, lih_o2t, todo, instrument, order)
+		lih_b2t, lih_o2b, lih_b2o, lih_t2o, lih_o2t, metadata) where {T<:Number}
+		return new{T}(tel, star, rv, reg_tel, reg_star, lih_t2b, lih_b2t, lih_o2b, lih_b2o, lih_t2o, lih_o2t, metadata)
 	end
 end
 Base.copy(tfom::TFOrderModel) = TFOrderModel(copy(tfom.tel), copy(tfom.star), copy(tfom.rv), copy(tfom.reg_tel), copy(tfom.reg_star), tfom.lih_t2b,
-	tfom.lih_b2t, tfom.lih_o2b, tfom.lih_b2o, tfom.lih_t2o, tfom.lih_o2t, copy(tfom.todo), tfom.instrument, tfom.order)
+	tfom.lih_b2t, tfom.lih_o2b, tfom.lih_b2o, tfom.lih_t2o, tfom.lih_o2t, copy(tfom.metadata))
 (tfom::TFOrderModel)(inds::AbstractVecOrMat) =
 	TFOrderModel(tfom.tel(inds), tfom.star(inds), tfom.rv(inds), tfom.reg_tel, tfom.reg_star,
 	tfom.lih_t2b(inds, size(tfom.lih_o2t.li, 1)), tfom.lih_b2t(inds, size(tfom.lih_o2b.li, 1)),
 	tfom.lih_o2b(inds, size(tfom.lih_b2o.li, 1)), tfom.lih_b2o(inds, size(tfom.lih_o2b.li, 1)),
 	tfom.lih_t2o(inds, size(tfom.lih_o2t.li, 1)), tfom.lih_o2t(inds, size(tfom.lih_b2o.li, 1)),
-	tfom.todo, tfom.instrument, tfom.order)
+	copy(tfom.metadata))
 function zero_regularization(tfom::TFOrderModel)
 	for (key, value) in tfom.reg_tel
 		tfom.reg_tel[key] = 0
@@ -246,8 +244,7 @@ downsize(tfm::TFOrderModel, n_comp_tel::Int, n_comp_star::Int) =
 		downsize(tfm.tel, n_comp_tel),
 		downsize(tfm.star, n_comp_star),
 		tfm.rv, tfm.reg_tel, tfm.reg_star, tfm.lih_t2b, tfm.lih_b2t,
-		tfm.lih_o2b, tfm.lih_b2o, tfm.lih_t2o, tfm.lih_o2t, tfm.todo,
-		tfm.instrument, tfm.order)
+		tfm.lih_o2b, tfm.lih_b2o, tfm.lih_t2o, tfm.lih_o2t, tfm.metadata)
 
 tel_prior(tfom::TFOrderModel) = model_prior(tfom.tel.lm, tfom.reg_tel)
 star_prior(tfom::TFOrderModel) = model_prior(tfom.star.lm, tfom.reg_star)
