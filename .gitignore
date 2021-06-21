@@ -8,3 +8,4 @@ examples/generate_example_data.jl
 *.png
 *.gif
 EXPRES/data_locs.jl
+Manifest.toml
