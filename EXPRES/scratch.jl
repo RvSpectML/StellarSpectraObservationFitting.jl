@@ -1,5 +1,34 @@
 ## moved from end of init.jl
 
+
+# using Plots
+#
+# snr = sqrt.(tf_data.flux.^2 ./ tf_data.var)
+# heatmap(snr)
+# histogram(collect(Iterators.flatten(snr)))
+#
+# plt = plot(;xlabel="MJD", ylabel="Å", title="EXPRES wavelength calibration ($star, order $desired_order)")
+# for i in 1:10
+#     scatter!(plt, times_nu, exp.(log_λ_obs[i, :]); label="pixel $(mask_inds[i])")
+# end
+# display(plt)
+# png("obs.png")
+#
+# plt = plot(;xlabel="MJD", ylabel="Å", title="EXPRES wavelength calibration ($star, order $desired_order)")
+# for i in 1:10
+#     scatter!(plt, times_nu, exp.(log_λ_star[i, :]); label="pixel $(mask_inds[i])")
+# end
+# display(plt)
+# png("bary.png")
+
+# inst = all_spectra[1].inst
+# extra_chop = 0
+# mask_inds = (min_col_default(inst, desired_order) + extra_chop):(max_col_default(inst, desired_order) - extra_chop)  # 850:6570
+# mask_inds = 2270:5150
+
+# using Plots
+# plot(all_spectra[1].metadata[:tellurics][:, desired_order])
+
 # abs_M = abs.(tf_model.tel.lm.M[:, 1])
 # plot((1:length(abs_M)) ./ length(abs_M), sort(abs_M); xrange=(0.975,1))
 function proposed_new_cuts(M::AbstractVector, mask_inds::UnitRange, cutoff::Real)

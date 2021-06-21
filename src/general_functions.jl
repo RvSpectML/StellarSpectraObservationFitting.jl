@@ -77,6 +77,7 @@ function copy_dict!(from::Dict, to::Dict)
 end
 
 function parse_args(ind::Int, type::DataType, default)
+	@assert typeof(default) <: type
     if length(ARGS) > (ind - 1)
         return parse(type, ARGS[ind])
     else

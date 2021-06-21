@@ -13,13 +13,16 @@ using Plots
 stars = ["10700", "26965"]
 star = stars[1]
 plot_stuff = true
-plot_stuff_fit = true
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 use_telstar = SSOF.parse_args(1, Bool, true)
 desired_order = SSOF.parse_args(2, Int, 68)  # 68 has a bunch of tels, 47 has very few
+save_intermediate = SSOF.parse_args(3, Bool, true)
 
-## Loading in initialized data and downsizing model
-@load expres_save_path * star * "/$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
+## Loading in data and initializing model
+@load expres_save_path * star * "/$(desired_order)_data.jld2" n_obs tf_data times_nu airmasses
+model_res = 2 * sqrt(2) * 150000
+@time tf_model = SSOF.TFOrderModel(tf_data, model_res, model_res, "EXPRES", desired_order, star; n_comp_tel=20, n_comp_star=20)
+@time rvs_notel, rvs_naive, fracvar_tel, fracvar_star = SSOF.initialize!(tf_model, tf_data; use_gp=true)
 tf_model = SSOF.downsize(tf_model, 10, 10)
 
 ## Creating optimization workspace
@@ -30,7 +33,7 @@ else
 end
 
 ## Plotting
-if plot_stuff_fit
+if plot_stuff
     include("../src/_plot_functions.jl")
     status_plot(tf_workspace.tfo, tf_data)
 end
@@ -38,27 +41,28 @@ end
 light_speed_nu = 299792458
 rvs_notel = (tf_model.rv.lm.s .* light_speed_nu)'
 rvs_notel_opt = copy(rvs_notel)
-@time results_telstar, _ = SSOF.train_TFOrderModel!(tf_workspace; print_stuff=true, ignore_regularization=true)  # 16s
-@time results_telstar, _ = SSOF.train_TFOrderModel!(tf_workspace; print_stuff=true, ignore_regularization=true, g_tol=SSOF._g_tol_def/10*sqrt(length(tf_workspace.telstar.p0)), f_tol=1e-8)  # 50s
 
 if !tf_model.metadata.todo[:reg_improved]
+    @time results_telstar, _ = SSOF.train_TFOrderModel!(tf_workspace; print_stuff=true, ignore_regularization=true)  # 16s
+    @time results_telstar, _ = SSOF.train_TFOrderModel!(tf_workspace; print_stuff=true, ignore_regularization=true, g_tol=SSOF._g_tol_def/10*sqrt(length(tf_workspace.telstar.p0)), f_tol=1e-8)  # 50s
     using StatsBase
     n_obs_train = Int(round(0.75 * n_obs))
     training_inds = sort(sample(1:n_obs, n_obs_train; replace=false))
     @time SSOF.fit_regularization!(tf_model, tf_data, training_inds; use_telstar=use_telstar)
     tf_model.metadata.todo[:reg_improved] = true
     tf_model.metadata.todo[:optimized] = false
-    @save expres_save_path * star * "/$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
+    @save expres_save_path * star * "/$(desired_order)_results.jld2" tf_model rvs_naive rvs_notel
 end
 
 if !tf_model.metadata.todo[:optimized]
     @time results_telstar, _ = SSOF.train_TFOrderModel!(tf_workspace; print_stuff=true)  # 16s
     @time results_telstar, _ = SSOF.train_TFOrderModel!(tf_workspace; print_stuff=true, g_tol=SSOF._g_tol_def/10*sqrt(length(tf_workspace.telstar.p0)), f_tol=1e-8)  # 50s
     rvs_notel_opt[:] = (tf_model.rv.lm.s .* light_speed_nu)'
-    if plot_stuff_fit; status_plot(tf_workspace.tfo, tf_data) end
+    if plot_stuff; status_plot(tf_workspace.tfo, tf_data) end
     tf_model.metadata.todo[:optimized] = true
-    @save expres_save_path * star * "/$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses
+    @save expres_save_path * star * "/$(desired_order)_results.jld2" tf_model rvs_naive rvs_notel
 end
+
 
 ## Getting RV error bars (only regularization held constant)
 
@@ -76,9 +80,23 @@ rv_holder = zeros(n, length(tf_model.rv.lm.s))
     rv_holder[i, :] = (tf_model_holder.rv.lm.s .* light_speed_nu)'
 end
 rv_errors = std(rv_holder; dims=1)
-@save expres_save_path * star * "/$(desired_order).jld2" tf_model n_obs tf_data rvs_naive rvs_notel times_nu airmasses rv_errors
+@save expres_save_path * star * "/$(desired_order)_results.jld2" tf_model rvs_naive rvs_notel rv_errors
 
 ## Plots
+using CSV, DataFrames
+expres_output = CSV.read(expres_data_path * star * "_activity.csv", DataFrame)
+eo_rv = expres_output."CBC RV [m/s]"
+eo_rv_σ = expres_output."CBC RV Err. [m/s]"
+eo_time = expres_output."Time [MJD]"
+
+# Compare RV differences to actual RVs from activity
+include("../src/_plot_functions.jl")
+rvs_notel_opt = (tf_model.rv.lm.s .* light_speed_nu)'
+predict_plot = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ; markerstrokewidth=1, xlim=(58764.35, 58764.40))
+scatter(x, x; yerror=x)
+
+scatter(eo_time, eo_time-times_nu)
+histogram(eo_time - times_nu)
 
 if plot_stuff
     include("../src/_plot_functions.jl")
