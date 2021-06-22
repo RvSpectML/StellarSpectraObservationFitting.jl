@@ -61,6 +61,7 @@ times_nu = [s.metadata[:bjd] for s in all_spectra]
 airmasses = [parse(Float64, s.metadata[:airmass]) for s in all_spectra]
 
 ## Switching to my data format
+println("starting to write new files")
 
 useful_orders = [length(i) for i in inds] .> 1000
 
