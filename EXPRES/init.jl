@@ -57,8 +57,8 @@ for i in 1:length(inds)
     inds[i] = maximum([mask[1] for mask in masks[:, i]]):minimum([mask[end] for mask in masks[:, i]])
 end
 
-times_nu = pipeline_plan.cache[:extract_orders].times
-airmasses = [parse(Float64, md[:airmass]) for md in pipeline_plan.cache[:extract_orders].metadata]
+times_nu = [s.metadata[:bjd] for s in all_spectra]
+airmasses = [parse(Float64, s.metadata[:airmass]) for s in all_spectra]
 
 ## Switching to my data format
 
