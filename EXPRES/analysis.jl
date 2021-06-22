@@ -104,7 +104,7 @@ if plot_stuff
     mkpath(fig_dir)
 
     using CSV, DataFrames
-    expres_output = CSV.read(expres_data_path * star * "_activity.csv", DataFrame)
+    expres_output = CSV.read("EXPRES/" * star * "_activity.csv", DataFrame)
     eo_rv = expres_output."CBC RV [m/s]"
     eo_rv_σ = expres_output."CBC RV Err. [m/s]"
     eo_time = expres_output."Time [MJD]"

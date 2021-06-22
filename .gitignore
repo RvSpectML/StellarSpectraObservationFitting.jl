@@ -9,3 +9,4 @@ examples/generate_example_data.jl
 *.gif
 EXPRES/data_locs.jl
 Manifest.toml
+*.csv
