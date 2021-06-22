@@ -19,6 +19,5 @@ UnitfulAstro = "6112ee07-acf9-5e0f-b108-d242c714bf9f"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
-EMPCA = "0.1"
 Stheno = "0.6"
 TemporalGPs = "0.3, 0.4"
