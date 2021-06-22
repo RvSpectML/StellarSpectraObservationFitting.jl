@@ -65,6 +65,8 @@ airmasses = [parse(Float64, s.metadata[:airmass]) for s in all_spectra]
 useful_orders = [length(i) for i in inds] .> 1000
 
 # 68 has a bunch of tels, 47 has very few
+save_path = expres_save_path * star * "/"
+mkpath(save_path)
 for desired_order in findfirst(useful_orders):findlast(useful_orders)
 	n_obs = length(all_spectra)
 	mask_inds = inds[desired_order]
@@ -82,7 +84,7 @@ for desired_order in findfirst(useful_orders):findlast(useful_orders)
 	end
 	tf_data = SSOF.TFData(flux_obs, var_obs, log_λ_obs, log_λ_star)
 	SSOF.process!(tf_data; order=6)
-	@save expres_save_path * star * "/$(desired_order)_data.jld2" n_obs tf_data times_nu airmasses
+	@save save_path * "$(desired_order)_data.jld2" n_obs tf_data times_nu airmasses
 end
 
 # lfc_orders = 43:72
