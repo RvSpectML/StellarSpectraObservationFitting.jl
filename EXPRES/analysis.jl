@@ -83,20 +83,6 @@ rv_errors = std(rv_holder; dims=1)
 @save expres_save_path * star * "/$(desired_order)_results.jld2" tf_model rvs_naive rvs_notel rv_errors
 
 ## Plots
-using CSV, DataFrames
-expres_output = CSV.read(expres_data_path * star * "_activity.csv", DataFrame)
-eo_rv = expres_output."CBC RV [m/s]"
-eo_rv_σ = expres_output."CBC RV Err. [m/s]"
-eo_time = expres_output."Time [MJD]"
-
-# Compare RV differences to actual RVs from activity
-include("../src/_plot_functions.jl")
-rvs_notel_opt = (tf_model.rv.lm.s .* light_speed_nu)'
-predict_plot = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ; markerstrokewidth=1, xlim=(58764.35, 58764.40))
-scatter(x, x; yerror=x)
-
-scatter(eo_time, eo_time-times_nu)
-histogram(eo_time - times_nu)
 
 if plot_stuff
     include("../src/_plot_functions.jl")
