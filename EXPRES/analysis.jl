@@ -57,7 +57,7 @@ if !tf_model.metadata[:todo][:reg_improved]
     @time SSOF.fit_regularization!(tf_model, tf_data, training_inds; use_telstar=use_telstar)
     tf_model.metadata[:todo][:reg_improved] = true
     tf_model.metadata[:todo][:optimized] = false
-    @save save_path*"results.jld2" tf_model rvs_naive rvs_notel
+    @save save_path*"results.jld2" tf_model rvs_naive rvs_notel rv_errors
 end
 
 ## Optimizing model
@@ -74,7 +74,7 @@ end
 
 ## Getting RV error bars (only regularization held constant)
 
-if !tf_model.metadata[:todo][:optimized]
+if !tf_model.metadata[:todo][:err_estimated]
     tf_data.var[tf_data.var.==Inf] .= 0
     tf_data_noise = sqrt.(tf_data.var)
     tf_data.var[tf_data.var.==0] .= Inf
