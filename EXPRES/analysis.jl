@@ -43,24 +43,24 @@ light_speed_nu = 299792458
 rvs_notel = (tf_model.rv.lm.s .* light_speed_nu)'
 rvs_notel_opt = copy(rvs_notel)
 
-if !tf_model.metadata.todo[:reg_improved]
+if !tf_model.metadata[:todo][:reg_improved]
     @time results_telstar, _ = SSOF.train_TFOrderModel!(tf_workspace; print_stuff=true, ignore_regularization=true)  # 16s
     @time results_telstar, _ = SSOF.train_TFOrderModel!(tf_workspace; print_stuff=true, ignore_regularization=true, g_tol=SSOF._g_tol_def/10*sqrt(length(tf_workspace.telstar.p0)), f_tol=1e-8)  # 50s
     using StatsBase
     n_obs_train = Int(round(0.75 * n_obs))
     training_inds = sort(sample(1:n_obs, n_obs_train; replace=false))
     @time SSOF.fit_regularization!(tf_model, tf_data, training_inds; use_telstar=use_telstar)
-    tf_model.metadata.todo[:reg_improved] = true
-    tf_model.metadata.todo[:optimized] = false
+    tf_model.metadata[:todo][:reg_improved] = true
+    tf_model.metadata[:todo][:optimized] = false
     @save save_path*"results.jld2" tf_model rvs_naive rvs_notel
 end
 
-if !tf_model.metadata.todo[:optimized]
+if !tf_model.metadata[:todo][:optimized]
     @time results_telstar, _ = SSOF.train_TFOrderModel!(tf_workspace; print_stuff=true)  # 16s
     @time results_telstar, _ = SSOF.train_TFOrderModel!(tf_workspace; print_stuff=true, g_tol=SSOF._g_tol_def/10*sqrt(length(tf_workspace.telstar.p0)), f_tol=1e-8)  # 50s
     rvs_notel_opt[:] = (tf_model.rv.lm.s .* light_speed_nu)'
     if interactive; status_plot(tf_workspace.tfo, tf_data) end
-    tf_model.metadata.todo[:optimized] = true
+    tf_model.metadata[:todo][:optimized] = true
     @save save_path*"results.jld2" tf_model rvs_naive rvs_notel
 end
 
