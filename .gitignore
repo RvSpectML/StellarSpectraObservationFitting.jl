@@ -10,3 +10,4 @@ examples/generate_example_data.jl
 EXPRES/data_locs.jl
 Manifest.toml
 *.csv
+test.jl
