@@ -11,4 +11,4 @@ EXPRES/data_locs.jl
 Manifest.toml
 *.csv
 test.jl
-*.sh
+*.pbs
