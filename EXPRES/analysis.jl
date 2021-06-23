@@ -12,7 +12,8 @@ using Plots
 
 stars = ["10700", "26965"]
 star = stars[SSOF.parse_args(1, Int, 1)]
-plot_stuff = true
+interactive = length(ARGS) == 0
+save_plots = true
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 use_telstar = SSOF.parse_args(2, Bool, true)
 desired_order = SSOF.parse_args(3, Int, 68)  # 68 has a bunch of tels, 47 has very few
@@ -33,8 +34,8 @@ else
 end
 
 ## Plotting
-if plot_stuff
-    include("../src/_plot_functions.jl")
+if interactive
+    include(dirname(pathof(SSOF)) * "/_plot_functions.jl")
     status_plot(tf_workspace.tfo, tf_data)
 end
 
@@ -58,7 +59,7 @@ if !tf_model.metadata.todo[:optimized]
     @time results_telstar, _ = SSOF.train_TFOrderModel!(tf_workspace; print_stuff=true)  # 16s
     @time results_telstar, _ = SSOF.train_TFOrderModel!(tf_workspace; print_stuff=true, g_tol=SSOF._g_tol_def/10*sqrt(length(tf_workspace.telstar.p0)), f_tol=1e-8)  # 50s
     rvs_notel_opt[:] = (tf_model.rv.lm.s .* light_speed_nu)'
-    if plot_stuff; status_plot(tf_workspace.tfo, tf_data) end
+    if interactive; status_plot(tf_workspace.tfo, tf_data) end
     tf_model.metadata.todo[:optimized] = true
     @save save_path*"results.jld2" tf_model rvs_naive rvs_notel
 end
@@ -84,7 +85,7 @@ rv_errors = std(rv_holder; dims=1)
 
 ## Plots
 
-if plot_stuff
+if save_plots
 
     include(dirname(pathof(SSOF)) * "/_plot_functions.jl")
 
@@ -96,33 +97,33 @@ if plot_stuff
 
     # Compare RV differences to actual RVs from activity
     rvs_notel_opt = (tf_model.rv.lm.s .* light_speed_nu)'
-    predict_plot = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ)
+    predict_plot = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ; display_plt=interactive)
     png(predict_plot, save_path * "model_rvs.png")
 
-    predict_plot = plot_stellar_model_bases(tf_model)
+    predict_plot = plot_stellar_model_bases(tf_model; display_plt=interactive)
     png(predict_plot, save_path * "model_star_basis.png")
 
-    predict_plot = plot_stellar_model_scores(tf_model)
+    predict_plot = plot_stellar_model_scores(tf_model; display_plt=interactive)
     png(predict_plot, save_path * "model_star_weights.png")
 
-    predict_plot = plot_telluric_model_bases(tf_model)
+    predict_plot = plot_telluric_model_bases(tf_model; display_plt=interactive)
     png(predict_plot, save_path * "model_tel_basis.png")
 
-    predict_plot = plot_telluric_model_scores(tf_model)
+    predict_plot = plot_telluric_model_scores(tf_model; display_plt=interactive)
     png(predict_plot, save_path * "model_tel_weights.png")
 
-    predict_plot = plot_stellar_model_bases(tf_model; inds=1:3)
+    predict_plot = plot_stellar_model_bases(tf_model; inds=1:4, display_plt=interactive)
     png(predict_plot, save_path * "model_star_basis_few.png")
 
-    predict_plot = plot_stellar_model_scores(tf_model; inds=1:3)
+    predict_plot = plot_stellar_model_scores(tf_model; inds=1:4, display_plt=interactive)
     png(predict_plot, save_path * "model_star_weights_few.png")
 
-    predict_plot = plot_telluric_model_bases(tf_model; inds=1:3)
+    predict_plot = plot_telluric_model_bases(tf_model; inds=1:4, display_plt=interactive)
     png(predict_plot, save_path * "model_tel_basis_few.png")
 
-    predict_plot = plot_telluric_model_scores(tf_model; inds=1:3)
+    predict_plot = plot_telluric_model_scores(tf_model; inds=1:4, display_plt=interactive)
     png(predict_plot, save_path * "model_tel_weights_few.png")
 
-    predict_plot = status_plot(tf_workspace.tfo, tf_data)
+    predict_plot = status_plot(tf_workspace.tfo, tf_data; display_plt=interactive)
     png(predict_plot, save_path * "status_plot.png")
 end
