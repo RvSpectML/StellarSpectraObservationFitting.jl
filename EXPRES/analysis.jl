@@ -39,8 +39,9 @@ else
 end
 
 ## Plotting
+SSOF_path = dirname(dirname(pathof(SSOF)))
 if interactive
-    include(dirname(pathof(SSOF)) * "/_plot_functions.jl")
+    include(SSOF_path * "/src/_plot_functions.jl")
     status_plot(tf_workspace.tfo, tf_data)
 end
 
@@ -92,10 +93,10 @@ rv_errors = std(rv_holder; dims=1)
 
 if save_plots
 
-    include(dirname(pathof(SSOF)) * "/_plot_functions.jl")
+    include(SSOF_path * "/src/_plot_functions.jl")
 
     using CSV, DataFrames
-    expres_output = CSV.read("EXPRES/" * star * "_activity.csv", DataFrame)
+    expres_output = CSV.read(SSOF_path * "/EXPRES/" * star * "_activity.csv", DataFrame)
     eo_rv = expres_output."CBC RV [m/s]"
     eo_rv_σ = expres_output."CBC RV Err. [m/s]"
     eo_time = expres_output."Time [MJD]"
