@@ -21,10 +21,15 @@ desired_order = SSOF.parse_args(3, Int, 68)  # 68 has a bunch of tels, 47 has ve
 ## Loading in data and initializing model
 save_path = expres_save_path * star * "/$(desired_order)/"
 @load save_path * "data.jld2" n_obs tf_data times_nu airmasses
-model_res = 2 * sqrt(2) * 150000
-@time tf_model = SSOF.TFOrderModel(tf_data, model_res, model_res, "EXPRES", desired_order, star; n_comp_tel=20, n_comp_star=20)
-@time rvs_notel, rvs_naive, fracvar_tel, fracvar_star = SSOF.initialize!(tf_model, tf_data; use_gp=true)
-tf_model = SSOF.downsize(tf_model, 10, 10)
+
+if isfile(save_path*"results.jld2")
+    @load save_path*"results.jld2" tf_model rvs_naive rvs_notel
+else
+    model_res = 2 * sqrt(2) * 150000
+    @time tf_model = SSOF.TFOrderModel(tf_data, model_res, model_res, "EXPRES", desired_order, star; n_comp_tel=20, n_comp_star=20)
+    @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(tf_model, tf_data; use_gp=true)
+    tf_model = SSOF.downsize(tf_model, 10, 10)
+end
 
 ## Creating optimization workspace
 if use_telstar
@@ -75,7 +80,7 @@ tf_data_holder = copy(tf_data)
 tf_model_holder = copy(tf_model)
 n = 20
 rv_holder = zeros(n, length(tf_model.rv.lm.s))
-@time @progress for i in 1:n
+@time for i in 1:n
     tf_data_holder.flux[:, :] = tf_data.flux + (tf_data_noise .* randn(size(tf_data_holder.var)))
     SSOF.train_TFOrderModel!(SSOF.TFWorkspaceTelStar(tf_model_holder, tf_data_holder), g_tol=SSOF._g_tol_def/1*sqrt(length(tf_workspace.telstar.p0)), f_tol=1e-8)
     rv_holder[i, :] = (tf_model_holder.rv.lm.s .* light_speed_nu)'
