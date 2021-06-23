@@ -23,7 +23,7 @@ save_path = expres_save_path * star * "/$(desired_order)/"
 @load save_path * "data.jld2" n_obs tf_data times_nu airmasses
 
 if isfile(save_path*"results.jld2")
-    @load save_path*"results.jld2" tf_model rvs_naive rvs_notel
+    @load save_path*"results.jld2" tf_model rvs_naive rvs_notel rv_errors
 else
     model_res = 2 * sqrt(2) * 150000
     @time tf_model = SSOF.TFOrderModel(tf_data, model_res, model_res, "EXPRES", desired_order, star; n_comp_tel=20, n_comp_star=20)
