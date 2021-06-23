@@ -66,10 +66,10 @@ println("starting to write new files")
 useful_orders = [length(i) for i in inds] .> 1000
 
 # 68 has a bunch of tels, 47 has very few
-save_path = expres_save_path * star * "/$(desired_order)/"
-mkpath(save_path)
+n_obs = length(all_spectra)
 for desired_order in findfirst(useful_orders):findlast(useful_orders)
-	n_obs = length(all_spectra)
+	save_path = expres_save_path * star * "/$(desired_order)/"
+	mkpath(save_path)
 	mask_inds = inds[desired_order]
 
 	len_obs = length(mask_inds)
