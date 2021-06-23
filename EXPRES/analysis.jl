@@ -106,33 +106,33 @@ if save_plots
 
     # Compare RV differences to actual RVs from activity
     rvs_notel_opt = (tf_model.rv.lm.s .* SSOF.light_speed_nu)'
-    predict_plot = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ; display_plt=interactive)
-    png(predict_plot, save_path * "model_rvs.png")
+    plt = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ; display_plt=interactive)
+    png(plt, save_path * "model_rvs.png")
 
-    predict_plot = plot_stellar_model_bases(tf_model; display_plt=interactive)
-    png(predict_plot, save_path * "model_star_basis.png")
+    plt = plot_stellar_model_bases(tf_model; display_plt=interactive)
+    png(plt, save_path * "model_star_basis.png")
 
-    predict_plot = plot_stellar_model_scores(tf_model; display_plt=interactive)
-    png(predict_plot, save_path * "model_star_weights.png")
+    plt = plot_stellar_model_scores(tf_model; display_plt=interactive)
+    png(plt, save_path * "model_star_weights.png")
 
-    predict_plot = plot_telluric_model_bases(tf_model; display_plt=interactive)
-    png(predict_plot, save_path * "model_tel_basis.png")
+    plt = plot_telluric_model_bases(tf_model; display_plt=interactive)
+    png(plt, save_path * "model_tel_basis.png")
 
-    predict_plot = plot_telluric_model_scores(tf_model; display_plt=interactive)
-    png(predict_plot, save_path * "model_tel_weights.png")
+    plt = plot_telluric_model_scores(tf_model; display_plt=interactive)
+    png(plt, save_path * "model_tel_weights.png")
 
-    predict_plot = plot_stellar_model_bases(tf_model; inds=1:4, display_plt=interactive)
-    png(predict_plot, save_path * "model_star_basis_few.png")
+    plt = plot_stellar_model_bases(tf_model; inds=1:4, display_plt=interactive)
+    png(plt, save_path * "model_star_basis_few.png")
 
-    predict_plot = plot_stellar_model_scores(tf_model; inds=1:4, display_plt=interactive)
-    png(predict_plot, save_path * "model_star_weights_few.png")
+    plt = plot_stellar_model_scores(tf_model; inds=1:4, display_plt=interactive)
+    png(plt, save_path * "model_star_weights_few.png")
 
-    predict_plot = plot_telluric_model_bases(tf_model; inds=1:4, display_plt=interactive)
-    png(predict_plot, save_path * "model_tel_basis_few.png")
+    plt = plot_telluric_model_bases(tf_model; inds=1:4, display_plt=interactive)
+    png(plt, save_path * "model_tel_basis_few.png")
 
-    predict_plot = plot_telluric_model_scores(tf_model; inds=1:4, display_plt=interactive)
-    png(predict_plot, save_path * "model_tel_weights_few.png")
+    plt = plot_telluric_model_scores(tf_model; inds=1:4, display_plt=interactive)
+    png(plt, save_path * "model_tel_weights_few.png")
 
-    predict_plot = status_plot(tf_workspace.tfo, tf_data; display_plt=interactive)
-    png(predict_plot, save_path * "status_plot.png")
+    plt = status_plot(tf_workspace.tfo, tf_data; display_plt=interactive)
+    png(plt, save_path * "status_plot.png")
 end
