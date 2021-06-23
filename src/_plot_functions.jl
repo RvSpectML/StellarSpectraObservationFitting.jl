@@ -40,7 +40,8 @@ function plot_stellar_model_bases(tfom::StellarSpectraObservationFitting.TFOrder
     plot!(tfom.star.λ, tfom.star.lm.μ; label="μₛₜₐᵣ")
     shift = 0.2
     for i in reverse(inds)
-        plot!(tfom.star.λ, (tfom.star.lm.M[:, i] ./ norm(tfom.star.lm.M[:, i])) .- shift * (i - 1); label="Basis $i", color=plt_colors[((i - inds[1] + 3) % 19) + 1])
+        c_ind = ((i - inds[1] + 3) % 19) + 1
+        plot!(tfom.star.λ, (tfom.star.lm.M[:, i] ./ norm(tfom.star.lm.M[:, i])) .- shift * (i - 1); label="Basis $i", color=plt_colors[c_ind])
     end
     if display_plt; display(plt) end
     return plt
@@ -49,8 +50,9 @@ function plot_stellar_model_scores(tfom::StellarSpectraObservationFitting.TFOrde
     plt = plot_scores(; title="Stellar Model Weights", legend=:outerright)
     shift = ceil(10 * maximum([std(tfom.star.lm.s[inds[i], :] .* norm(tfom.star.lm.M[:, inds[i]])) for i in inds])) / 2
     for i in reverse(inds)
-        my_scatter!(plt, times_nu, (tfom.star.lm.s[i, :] .* norm(tfom.star.lm.M[:, i])) .- shift * (i - 1); label="Weights $i", color=plt_colors[((i - inds[1] + 3) % 19) + 1])
-        hline!([-shift * (i - 1)]; label="", color=plt_colors[((i - inds[1] + 3) % 19) + 1], lw=3, alpha=0.4)
+        c_ind = ((i - inds[1] + 3) % 19) + 1
+        my_scatter!(plt, times_nu, (tfom.star.lm.s[i, :] .* norm(tfom.star.lm.M[:, i])) .- shift * (i - 1); label="Weights $i", color=plt_colors[c_ind])
+        hline!([-shift * (i - 1)]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
     end
     if display_plt; display(plt) end
     return plt
@@ -62,7 +64,8 @@ function plot_telluric_model_bases(tfom::StellarSpectraObservationFitting.TFOrde
     plot!(tfom.tel.λ, tfom.tel.lm.μ; label="μₜₑₗ")
     shift = 0.2
     for i in reverse(inds)
-        plot!(tfom.tel.λ, (tfom.tel.lm.M[:, i] ./ norm(tfom.tel.lm.M[:, i])) .- shift * (i - 1); label="Basis $i", color=plt_colors[((i - inds[1] + 3) % 19) + 1])
+        c_ind = ((i - inds[1] + 3) % 19) + 1
+        plot!(tfom.tel.λ, (tfom.tel.lm.M[:, i] ./ norm(tfom.tel.lm.M[:, i])) .- shift * (i - 1); label="Basis $i", color=plt_colors[c_ind])
     end
     if display_plt; display(plt) end
     return plt
@@ -74,8 +77,9 @@ function plot_telluric_model_scores(tfom::StellarSpectraObservationFitting.TFOrd
     shift = ceil(10 * maximum([std(tfom.tel.lm.s[inds[i], :] .* norm(tfom.tel.lm.M[:, inds[i]])) for i in inds])) / 2
     half_shift = ceil(shift) / 2
     for i in reverse(inds)
-        my_scatter!(plt, times_nu, (tfom.tel.lm.s[i, :] .* norm(tfom.tel.lm.M[:, i])) .- (shift * (i - 1) + half_shift); label="Weights $i", color=plt_colors[((i - inds[1] + 3) % 19) + 1])
-        hline!([-(shift * (i - 1) + half_shift)]; label="", color=plt_colors[i - inds[1] + 2], lw=3, alpha=0.4)
+        c_ind = ((i - inds[1] + 3) % 19) + 1
+        my_scatter!(plt, times_nu, (tfom.tel.lm.s[i, :] .* norm(tfom.tel.lm.M[:, i])) .- (shift * (i - 1) + half_shift); label="Weights $i", color=plt_colors[c_ind])
+        hline!([-(shift * (i - 1) + half_shift)]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
     end
     if display_plt; display(plt) end
     return plt

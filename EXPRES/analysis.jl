@@ -106,7 +106,7 @@ if save_plots
 
     # Compare RV differences to actual RVs from activity
     rvs_notel_opt = (tf_model.rv.lm.s .* SSOF.light_speed_nu)'
-    plt = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ; display_plt=interactive)
+    plt = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1)
     png(plt, save_path * "model_rvs.png")
 
     plt = plot_stellar_model_bases(tf_model; display_plt=interactive)
