@@ -206,7 +206,7 @@ struct TFOrderModel{T<:Number}
             star_log_λ_tel[:, i] = star.log_λ .+ star_dop[i]
         end
         lih_t2b, lih_b2t = LinearInterpolationHelper_maker(tel.log_λ, star_log_λ_tel)
-		todo = Dict([(:reg_improved, false), (:extra_chop, false), (:optimized, false)])
+		todo = Dict([(:reg_improved, false), (:extra_chop, false), (:optimized, false), (:err_estimated, false)])
 		metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
         return TFOrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), lih_t2b, lih_b2t,
 			lih_o2b, lih_b2o, lih_t2o, lih_o2t, metadata)

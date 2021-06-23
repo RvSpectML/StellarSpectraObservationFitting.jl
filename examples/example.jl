@@ -70,8 +70,7 @@ if plot_stuff
     status_plot(tf_output, tf_data)
 end
 
-light_speed_nu = 299792458
-rvs_notel = (tf_model.rv.lm.s .* light_speed_nu)'
+rvs_notel = (tf_model.rv.lm.s .* SSOF.light_speed_nu)'
 rvs_std(rvs; inds=:) = std((rvs - rvs_kep_nu[inds]) - rvs_activ_no_noise[inds])
 resid_stds = [rvs_std(rvs_notel)]
 losses = [loss()]
@@ -81,7 +80,7 @@ rvs_notel_opt = copy(rvs_notel)
 
 @time for i in 1:8
     SSOF.train_TFOrderModel!(tf_workspace)
-    rvs_notel_opt[:] = (tf_model.rv.lm.s .* light_speed_nu)'
+    rvs_notel_opt[:] = (tf_model.rv.lm.s .* SSOF.light_speed_nu)'
 
     append!(resid_stds, [rvs_std(rvs_notel_opt)])
     append!(losses, [loss()])

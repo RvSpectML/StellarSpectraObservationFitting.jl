@@ -39,15 +39,14 @@ else
 end
 
 ## Plotting
+
 SSOF_path = dirname(dirname(pathof(SSOF)))
 if interactive
     include(SSOF_path * "/src/_plot_functions.jl")
     status_plot(tf_workspace.tfo, tf_data)
 end
 
-light_speed_nu = 299792458
-rvs_notel = (tf_model.rv.lm.s .* light_speed_nu)'
-rvs_notel_opt = copy(rvs_notel)
+## Improving regularization
 
 if !tf_model.metadata[:todo][:reg_improved]
     @time results_telstar, _ = SSOF.train_TFOrderModel!(tf_workspace; print_stuff=true, ignore_regularization=true)  # 16s
@@ -61,10 +60,12 @@ if !tf_model.metadata[:todo][:reg_improved]
     @save save_path*"results.jld2" tf_model rvs_naive rvs_notel
 end
 
+## Optimizing model
+
 if !tf_model.metadata[:todo][:optimized]
     @time results_telstar, _ = SSOF.train_TFOrderModel!(tf_workspace; print_stuff=true)  # 16s
     @time results_telstar, _ = SSOF.train_TFOrderModel!(tf_workspace; print_stuff=true, g_tol=SSOF._g_tol_def/10*sqrt(length(tf_workspace.telstar.p0)), f_tol=1e-8)  # 50s
-    rvs_notel_opt[:] = (tf_model.rv.lm.s .* light_speed_nu)'
+    rvs_notel_opt = (tf_model.rv.lm.s .* SSOF.light_speed_nu)'
     if interactive; status_plot(tf_workspace.tfo, tf_data) end
     tf_model.metadata[:todo][:optimized] = true
     @save save_path*"results.jld2" tf_model rvs_naive rvs_notel
@@ -73,21 +74,23 @@ end
 
 ## Getting RV error bars (only regularization held constant)
 
-tf_data.var[tf_data.var.==Inf] .= 0
-tf_data_noise = sqrt.(tf_data.var)
-tf_data.var[tf_data.var.==0] .= Inf
+if !tf_model.metadata[:todo][:optimized]
+    tf_data.var[tf_data.var.==Inf] .= 0
+    tf_data_noise = sqrt.(tf_data.var)
+    tf_data.var[tf_data.var.==0] .= Inf
 
-tf_data_holder = copy(tf_data)
-tf_model_holder = copy(tf_model)
-n = 20
-rv_holder = zeros(n, length(tf_model.rv.lm.s))
-@time for i in 1:n
-    tf_data_holder.flux[:, :] = tf_data.flux + (tf_data_noise .* randn(size(tf_data_holder.var)))
-    SSOF.train_TFOrderModel!(SSOF.TFWorkspaceTelStar(tf_model_holder, tf_data_holder), g_tol=SSOF._g_tol_def/1*sqrt(length(tf_workspace.telstar.p0)), f_tol=1e-8)
-    rv_holder[i, :] = (tf_model_holder.rv.lm.s .* light_speed_nu)'
+    tf_data_holder = copy(tf_data)
+    tf_model_holder = copy(tf_model)
+    n = 20
+    rv_holder = zeros(n, length(tf_model.rv.lm.s))
+    @time for i in 1:n
+        tf_data_holder.flux[:, :] = tf_data.flux + (tf_data_noise .* randn(size(tf_data_holder.var)))
+        SSOF.train_TFOrderModel!(SSOF.TFWorkspaceTelStar(tf_model_holder, tf_data_holder), g_tol=SSOF._g_tol_def/1*sqrt(length(tf_workspace.telstar.p0)), f_tol=1e-8)
+        rv_holder[i, :] = (tf_model_holder.rv.lm.s .* SSOF.light_speed_nu)'
+    end
+    rv_errors = std(rv_holder; dims=1)
+    @save save_path*"results.jld2" tf_model rvs_naive rvs_notel rv_errors
 end
-rv_errors = std(rv_holder; dims=1)
-@save save_path*"results.jld2" tf_model rvs_naive rvs_notel rv_errors
 
 ## Plots
 
@@ -102,7 +105,7 @@ if save_plots
     eo_time = expres_output."Time [MJD]"
 
     # Compare RV differences to actual RVs from activity
-    rvs_notel_opt = (tf_model.rv.lm.s .* light_speed_nu)'
+    rvs_notel_opt = (tf_model.rv.lm.s .* SSOF.light_speed_nu)'
     predict_plot = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ; display_plt=interactive)
     png(predict_plot, save_path * "model_rvs.png")
 
