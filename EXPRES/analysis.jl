@@ -23,7 +23,11 @@ save_path = expres_save_path * star * "/$(desired_order)/"
 @load save_path * "data.jld2" n_obs tf_data times_nu airmasses
 
 if isfile(save_path*"results.jld2")
-    @load save_path*"results.jld2" tf_model rvs_naive rvs_notel rv_errors
+    try
+        @load save_path*"results.jld2" tf_model rvs_naive rvs_notel rv_errors
+    catch
+        @load save_path*"results.jld2" tf_model rvs_naive rvs_notel
+    end
 else
     model_res = 2 * sqrt(2) * 150000
     @time tf_model = SSOF.TFOrderModel(tf_data, model_res, model_res, "EXPRES", desired_order, star; n_comp_tel=20, n_comp_star=20)
@@ -57,7 +61,7 @@ if !tf_model.metadata[:todo][:reg_improved]
     @time SSOF.fit_regularization!(tf_model, tf_data, training_inds; use_telstar=use_telstar)
     tf_model.metadata[:todo][:reg_improved] = true
     tf_model.metadata[:todo][:optimized] = false
-    @save save_path*"results.jld2" tf_model rvs_naive rvs_notel rv_errors
+    @save save_path*"results.jld2" tf_model rvs_naive rvs_notel
 end
 
 ## Optimizing model
