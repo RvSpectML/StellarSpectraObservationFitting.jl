@@ -23,10 +23,9 @@ save_path = expres_save_path * star * "/$(desired_order)/"
 @load save_path * "data.jld2" n_obs tf_data times_nu airmasses
 
 if isfile(save_path*"results.jld2")
-    try
-        @load save_path*"results.jld2" tf_model rvs_naive rvs_notel rv_errors
-    catch
-        println("no rv errors found")
+    @load save_path*"results.jld2" tf_model rvs_naive rvs_notel
+    if tf_model.metadata[:todo][:err_estimated]
+        @load save_path*"results.jld2" rv_errors
     end
 else
     model_res = 2 * sqrt(2) * 150000
