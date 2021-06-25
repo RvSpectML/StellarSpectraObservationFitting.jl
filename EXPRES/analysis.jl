@@ -25,6 +25,8 @@ save_path = expres_save_path * star * "/$(desired_order)/"
 if isfile(save_path*"results.jld2")
     try
         @load save_path*"results.jld2" tf_model rvs_naive rvs_notel rv_errors
+    catch
+        println("no rv errors found")
     end
 else
     model_res = 2 * sqrt(2) * 150000
