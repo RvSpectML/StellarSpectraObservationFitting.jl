@@ -84,7 +84,7 @@ if !tf_model.metadata[:todo][:err_estimated]
 
     tf_data_holder = copy(tf_data)
     tf_model_holder = copy(tf_model)
-    n = 20
+    n = 50
     rv_holder = zeros(n, length(tf_model.rv.lm.s))
     @time for i in 1:n
         tf_data_holder.flux[:, :] = tf_data.flux + (tf_data_noise .* randn(size(tf_data_holder.var)))

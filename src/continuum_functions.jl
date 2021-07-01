@@ -17,7 +17,7 @@ see (https://en.wikipedia.org/wiki/Generalized_least_squares#Method_outline)
 function general_lst_sq(
     dm::AbstractMatrix{T},
     data::AbstractVector,
-    Σ::Union{Cholesky{T,Matrix{T}},Symmetric{T,Matrix{T}},AbstractMatrix{T},AbstractVector{T}}) where {T<:Real}
+    Σ::Union{Cholesky,Diagonal) where {T<:Real}
     if ndims(Σ) == 1
         Σ = Diagonal(Σ)
     else
