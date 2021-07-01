@@ -12,3 +12,5 @@ Manifest.toml
 *.csv
 test.jl
 *.pbs
+outputs/
+*.jld2

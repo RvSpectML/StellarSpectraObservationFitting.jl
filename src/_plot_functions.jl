@@ -1,5 +1,6 @@
 using LinearAlgebra
 using Plots
+using Statistics
 
 _plt_dpi = 400
 _plt_size = (1920,1080)
