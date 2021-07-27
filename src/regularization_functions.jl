@@ -1,12 +1,12 @@
-function eval_regularization(reg_field::Symbol, reg_key::Symbol, reg_val::Real, start_tfom::OrderModel, tfd::Data, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat; use_telstar::Bool=true)
-    tfom = copy(start_tfom)
-    getfield(tfom, reg_field)[reg_key] = reg_val
+function eval_regularization(reg_field::Symbol, reg_key::Symbol, reg_val::Real, start_om::OrderModel, d::Data, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat; use_telstar::Bool=true)
+    om = copy(start_om)
+    getfield(om, reg_field)[reg_key] = reg_val
     if use_telstar
-        train = WorkspaceTelStar(tfom, tfd, training_inds)
-        test, loss_test = WorkspaceTelStar(tfom, tfd, testing_inds; return_loss_f=true, only_s=true)
+        train = WorkspaceTelStar(om, d, training_inds)
+        test, loss_test = WorkspaceTelStar(om, d, testing_inds; return_loss_f=true, only_s=true)
     else
-        train = WorkspaceTotal(tfom, tfd, training_inds)
-        test, loss_test = WorkspaceTotal(tfom, tfd, testing_inds; return_loss_f=true, only_s=true)
+        train = WorkspaceTotal(om, d, training_inds)
+        test, loss_test = WorkspaceTotal(om, d, testing_inds; return_loss_f=true, only_s=true)
     end
     train_OrderModel!(train)
     train_OrderModel!(test)
@@ -15,15 +15,15 @@ end
 
 
 
-function fit_regularization_helper!(reg_field::Symbol, reg_key::Symbol, tfom::OrderModel, tfd::Data, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; kwargs...)
+function fit_regularization_helper!(reg_field::Symbol, reg_key::Symbol, om::OrderModel, d::Data, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; kwargs...)
     @assert 0 < reg_min < reg_max < Inf
     ℓs = zeros(2)
-    regs = getfield(tfom, reg_field)
+    regs = getfield(om, reg_field)
     reg_hold = [1, test_factor] .* regs[reg_key]
     println("initial regularization eval")
-    ℓs[1] = eval_regularization(reg_field, reg_key, reg_hold[1], tfom, tfd, training_inds, testing_inds)
+    ℓs[1] = eval_regularization(reg_field, reg_key, reg_hold[1], om, d, training_inds, testing_inds)
     println("$(test_factor)x regularization eval")
-    ℓs[2] = eval_regularization(reg_field, reg_key, reg_hold[2], tfom, tfd, training_inds, testing_inds)
+    ℓs[2] = eval_regularization(reg_field, reg_key, reg_hold[2], om, d, training_inds, testing_inds)
     println()
     # need to try decreasing regularization
     if ℓs[2] > ℓs[1]
@@ -31,7 +31,7 @@ function fit_regularization_helper!(reg_field::Symbol, reg_key::Symbol, tfom::Or
             println("trying a lower regularization")
             ℓs[2] = ℓs[1]
             reg_hold ./= test_factor
-            ℓs[1] = eval_regularization(reg_field, reg_key, reg_hold[1], tfom, tfd, training_inds, testing_inds)
+            ℓs[1] = eval_regularization(reg_field, reg_key, reg_hold[1], om, d, training_inds, testing_inds)
         end
         regs[reg_key] = reg_hold[2]
     # need to try increasing regularization
@@ -40,7 +40,7 @@ function fit_regularization_helper!(reg_field::Symbol, reg_key::Symbol, tfom::Or
             println("trying a higher regularization")
             ℓs[1] = ℓs[2]
             reg_hold .*= test_factor
-            ℓs[2] = eval_regularization(reg_field, reg_key, reg_hold[2], tfom, tfd, training_inds, testing_inds)
+            ℓs[2] = eval_regularization(reg_field, reg_key, reg_hold[2], om, d, training_inds, testing_inds)
         end
         regs[reg_key] = reg_hold[1]
     end
@@ -60,28 +60,28 @@ function check_for_valid_regularization(reg::Dict{Symbol, <:Real})
 end
 
 
-function fit_regularization!(tfom::OrderModel, tfd::Data, training_inds::AbstractVecOrMat; key_list::Vector{Symbol}=_key_list, kwargs...)
-    n_obs = size(tfd.flux, 2)
+function fit_regularization!(om::OrderModel, d::Data, training_inds::AbstractVecOrMat; key_list::Vector{Symbol}=_key_list, kwargs...)
+    n_obs = size(d.flux, 2)
     testing_inds = [i for i in 1:n_obs if !(i in training_inds)]
     println("starting regularization searches")
     # for i in 3
-    check_for_valid_regularization(tfom.reg_tel)
-    check_for_valid_regularization(tfom.reg_star)
+    check_for_valid_regularization(om.reg_tel)
+    check_for_valid_regularization(om.reg_star)
     for key in key_list
         if key == :L1_μ₊_factor
             test_factor, reg_min, reg_max = 1.2, 1e-1, 1e1
         else
             test_factor, reg_min, reg_max = 10, 1e-3, 1e10
         end
-        if haskey(tfom.reg_tel, key)
-            println("before: reg_tel[:$key]  = $(tfom.reg_tel[key])")
-            fit_regularization_helper!(:reg_tel, key, tfom, tfd, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
-            println("after:  reg_tel[:$key]  = $(tfom.reg_tel[key])")
+        if haskey(om.reg_tel, key)
+            println("before: reg_tel[:$key]  = $(om.reg_tel[key])")
+            fit_regularization_helper!(:reg_tel, key, om, d, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
+            println("after:  reg_tel[:$key]  = $(om.reg_tel[key])")
         end
-        if haskey(tfom.reg_star, key)
-            println("before: reg_star[:$key] = $(tfom.reg_star[key])")
-            fit_regularization_helper!(:reg_star, key, tfom, tfd, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
-            println("after:  reg_star[:$key] = $(tfom.reg_star[key])")
+        if haskey(om.reg_star, key)
+            println("before: reg_star[:$key] = $(om.reg_star[key])")
+            fit_regularization_helper!(:reg_star, key, om, d, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
+            println("after:  reg_star[:$key] = $(om.reg_star[key])")
         end
     end
 end

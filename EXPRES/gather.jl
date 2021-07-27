@@ -13,8 +13,8 @@ orders_list = [42:77, 40:77]
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 
 function retrieve(order::Int, star::String)
-    @load expres_save_path*star*"/$(order)/results.jld2" tf_model rv_errors
-    rvs_notel_opt = (tf_model.rv.lm.s .* SSOF.light_speed_nu)'
+    @load expres_save_path*star*"/$(order)/results.jld2" model rv_errors
+    rvs_notel_opt = (model.rv.lm.s .* SSOF.light_speed_nu)'
     return rvs_notel_opt, rv_errors
 end
 

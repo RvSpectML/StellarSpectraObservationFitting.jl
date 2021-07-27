@@ -25,25 +25,25 @@ desired_order = SSOF.parse_args(3, Int, 68)  # 68 has a bunch of tels, 47 has ve
 
 ## Loading in data and initializing model
 save_path = expres_save_path * star * "/$(desired_order)/"
-@load save_path * "data.jld2" n_obs tf_data times_nu airmasses
+@load save_path * "data.jld2" n_obs data times_nu airmasses
 
 if isfile(save_path*"results.jld2")
-    @load save_path*"results.jld2" tf_model rvs_naive rvs_notel
-    if tf_model.metadata[:todo][:err_estimated]
+    @load save_path*"results.jld2" model rvs_naive rvs_notel
+    if model.metadata[:todo][:err_estimated]
         @load save_path*"results.jld2" rv_errors
     end
 else
     model_res = 2 * sqrt(2) * 150000
-    @time tf_model = SSOF.OrderModel(tf_data, model_res, model_res, "EXPRES", desired_order, star; n_comp_tel=20, n_comp_star=20)
-    @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(tf_model, tf_data; use_gp=true)
-    tf_model = SSOF.downsize(tf_model, 10, 10)
+    @time model = SSOF.OrderModel(data, model_res, model_res, "EXPRES", desired_order, star; n_comp_tel=20, n_comp_star=20)
+    @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
+    model = SSOF.downsize(model, 10, 10)
 end
 
 ## Creating optimization workspace
 if use_telstar
-    tf_workspace, loss = SSOF.WorkspaceTelStar(tf_model, tf_data; return_loss_f=true)
+    workspace, loss = SSOF.WorkspaceTelStar(model, data; return_loss_f=true)
 else
-    tf_workspace, loss = SSOF.WorkspaceTotal(tf_model, tf_data; return_loss_f=true)
+    workspace, loss = SSOF.WorkspaceTotal(model, data; return_loss_f=true)
 end
 
 ## Plotting
@@ -51,53 +51,53 @@ end
 SSOF_path = dirname(dirname(pathof(SSOF)))
 if interactive
     include(SSOF_path * "/src/_plot_functions.jl")
-    status_plot(tf_workspace.tfo, tf_data)
+    status_plot(workspace.o, data)
 end
 
 ## Improving regularization
 
-if !tf_model.metadata[:todo][:reg_improved]
-    @time results_telstar, _ = SSOF.train_OrderModel!(tf_workspace; print_stuff=true, ignore_regularization=true)  # 16s
-    @time results_telstar, _ = SSOF.train_OrderModel!(tf_workspace; print_stuff=true, ignore_regularization=true, g_tol=SSOF._g_tol_def/10*sqrt(length(tf_workspace.telstar.p0)), f_tol=1e-8)  # 50s
+if !model.metadata[:todo][:reg_improved]
+    @time results_telstar, _ = SSOF.train_OrderModel!(workspace; print_stuff=true, ignore_regularization=true)  # 16s
+    @time results_telstar, _ = SSOF.train_OrderModel!(workspace; print_stuff=true, ignore_regularization=true, g_tol=SSOF._g_tol_def/10*sqrt(length(workspace.telstar.p0)), f_tol=1e-8)  # 50s
     using StatsBase
     n_obs_train = Int(round(0.75 * n_obs))
     training_inds = sort(sample(1:n_obs, n_obs_train; replace=false))
-    @time SSOF.fit_regularization!(tf_model, tf_data, training_inds; use_telstar=use_telstar)
-    tf_model.metadata[:todo][:reg_improved] = true
-    tf_model.metadata[:todo][:optimized] = false
-    @save save_path*"results.jld2" tf_model rvs_naive rvs_notel
+    @time SSOF.fit_regularization!(model, data, training_inds; use_telstar=use_telstar)
+    model.metadata[:todo][:reg_improved] = true
+    model.metadata[:todo][:optimized] = false
+    @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
 
 ## Optimizing model
 
-if !tf_model.metadata[:todo][:optimized]
-    @time results_telstar, _ = SSOF.train_OrderModel!(tf_workspace; print_stuff=true)  # 16s
-    @time results_telstar, _ = SSOF.train_OrderModel!(tf_workspace; print_stuff=true, g_tol=SSOF._g_tol_def/10*sqrt(length(tf_workspace.telstar.p0)), f_tol=1e-8)  # 50s
-    rvs_notel_opt = (tf_model.rv.lm.s .* SSOF.light_speed_nu)'
-    if interactive; status_plot(tf_workspace.tfo, tf_data) end
-    tf_model.metadata[:todo][:optimized] = true
-    @save save_path*"results.jld2" tf_model rvs_naive rvs_notel
+if !model.metadata[:todo][:optimized]
+    @time results_telstar, _ = SSOF.train_OrderModel!(workspace; print_stuff=true)  # 16s
+    @time results_telstar, _ = SSOF.train_OrderModel!(workspace; print_stuff=true, g_tol=SSOF._g_tol_def/10*sqrt(length(workspace.telstar.p0)), f_tol=1e-8)  # 50s
+    rvs_notel_opt = (model.rv.lm.s .* SSOF.light_speed_nu)'
+    if interactive; status_plot(workspace.o, data) end
+    model.metadata[:todo][:optimized] = true
+    @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
 
 
 ## Getting RV error bars (only regularization held constant)
 
-if !tf_model.metadata[:todo][:err_estimated]
-    tf_data.var[tf_data.var.==Inf] .= 0
-    tf_data_noise = sqrt.(tf_data.var)
-    tf_data.var[tf_data.var.==0] .= Inf
+if !model.metadata[:todo][:err_estimated]
+    data.var[data.var.==Inf] .= 0
+    data_noise = sqrt.(data.var)
+    data.var[data.var.==0] .= Inf
 
-    tf_data_holder = copy(tf_data)
-    tf_model_holder = copy(tf_model)
+    data_holder = copy(data)
+    model_holder = copy(model)
     n = 50
-    rv_holder = zeros(n, length(tf_model.rv.lm.s))
+    rv_holder = zeros(n, length(model.rv.lm.s))
     @time for i in 1:n
-        tf_data_holder.flux[:, :] = tf_data.flux + (tf_data_noise .* randn(size(tf_data_holder.var)))
-        SSOF.train_OrderModel!(SSOF.WorkspaceTelStar(tf_model_holder, tf_data_holder), g_tol=SSOF._g_tol_def/1*sqrt(length(tf_workspace.telstar.p0)), f_tol=1e-8)
-        rv_holder[i, :] = (tf_model_holder.rv.lm.s .* SSOF.light_speed_nu)'
+        data_holder.flux[:, :] = data.flux + (data_noise .* randn(size(data_holder.var)))
+        SSOF.train_OrderModel!(SSOF.WorkspaceTelStar(model_holder, data_holder), g_tol=SSOF._g_tol_def/1*sqrt(length(workspace.telstar.p0)), f_tol=1e-8)
+        rv_holder[i, :] = (model_holder.rv.lm.s .* SSOF.light_speed_nu)'
     end
     rv_errors = std(rv_holder; dims=1)
-    @save save_path*"results.jld2" tf_model rvs_naive rvs_notel rv_errors
+    @save save_path*"results.jld2" model rvs_naive rvs_notel rv_errors
 end
 
 ## Plots
@@ -113,34 +113,34 @@ if save_plots
     eo_time = expres_output."Time [MJD]"
 
     # Compare RV differences to actual RVs from activity
-    rvs_notel_opt = (tf_model.rv.lm.s .* SSOF.light_speed_nu)'
+    rvs_notel_opt = (model.rv.lm.s .* SSOF.light_speed_nu)'
     plt = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1)
     png(plt, save_path * "model_rvs.png")
 
-    plt = plot_stellar_model_bases(tf_model; display_plt=interactive)
+    plt = plot_stellar_model_bases(model; display_plt=interactive)
     png(plt, save_path * "model_star_basis.png")
 
-    plt = plot_stellar_model_scores(tf_model; display_plt=interactive)
+    plt = plot_stellar_model_scores(model; display_plt=interactive)
     png(plt, save_path * "model_star_weights.png")
 
-    plt = plot_telluric_model_bases(tf_model; display_plt=interactive)
+    plt = plot_telluric_model_bases(model; display_plt=interactive)
     png(plt, save_path * "model_tel_basis.png")
 
-    plt = plot_telluric_model_scores(tf_model; display_plt=interactive)
+    plt = plot_telluric_model_scores(model; display_plt=interactive)
     png(plt, save_path * "model_tel_weights.png")
 
-    plt = plot_stellar_model_bases(tf_model; inds=1:4, display_plt=interactive)
+    plt = plot_stellar_model_bases(model; inds=1:4, display_plt=interactive)
     png(plt, save_path * "model_star_basis_few.png")
 
-    plt = plot_stellar_model_scores(tf_model; inds=1:4, display_plt=interactive)
+    plt = plot_stellar_model_scores(model; inds=1:4, display_plt=interactive)
     png(plt, save_path * "model_star_weights_few.png")
 
-    plt = plot_telluric_model_bases(tf_model; inds=1:4, display_plt=interactive)
+    plt = plot_telluric_model_bases(model; inds=1:4, display_plt=interactive)
     png(plt, save_path * "model_tel_basis_few.png")
 
-    plt = plot_telluric_model_scores(tf_model; inds=1:4, display_plt=interactive)
+    plt = plot_telluric_model_scores(model; inds=1:4, display_plt=interactive)
     png(plt, save_path * "model_tel_weights_few.png")
 
-    plt = status_plot(tf_workspace.tfo, tf_data; display_plt=interactive)
+    plt = status_plot(workspace.o, data; display_plt=interactive)
     png(plt, save_path * "status_plot.png")
 end

@@ -1,28 +1,28 @@
 using LineSearches
-_loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, tfd::Data) =
-    sum((((tel .* (star + rv)) - tfd.flux) .^ 2) ./ tfd.var)
-loss(tfo::Output, tfd::Data) = _loss(tfo.tel, tfo.star, tfo.rv, tfd)
-loss(tfom::OrderModel, tfd::Data) = _loss(tel_model(tfom), star_model(tfom), rv_model(tfom), tfd)
-loss_tel(tfo::Output, tfom::OrderModel, tfd::Data) = _loss(tel_model(tfom), tfo.star, tfo.rv, tfd) + tel_prior(tfom)
-loss_star(tfo::Output, tfom::OrderModel, tfd::Data) = _loss(tfo.tel, star_model(tfom), tfo.rv, tfd) + star_prior(tfom)
-loss_telstar(tfo::Output, tfom::OrderModel, tfd::Data) = _loss(tel_model(tfom), star_model(tfom), tfo.rv, tfd) + star_prior(tfom) + tel_prior(tfom)
-loss_rv(tfo::Output, tfom::OrderModel, tfd::Data) = _loss(tfo.tel, tfo.star, rv_model(tfom), tfd)
-loss_opt(tfom::OrderModel, tfd::Data) =
-    _loss(tel_model(tfom),
-        star_model(tfom),
+_loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::Data) =
+    sum((((tel .* (star + rv)) - d.flux) .^ 2) ./ d.var)
+loss(o::Output, d::Data) = _loss(o.tel, o.star, o.rv, d)
+loss(om::OrderModel, d::Data) = _loss(tel_model(om), star_model(om), rv_model(om), d)
+loss_tel(o::Output, om::OrderModel, d::Data) = _loss(tel_model(om), o.star, o.rv, d) + tel_prior(om)
+loss_star(o::Output, om::OrderModel, d::Data) = _loss(o.tel, star_model(om), o.rv, d) + star_prior(om)
+loss_telstar(o::Output, om::OrderModel, d::Data) = _loss(tel_model(om), star_model(om), o.rv, d) + star_prior(om) + tel_prior(om)
+loss_rv(o::Output, om::OrderModel, d::Data) = _loss(o.tel, o.star, rv_model(om), d)
+loss_opt(om::OrderModel, d::Data) =
+    _loss(tel_model(om),
+        star_model(om),
         spectra_interp(
             _eval_blm(
-                calc_doppler_component_RVSKL_Flux(tfom.star.λ, tfom.star.lm.μ),
-                tfom.rv.lm.s),
-            tfom.lih_b2o),
-        tfd) + star_prior(tfom) + tel_prior(tfom)
-function loss_funcs(tfo::Output, tfom::OrderModel, tfd::Data)
-    l() = loss(tfo, tfd)
-    l_tel() = loss_tel(tfo, tfom, tfd)
-    l_star() = loss_star(tfo, tfom, tfd)
-    l_telstar() = loss_telstar(tfo, tfom, tfd)
-    l_rv() = loss_rv(tfo, tfom, tfd)
-    l_opt() = loss_opt(tfom, tfd)
+                calc_doppler_component_RVSKL_Flux(om.star.λ, om.star.lm.μ),
+                om.rv.lm.s),
+            om.lih_b2o),
+        d) + star_prior(om) + tel_prior(om)
+function loss_funcs(o::Output, om::OrderModel, d::Data)
+    l() = loss(o, d)
+    l_tel() = loss_tel(o, om, d)
+    l_star() = loss_star(o, om, d)
+    l_telstar() = loss_telstar(o, om, d)
+    l_rv() = loss_rv(o, om, d)
+    l_opt() = loss_opt(om, d)
     return l, l_tel, l_star, l_telstar, l_rv, l_opt
 end
 
@@ -39,27 +39,27 @@ struct OptimSubWorkspace
         # initial_state(method::LBFGS, ...) doesn't use the options for anything
         return OptimSubWorkspace(θ, obj, opt, p0)
     end
-    function OptimSubWorkspace(tfsm::Submodel, loss::Function, only_s::Bool)
+    function OptimSubWorkspace(sm::Submodel, loss::Function, only_s::Bool)
         if only_s
-            θ = Flux.params(tfsm.lm.s)
+            θ = Flux.params(sm.lm.s)
         else
-            θ = Flux.params(tfsm.lm.M, tfsm.lm.s, tfsm.lm.μ)
+            θ = Flux.params(sm.lm.M, sm.lm.s, sm.lm.μ)
         end
         return OptimSubWorkspace(θ, loss; use_cg=!only_s)
     end
-    function OptimSubWorkspace(tfsm1::Submodel, tfsm2::Submodel, loss::Function, only_s::Bool)
+    function OptimSubWorkspace(sm1::Submodel, sm2::Submodel, loss::Function, only_s::Bool)
         if only_s
-            θ = Flux.params(tfsm1.lm.s, tfsm2.lm.s)
+            θ = Flux.params(sm1.lm.s, sm2.lm.s)
         else
-            θ = Flux.params(tfsm1.lm.M, tfsm1.lm.s, tfsm1.lm.μ, tfsm2.lm.M, tfsm2.lm.s, tfsm2.lm.μ)
+            θ = Flux.params(sm1.lm.M, sm1.lm.s, sm1.lm.μ, sm2.lm.M, sm2.lm.s, sm2.lm.μ)
         end
         return OptimSubWorkspace(θ, loss; use_cg=!only_s)
     end
-    function OptimSubWorkspace(tfsm1::Submodel, tfsm2::Submodel, tfsm3::Submodel, loss::Function, only_s::Bool)
+    function OptimSubWorkspace(sm1::Submodel, sm2::Submodel, sm3::Submodel, loss::Function, only_s::Bool)
         if only_s
-            θ = Flux.params(tfsm1.lm.s, tfsm2.lm.s, tfsm3.lm.s)
+            θ = Flux.params(sm1.lm.s, sm2.lm.s, sm3.lm.s)
         else
-            θ = Flux.params(tfsm1.lm.M, tfsm1.lm.s, tfsm1.lm.μ, tfsm2.lm.M, tfsm2.lm.s, tfsm2.lm.μ, tfsm3.lm.s)
+            θ = Flux.params(sm1.lm.M, sm1.lm.s, sm1.lm.μ, sm2.lm.M, sm2.lm.s, sm2.lm.μ, sm3.lm.s)
         end
         return OptimSubWorkspace(θ, loss; use_cg=!only_s)
     end
@@ -79,91 +79,91 @@ struct Workspace <: OptimWorkspace
     tel::OptimSubWorkspace
     star::OptimSubWorkspace
     rv::OptimSubWorkspace
-    tfom::OrderModel
-    tfo::Output
-    tfd::Data
-    function Workspace(tfom::OrderModel, tfo::Output, tfd::Data; return_loss_f::Bool=false, only_s::Bool=false)
-        loss, loss_tel, loss_star, _, loss_rv, _ = loss_funcs(tfo, tfom, tfd)
-        tel = OptimSubWorkspace(tfom.tel, loss_tel, only_s)
-        star = OptimSubWorkspace(tfom.star, loss_star, only_s)
-        rv = OptimSubWorkspace(tfom.rv, loss_rv, true)
-        tfow = Workspace(tel, star, rv, tfom, tfo, tfd)
+    om::OrderModel
+    o::Output
+    d::Data
+    function Workspace(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=false, only_s::Bool=false)
+        loss, loss_tel, loss_star, _, loss_rv, _ = loss_funcs(o, om, d)
+        tel = OptimSubWorkspace(om.tel, loss_tel, only_s)
+        star = OptimSubWorkspace(om.star, loss_star, only_s)
+        rv = OptimSubWorkspace(om.rv, loss_rv, true)
+        ow = Workspace(tel, star, rv, om, o, d)
         if return_loss_f
-            return tfow, loss
+            return ow, loss
         else
-            return tfow
+            return ow
         end
     end
-    Workspace(tfom::OrderModel, tfd::Data, inds::AbstractVecOrMat; kwargs...) =
-        Workspace(tfom(inds), tfd(inds); kwargs...)
-    Workspace(tfom::OrderModel, tfd::Data; kwargs...) =
-        Workspace(tfom, Output(tfom), tfd; kwargs...)
-    function Workspace(tel, star, rv, tfom, tfo, tfd)
+    Workspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
+        Workspace(om(inds), d(inds); kwargs...)
+    Workspace(om::OrderModel, d::Data; kwargs...) =
+        Workspace(om, Output(om), d; kwargs...)
+    function Workspace(tel, star, rv, om, o, d)
         @assert length(tel.θ) == length(star.θ)
         @assert (length(tel.θ) == 1) || (length(tel.θ) == 3)
         @assert length(rv.θ) == 1
-        new(tel, star, rv, tfom, tfo, tfd)
+        new(tel, star, rv, om, o, d)
     end
 end
 
 struct WorkspaceTelStar <: OptimWorkspace
     telstar::OptimSubWorkspace
     rv::OptimSubWorkspace
-    tfom::OrderModel
-    tfo::Output
-    tfd::Data
-    function WorkspaceTelStar(tfom::OrderModel, tfo::Output, tfd::Data; return_loss_f::Bool=false, only_s::Bool=false)
-        loss, _, _, loss_telstar, loss_rv, _ = loss_funcs(tfo, tfom, tfd)
-        telstar = OptimSubWorkspace(tfom.tel, tfom.star, loss_telstar, only_s)
-        rv = OptimSubWorkspace(tfom.rv, loss_rv, true)
-        tfow = WorkspaceTelStar(telstar, rv, tfom, tfo, tfd)
+    om::OrderModel
+    o::Output
+    d::Data
+    function WorkspaceTelStar(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=false, only_s::Bool=false)
+        loss, _, _, loss_telstar, loss_rv, _ = loss_funcs(o, om, d)
+        telstar = OptimSubWorkspace(om.tel, om.star, loss_telstar, only_s)
+        rv = OptimSubWorkspace(om.rv, loss_rv, true)
+        ow = WorkspaceTelStar(telstar, rv, om, o, d)
         if return_loss_f
-            return tfow, loss
+            return ow, loss
         else
-            return tfow
+            return ow
         end
     end
-    WorkspaceTelStar(tfom::OrderModel, tfd::Data, inds::AbstractVecOrMat; kwargs...) =
-        WorkspaceTelStar(tfom(inds), tfd(inds); kwargs...)
-    WorkspaceTelStar(tfom::OrderModel, tfd::Data; kwargs...) =
-        WorkspaceTelStar(tfom, Output(tfom), tfd; kwargs...)
+    WorkspaceTelStar(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
+        WorkspaceTelStar(om(inds), d(inds); kwargs...)
+    WorkspaceTelStar(om::OrderModel, d::Data; kwargs...) =
+        WorkspaceTelStar(om, Output(om), d; kwargs...)
     function WorkspaceTelStar(telstar::OptimSubWorkspace,
         rv::OptimSubWorkspace,
-        tfom::OrderModel,
-        tfo::Output,
-        tfd::Data)
+        om::OrderModel,
+        o::Output,
+        d::Data)
 
         @assert (length(telstar.θ) == 2) || (length(telstar.θ) == 6)
         @assert length(rv.θ) == 1
-        new(telstar, rv, tfom, tfo, tfd)
+        new(telstar, rv, om, o, d)
     end
-    function WorkspaceTelStar(tfws::WorkspaceTelStar)
-        WorkspaceTelStar(tfws.telstar, rv, tfom, tfo, tfd)
+    function WorkspaceTelStar(ws::WorkspaceTelStar)
+        WorkspaceTelStar(ws.telstar, rv, om, o, d)
     end
 end
 
 struct WorkspaceTotal <: OptimWorkspace
     total::OptimSubWorkspace
-    tfom::OrderModel
-    tfo::Output
-    tfd::Data
-    function WorkspaceTotal(tfom::OrderModel, tfo::Output, tfd::Data; return_loss_f::Bool=false, only_s::Bool=false)
-        loss, _, _, _, _, loss_opt = loss_funcs(tfo, tfom, tfd)
-        total = OptimSubWorkspace(tfom.tel, tfom.star, tfom.rv, loss_opt, only_s)
-        tfow = WorkspaceTotal(total, tfom, tfo, tfd)
+    om::OrderModel
+    o::Output
+    d::Data
+    function WorkspaceTotal(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=false, only_s::Bool=false)
+        loss, _, _, _, _, loss_opt = loss_funcs(o, om, d)
+        total = OptimSubWorkspace(om.tel, om.star, om.rv, loss_opt, only_s)
+        ow = WorkspaceTotal(total, om, o, d)
         if return_loss_f
-            return tfow, loss
+            return ow, loss
         else
-            return tfow
+            return ow
         end
     end
-    WorkspaceTotal(tfom::OrderModel, tfd::Data, inds::AbstractVecOrMat; kwargs...) =
-        WorkspaceTotal(tfom(inds), tfd(inds); kwargs...)
-    WorkspaceTotal(tfom::OrderModel, tfd::Data; kwargs...) =
-        WorkspaceTotal(tfom, Output(tfom), tfd; kwargs...)
-    function WorkspaceTotal(total, tfom, tfo, tfd)
+    WorkspaceTotal(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
+        WorkspaceTotal(om(inds), d(inds); kwargs...)
+    WorkspaceTotal(om::OrderModel, d::Data; kwargs...) =
+        WorkspaceTotal(om, Output(om), d; kwargs...)
+    function WorkspaceTotal(total, om, o, d)
         @assert (length(total.θ) == 3) || (length(total.θ) == 7)
-        new(total, tfom, tfo, tfd)
+        new(total, om, o, d)
     end
 end
 
@@ -173,8 +173,8 @@ function _Flux_optimize!(θ::Flux.Params, obj::OnceDifferentiable, p0::Vector,
     copyto!(p0, θ)
     return result
 end
-_Flux_optimize!(tfosw::OptimSubWorkspace, options::Optim.Options) =
-    _Flux_optimize!(tfosw.θ, tfosw.obj, tfosw.p0, tfosw.opt, options)
+_Flux_optimize!(osw::OptimSubWorkspace, options::Optim.Options) =
+    _Flux_optimize!(osw.θ, osw.obj, osw.p0, osw.opt, options)
 
 
 # ends optimization if true
@@ -198,70 +198,70 @@ _iter_def = 100
 _f_tol_def = 1e-6
 _g_tol_def = 400
 
-function train_OrderModel!(tfow::Workspace; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def, kwargs...)
+function train_OrderModel!(ow::Workspace; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def, kwargs...)
     optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
     options = Optim.Options(iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
     # optimize star
-    _Flux_optimize!(tfow.star, options)
-    tfow.tfo.star[:, :] = star_model(tfow.tfom)
+    _Flux_optimize!(ow.star, options)
+    ow.o.star[:, :] = star_model(ow.om)
 
     # optimize RVs
-    tfow.tfom.rv.lm.M[:] = calc_doppler_component_RVSKL(tfow.tfom.star.λ, tfow.tfom.star.lm.μ)
-    _Flux_optimize!(tfow.rv, options)
-    tfow.tfo.rv[:, :] = rv_model(tfow.tfom)
+    ow.om.rv.lm.M[:] = calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
+    _Flux_optimize!(ow.rv, options)
+    ow.o.rv[:, :] = rv_model(ow.om)
 
     # optimize tellurics
-    _Flux_optimize!(tfow.tel, options)
-    tfow.tfo.tel[:, :] = tel_model(tfow.tfom)
+    _Flux_optimize!(ow.tel, options)
+    ow.o.tel[:, :] = tel_model(ow.om)
 end
 
-function train_OrderModel!(tfow::WorkspaceTelStar; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def*sqrt(length(tfow.telstar.p0)), train_telstar::Bool=true, ignore_regularization::Bool=false, kwargs...)
+function train_OrderModel!(ow::WorkspaceTelStar; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def*sqrt(length(ow.telstar.p0)), train_telstar::Bool=true, ignore_regularization::Bool=false, kwargs...)
     optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
 
     if ignore_regularization
-        reg_tel_holder = copy(tfow.tfom.reg_tel)
-        reg_star_holder = copy(tfow.tfom.reg_star)
-        zero_regularization(tfow.tfom)
+        reg_tel_holder = copy(ow.om.reg_tel)
+        reg_star_holder = copy(ow.om.reg_star)
+        zero_regularization(ow.om)
     end
 
     if train_telstar
         options = Optim.Options(iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
         # optimize tellurics and star
-        result_telstar = _Flux_optimize!(tfow.telstar, options)
-        tfow.tfo.star[:, :] = star_model(tfow.tfom)
-        tfow.tfo.tel[:, :] = tel_model(tfow.tfom)
+        result_telstar = _Flux_optimize!(ow.telstar, options)
+        ow.o.star[:, :] = star_model(ow.om)
+        ow.o.tel[:, :] = tel_model(ow.om)
     end
 
     # optimize RVs
-    options = Optim.Options(callback=optim_cb_local, g_tol=g_tol*sqrt(length(tfow.rv.p0) / length(tfow.telstar.p0)), kwargs...)
-    tfow.tfom.rv.lm.M[:] = calc_doppler_component_RVSKL(tfow.tfom.star.λ, tfow.tfom.star.lm.μ)
-    result_rv = _Flux_optimize!(tfow.rv, options)
-    tfow.tfo.rv[:, :] = rv_model(tfow.tfom)
+    options = Optim.Options(callback=optim_cb_local, g_tol=g_tol*sqrt(length(ow.rv.p0) / length(ow.telstar.p0)), kwargs...)
+    ow.om.rv.lm.M[:] = calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
+    result_rv = _Flux_optimize!(ow.rv, options)
+    ow.o.rv[:, :] = rv_model(ow.om)
 
     if ignore_regularization
-        copy_dict!(reg_tel_holder, tfow.tfom.reg_tel)
-        copy_dict!(reg_star_holder, tfow.tfom.reg_star)
+        copy_dict!(reg_tel_holder, ow.om.reg_tel)
+        copy_dict!(reg_star_holder, ow.om.reg_star)
     end
     return result_telstar, result_rv
 end
 
-function train_OrderModel!(tfow::WorkspaceTotal; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def*sqrt(length(tfow.total.p0)), kwargs...)
+function train_OrderModel!(ow::WorkspaceTotal; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def*sqrt(length(ow.total.p0)), kwargs...)
     optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
     options = Optim.Options(iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
     # optimize tellurics and star
-    result = _Flux_optimize!(tfow.total, options)
-    tfow.tfom.rv.lm.M[:] = calc_doppler_component_RVSKL(tfow.tfom.star.λ, tfow.tfom.star.lm.μ)
-    tfow.tfo.star[:, :] = star_model(tfow.tfom)
-    tfow.tfo.tel[:, :] = tel_model(tfow.tfom)
-    tfow.tfo.rv[:, :] = rv_model(tfow.tfom)
+    result = _Flux_optimize!(ow.total, options)
+    ow.om.rv.lm.M[:] = calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
+    ow.o.star[:, :] = star_model(ow.om)
+    ow.o.tel[:, :] = tel_model(ow.om)
+    ow.o.rv[:, :] = rv_model(ow.om)
     return result
 end
 
-function train_OrderModel!(tfow::OptimWorkspace, n::Int; kwargs...)
+function train_OrderModel!(ow::OptimWorkspace, n::Int; kwargs...)
     for i in 1:n
-        train_OrderModel!(tfow; kwargs...)
+        train_OrderModel!(ow; kwargs...)
     end
 end
 
-train_OrderModel!(tfow::WorkspaceTotal, iterations::Int; kwargs...) =
-    train_OrderModel!(tfow; iterations=iterations, kwargs...)
+train_OrderModel!(ow::WorkspaceTotal, iterations::Int; kwargs...) =
+    train_OrderModel!(ow; iterations=iterations, kwargs...)

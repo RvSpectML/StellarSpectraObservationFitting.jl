@@ -3,7 +3,7 @@
 
 # using Plots
 #
-# snr = sqrt.(tf_data.flux.^2 ./ tf_data.var)
+# snr = sqrt.(data.flux.^2 ./ data.var)
 # heatmap(snr)
 # histogram(collect(Iterators.flatten(snr)))
 #
@@ -29,7 +29,7 @@
 # using Plots
 # plot(all_spectra[1].metadata[:tellurics][:, desired_order])
 
-# abs_M = abs.(tf_model.tel.lm.M[:, 1])
+# abs_M = abs.(model.tel.lm.M[:, 1])
 # plot((1:length(abs_M)) ./ length(abs_M), sort(abs_M); xrange=(0.975,1))
 function proposed_new_cuts(M::AbstractVector, mask_inds::UnitRange, cutoff::Real)
     abs_M = abs.(M)
@@ -52,38 +52,38 @@ function proposed_new_inds(cuts::Vector, M::AbstractVector, mask_inds::UnitRange
     return [mask_inds[1] + cuts2[1], mask_inds[1] + cuts2[2]]
 end
 function new_inds_M(M::AbstractArray, mask_inds::UnitRange, cutoff::Real)
-    possible_new_inds_tfm = [proposed_new_cuts(M[:, i], mask_inds, cutoff) for i in 1:size(M, 2)]
-    possible_new_inds_mask = [proposed_new_inds(possible_new_inds_tfm[i], M[:, i], mask_inds) for i in 1:size(M, 2)]
+    possible_new_inds_m = [proposed_new_cuts(M[:, i], mask_inds, cutoff) for i in 1:size(M, 2)]
+    possible_new_inds_mask = [proposed_new_inds(possible_new_inds_m[i], M[:, i], mask_inds) for i in 1:size(M, 2)]
     return [maximum([inds[1] for inds in possible_new_inds_mask]), minimum([inds[2] for inds in possible_new_inds_mask])],
-        [maximum([inds[1] for inds in possible_new_inds_tfm]), minimum([inds[2] for inds in possible_new_inds_tfm])]
+        [maximum([inds[1] for inds in possible_new_inds_m]), minimum([inds[2] for inds in possible_new_inds_m])]
 end
-function new_inds(tfom::SSOF.OrderModel, mask_inds::UnitRange)
-    mask_inds_star, _ = new_inds_M(tfom.star.lm.M, mask_inds, 0.975)
-    mask_inds_tel, _ = new_inds_M(tfom.tel.lm.M, mask_inds, 0.9975)
+function new_inds(om::SSOF.OrderModel, mask_inds::UnitRange)
+    mask_inds_star, _ = new_inds_M(om.star.lm.M, mask_inds, 0.975)
+    mask_inds_tel, _ = new_inds_M(om.tel.lm.M, mask_inds, 0.9975)
     return max(mask_inds_star[1], mask_inds_tel[1]):min(mask_inds_star[2], mask_inds_tel[2])
 end
-new_inds(tf_model, mask_inds)
+new_inds(model, mask_inds)
 
-proposed_new_cuts(tf_model.star.lm.M[:, 1], mask_inds, 0.975)
+proposed_new_cuts(model.star.lm.M[:, 1], mask_inds, 0.975)
 
 
-abs_M = abs.(tf_model.star.lm.M[:, 1])
+abs_M = abs.(model.star.lm.M[:, 1])
 plot((1:length(abs_M)) ./ length(abs_M), sort(abs_M); xrange=(0.9,1))
 cdf = [sum(view(abs_M, 1:i)) for i in 1:length(abs_M)] ./ sum(abs_M)
 plot(cdf)
 
-new_inds_M(tf_model.star.lm.M, mask_inds, 0.9975)
-new_inds_M(tf_model.tel.lm.M, mask_inds, 0.9975)
+new_inds_M(model.star.lm.M, mask_inds, 0.9975)
+new_inds_M(model.tel.lm.M, mask_inds, 0.9975)
 
 mask_inds
-mask_inds = new_inds(tf_model, mask_inds)
+mask_inds = new_inds(model, mask_inds)
 
-# _, tfm_inds = new_inds(tf_model.star.lm.M, mask_inds)
-# tf_model.star.lm.M[1:tfm_inds[1], :] .= 0
-# tf_model.star.lm.M[tfm_inds[2]:end, :] .= 0
-# _, tfm_inds = new_inds(tf_model.tel.lm.M, mask_inds)
-# tf_model.tel.lm.M[1:tfm_inds[1], :] .= 0
-# tf_model.tel.lm.M[tfm_inds[2]:end, :] .= 0
+# _, m_inds = new_inds(model.star.lm.M, mask_inds)
+# model.star.lm.M[1:m_inds[1], :] .= 0
+# model.star.lm.M[m_inds[2]:end, :] .= 0
+# _, m_inds = new_inds(model.tel.lm.M, mask_inds)
+# model.tel.lm.M[1:m_inds[1], :] .= 0
+# model.tel.lm.M[m_inds[2]:end, :] .= 0
 
 # using BenchmarkTools
 # using LinearAlgebra
@@ -131,7 +131,7 @@ end
 
 include("../src/_plot_functions.jl")
 i=10
-fit_continuum_gif(tf_data.log_λ_obs[:, i], tf_data.flux[:, i], tf_data.var[:, i]; order=6)
+fit_continuum_gif(data.log_λ_obs[:, i], data.flux[:, i], data.var[:, i]; order=6)
 
 ## Wavelength calibration plot
 plt = _my_plot(;xlabel="MJD", ylabel="Observer Frame Wavelength (Å)", title="Wavelength Calibration", thickness_scaling=3)
@@ -151,25 +151,25 @@ png("bary.png")
 ## moved from end of analysis.jl
 
 # TODO on choosing amount of basis vectors
-spectra_interp(tfom.tel(), tfom.lih_t2o)
-tf_workspace.tfom.
-tf_workspace.tfo.tel
-SSOF.tel_model(tf_model)
+spectra_interp(om.tel(), om.lih_t2o)
+workspace.om.
+workspace.o.tel
+SSOF.tel_model(model)
 
-tf_workspace.tfd.flux
+workspace.d.flux
 
-_fracvar(tf_workspace.tfd.flux - tf_workspace.tfo.tel, Y, 1 ./ tf_workspace.tfd.var; var_tot=sum(abs2, X .* weights))
+_fracvar(workspace.d.flux - workspace.o.tel, Y, 1 ./ workspace.d.var; var_tot=sum(abs2, X .* weights))
 
 # TODO ERES presentation plots
 
-hmm = status_plot(tf_workspace.tfo, tf_data)
+hmm = status_plot(workspace.o, data)
 png(hmm, "status_plot")
-plot_stellar_model_bases(tf_model; inds=1:3)
-hmm = plot_telluric_model_bases(tf_model; inds=1:3)
+plot_stellar_model_bases(model; inds=1:3)
+hmm = plot_telluric_model_bases(model; inds=1:3)
 png(hmm, "telluric_plot")
 anim = @animate for i in 1:40
     plt = plot_spectrum(; title="Telluric Spectrum")
-    plot!(plt, exp.(tf_data.log_λ_obs[:, i]), view(tf_workspace.tfo.tel, :, i), label="", yaxis=[0.95, 1.005])
+    plot!(plt, exp.(data.log_λ_obs[:, i]), view(workspace.o.tel, :, i), label="", yaxis=[0.95, 1.005])
 end
 gif(anim, "show_telluric_var.gif", fps = 10)
 
@@ -182,7 +182,7 @@ eo_time = expres_output."Time [MJD]"
 
 # Compare RV differences to actual RVs from activity
 include("../src/_plot_functions.jl")
-rvs_notel_opt = (tf_model.rv.lm.s .* light_speed_nu)'
+rvs_notel_opt = (model.rv.lm.s .* light_speed_nu)'
 plt = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ; markerstrokewidth=1, xlim=(58764.35, 58764.40))
 scatter(x, x; yerror=x)
 

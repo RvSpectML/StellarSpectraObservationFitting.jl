@@ -69,12 +69,12 @@ function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVecto
     end
     return μ
 end
-function continuum_normalize!(tfd; kwargs...)
-	continuum = ones(size(tfd.log_λ_obs, 1))
-	for i in 1:size(tfd.log_λ_obs, 2)
-		continuum[:] = fit_continuum(view(tfd.log_λ_obs, :, i), view(tfd.flux, :, i), view(tfd.var, :, i); kwargs...)
-		tfd.flux[:, i] ./= continuum
-		tfd.var[:, i] ./= continuum .* continuum
+function continuum_normalize!(d; kwargs...)
+	continuum = ones(size(d.log_λ_obs, 1))
+	for i in 1:size(d.log_λ_obs, 2)
+		continuum[:] = fit_continuum(view(d.log_λ_obs, :, i), view(d.flux, :, i), view(d.var, :, i); kwargs...)
+		d.flux[:, i] ./= continuum
+		d.var[:, i] ./= continuum .* continuum
 	end
 end
 
@@ -90,9 +90,9 @@ function mask_low_pixels!(y::AbstractVector, σ²::AbstractVector; min_flux::Rea
 	end
 	σ²[bad] .= Inf
 end
-function mask_low_pixels!(tfd; kwargs...)
-	for i in 1:size(tfd.log_λ_obs, 2)
-		mask_low_pixels!(view(tfd.flux, :, i), view(tfd.var, :, i); kwargs...)
+function mask_low_pixels!(d; kwargs...)
+	for i in 1:size(d.log_λ_obs, 2)
+		mask_low_pixels!(view(d.flux, :, i), view(d.var, :, i); kwargs...)
 	end
 end
 
@@ -108,9 +108,9 @@ function mask_high_pixels!(y::AbstractVector, σ²::AbstractVector; max_flux::Re
 	end
 	σ²[bad] .= Inf
 end
-function mask_high_pixels!(tfd; kwargs...)
-	for i in 1:size(tfd.log_λ_obs, 2)
-		mask_high_pixels!(view(tfd.flux, :, i), view(tfd.var, :, i); kwargs...)
+function mask_high_pixels!(d; kwargs...)
+	for i in 1:size(d.log_λ_obs, 2)
+		mask_high_pixels!(view(d.flux, :, i), view(d.var, :, i); kwargs...)
 	end
 end
 
@@ -133,15 +133,15 @@ function mask_bad_edges!(y::AbstractVector, σ²::AbstractVector; window_width::
 		end
 	end
 end
-function mask_bad_edges!(tfd; kwargs...)
-	for i in 1:size(tfd.log_λ_obs, 2)
-		mask_bad_edges!(view(tfd.flux, :, i), view(tfd.var, :, i); kwargs...)
+function mask_bad_edges!(d; kwargs...)
+	for i in 1:size(d.log_λ_obs, 2)
+		mask_bad_edges!(view(d.flux, :, i), view(d.var, :, i); kwargs...)
 	end
 end
 
-function process!(tfd; kwargs...)
-	mask_low_pixels!(tfd)
-	mask_bad_edges!(tfd)
-	continuum_normalize!(tfd; kwargs...)
-	mask_high_pixels!(tfd)
+function process!(d; kwargs...)
+	mask_low_pixels!(d)
+	mask_bad_edges!(d)
+	continuum_normalize!(d; kwargs...)
+	mask_high_pixels!(d)
 end

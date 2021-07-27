@@ -13,35 +13,35 @@ improve_regularization = false
 
 ## Setting up necessary variables and functions
 
-@load "E:/telfitting/tf_model_150k.jld2" tf_model n_obs tf_data rvs_notel rvs_naive
+@load "E:/telfitting/model_150k.jld2" model n_obs data rvs_notel rvs_naive
 
 if improve_regularization
     using StatsBase
     n_obs_train = Int(round(0.75 * n_obs))
     training_inds = sort(sample(1:n_obs, n_obs_train; replace=false))
-    SSOF.fit_regularization!(tf_model, tf_data, training_inds; use_telstar=use_telstar)
+    SSOF.fit_regularization!(model, data, training_inds; use_telstar=use_telstar)
 else
-    tf_model.reg_tel[:L2_μ] = 1e7
-    tf_model.reg_tel[:L1_μ] = 1e3
-    tf_model.reg_tel[:L1_μ₊_factor] = 2
-    tf_model.reg_tel[:L2_M] = 1e7
-    tf_model.reg_tel[:L1_M] = 1e5
-    delete!(tf_model.reg_tel, :shared_M)
+    model.reg_tel[:L2_μ] = 1e7
+    model.reg_tel[:L1_μ] = 1e3
+    model.reg_tel[:L1_μ₊_factor] = 2
+    model.reg_tel[:L2_M] = 1e7
+    model.reg_tel[:L1_M] = 1e5
+    delete!(model.reg_tel, :shared_M)
 
-    tf_model.reg_star[:L2_μ] = 1e6
-    tf_model.reg_star[:L1_μ] = 1e-1
-    tf_model.reg_star[:L1_μ₊_factor] = 2
-    tf_model.reg_star[:L2_M] = 1e11
-    tf_model.reg_star[:L1_M] = 1e7
-    delete!(tf_model.reg_star, :shared_M)
+    model.reg_star[:L2_μ] = 1e6
+    model.reg_star[:L1_μ] = 1e-1
+    model.reg_star[:L1_μ₊_factor] = 2
+    model.reg_star[:L2_M] = 1e11
+    model.reg_star[:L1_M] = 1e7
+    delete!(model.reg_star, :shared_M)
 end
 
-tf_output = SSOF.Output(tf_model)
+output = SSOF.Output(model)
 
 if use_telstar
-    tf_workspace, loss = SSOF.WorkspaceTelStar(tf_model, tf_output, tf_data; return_loss_f=true)
+    workspace, loss = SSOF.WorkspaceTelStar(model, output, data; return_loss_f=true)
 else
-    tf_workspace, loss = SSOF.Workspace(tf_model, tf_output, tf_data; return_loss_f=true)
+    workspace, loss = SSOF.Workspace(model, output, data; return_loss_f=true)
 end
 
 using Plots
@@ -51,26 +51,26 @@ if plot_stuff
     plot_spectrum(; kwargs...) = plot(; xlabel = "Wavelength (nm)", ylabel = "Continuum Normalized Flux", dpi = 400, kwargs...)
     plot_rv(; kwargs...) = plot(; xlabel = "Time (d)", ylabel = "RV (m/s)", dpi = 400, kwargs...)
 
-    function status_plot(tfo::SSOF.Output, tfd::SSOF.Data; plot_epoch::Int=10, tracker::Int=0)
-        obs_λ = exp.(tfd.log_λ_obs[:, plot_epoch])
+    function status_plot(o::SSOF.Output, d::SSOF.Data; plot_epoch::Int=10, tracker::Int=0)
+        obs_λ = exp.(d.log_λ_obs[:, plot_epoch])
         l = @layout [a; b]
         # plt = plot_spectrum(; legend = :bottomleft, size=(800,1200), layout = l)
         # plt = plot_spectrum(; xlim=(627.8,628.3), legend=:bottomleft, size=(800,1200), layout = l) # o2
         # plt = plot_spectrum(; xlim=(651.5,652), legend=:bottomleft, size=(800,1200), layout = l)  # h2o
         plt = plot_spectrum(; xlim = (647, 656), legend = :bottomleft, size=(800,1200), layout = l)  # h2o
         plot!(plt[1], obs_λ, true_tels[:, plot_epoch], label="true tel")
-        plot!(plt[1], obs_λ, tfd.flux[:, plot_epoch] ./ (tfo.star[:, plot_epoch] + tfo.rv[:, plot_epoch]), label="predicted tel", alpha = 0.5)
-        plot!(plt[1], obs_λ, tfo.tel[:, plot_epoch], label="model tel: $tracker", alpha = 0.5)
-        plot_star_λs = exp.(tfd.log_λ_star[:, plot_epoch])
-        plot!(plt[2], plot_star_λs, tfd.flux[:, plot_epoch] ./ true_tels[:, plot_epoch], label="true star")
-        plot!(plt[2], plot_star_λs, tfd.flux[:, plot_epoch] ./ tfo.tel[:, plot_epoch], label="predicted star", alpha = 0.5)
-        plot!(plt[2], plot_star_λs, tfo.star[:, plot_epoch] + tfo.rv[:, plot_epoch], label="model star: $tracker", alpha = 0.5)
+        plot!(plt[1], obs_λ, d.flux[:, plot_epoch] ./ (o.star[:, plot_epoch] + o.rv[:, plot_epoch]), label="predicted tel", alpha = 0.5)
+        plot!(plt[1], obs_λ, o.tel[:, plot_epoch], label="model tel: $tracker", alpha = 0.5)
+        plot_star_λs = exp.(d.log_λ_star[:, plot_epoch])
+        plot!(plt[2], plot_star_λs, d.flux[:, plot_epoch] ./ true_tels[:, plot_epoch], label="true star")
+        plot!(plt[2], plot_star_λs, d.flux[:, plot_epoch] ./ o.tel[:, plot_epoch], label="predicted star", alpha = 0.5)
+        plot!(plt[2], plot_star_λs, o.star[:, plot_epoch] + o.rv[:, plot_epoch], label="model star: $tracker", alpha = 0.5)
         display(plt)
     end
-    status_plot(tf_output, tf_data)
+    status_plot(output, data)
 end
 
-rvs_notel = (tf_model.rv.lm.s .* SSOF.light_speed_nu)'
+rvs_notel = (model.rv.lm.s .* SSOF.light_speed_nu)'
 rvs_std(rvs; inds=:) = std((rvs - rvs_kep_nu[inds]) - rvs_activ_no_noise[inds])
 resid_stds = [rvs_std(rvs_notel)]
 losses = [loss()]
@@ -79,13 +79,13 @@ println("guess $tracker, std=$(round(rvs_std(rvs_notel), digits=5))")
 rvs_notel_opt = copy(rvs_notel)
 
 @time for i in 1:8
-    SSOF.train_OrderModel!(tf_workspace)
-    rvs_notel_opt[:] = (tf_model.rv.lm.s .* SSOF.light_speed_nu)'
+    SSOF.train_OrderModel!(workspace)
+    rvs_notel_opt[:] = (model.rv.lm.s .* SSOF.light_speed_nu)'
 
     append!(resid_stds, [rvs_std(rvs_notel_opt)])
     append!(losses, [loss()])
 
-    status_plot(tf_output, tf_data)
+    status_plot(output, data)
     tracker += 1
     println("guess $tracker")
     println("loss   = $(losses[end])")
@@ -147,44 +147,44 @@ if plot_stuff
     # plt = plot_spectrum(; xlim = (647, 656))  # h2o
     # plt = plot_spectrum(; xlim=(651.5,652))  # h2o
     plt = plot_spectrum(; title="Stellar model")
-    plot!(tf_model.star.λ, tf_model.star.lm.M[:, 1] ./ norm(tf_model.star.lm.M[:, 1]); label="basis 1")
-    plot!(tf_model.star.λ, tf_model.star.lm.M[:, 2] ./ norm(tf_model.star.lm.M[:, 2]); label="basis 2")
-    plot!(tf_model.star.λ, tf_model.star.lm.μ; label="μ")
+    plot!(model.star.λ, model.star.lm.M[:, 1] ./ norm(model.star.lm.M[:, 1]); label="basis 1")
+    plot!(model.star.λ, model.star.lm.M[:, 2] ./ norm(model.star.lm.M[:, 2]); label="basis 2")
+    plot!(model.star.λ, model.star.lm.μ; label="μ")
     png(plt, fig_dir * "model_star_basis.png")
 
     plt = plot_spectrum(; xlim=(647, 656), title="Stellar model")  # h2o
-    plot!(tf_model.star.λ, tf_model.star.lm.M[:, 1] ./ norm(tf_model.star.lm.M[:, 1]); label="basis 1")
-    plot!(tf_model.star.λ, tf_model.star.lm.M[:, 2] ./ norm(tf_model.star.lm.M[:, 2]); label="basis 2")
-    plot!(tf_model.star.λ, tf_model.star.lm.μ; label="μ star")
-    plot!(tf_model.tel.λ, tf_model.tel.lm.μ; label="μ tel")
+    plot!(model.star.λ, model.star.lm.M[:, 1] ./ norm(model.star.lm.M[:, 1]); label="basis 1")
+    plot!(model.star.λ, model.star.lm.M[:, 2] ./ norm(model.star.lm.M[:, 2]); label="basis 2")
+    plot!(model.star.λ, model.star.lm.μ; label="μ star")
+    plot!(model.tel.λ, model.tel.lm.μ; label="μ tel")
     png(plt, fig_dir * "model_star_basis_h2o.png")
 
     plot_scores(; kwargs...) = plot(; xlabel = "Time (d)", ylabel = "Weights", dpi = 400, kwargs...)
     plt = plot_scores(; title="Stellar model")
-    scatter!(times_nu, tf_model.star.lm.s[1, :] .* norm(tf_model.star.lm.M[:, 1]); label="weights 1")
-    scatter!(times_nu, tf_model.star.lm.s[2, :] .* norm(tf_model.star.lm.M[:, 2]); label="weights 2")
+    scatter!(times_nu, model.star.lm.s[1, :] .* norm(model.star.lm.M[:, 1]); label="weights 1")
+    scatter!(times_nu, model.star.lm.s[2, :] .* norm(model.star.lm.M[:, 2]); label="weights 2")
     png(plt, fig_dir * "model_star_weights.png")
 
     plt = plot_spectrum(; title="Telluric model")
-    plot!(tf_model.tel.λ, tf_model.tel.lm.M[:, 1] ./ norm(tf_model.tel.lm.M[:, 1]); label="basis 1")
-    plot!(tf_model.tel.λ, tf_model.tel.lm.M[:, 2] ./ norm(tf_model.tel.lm.M[:, 2]); label="basis 2")
-    plot!(tf_model.tel.λ, tf_model.tel.lm.μ; label="μ")
+    plot!(model.tel.λ, model.tel.lm.M[:, 1] ./ norm(model.tel.lm.M[:, 1]); label="basis 1")
+    plot!(model.tel.λ, model.tel.lm.M[:, 2] ./ norm(model.tel.lm.M[:, 2]); label="basis 2")
+    plot!(model.tel.λ, model.tel.lm.μ; label="μ")
     png(plt, fig_dir * "model_tel_basis.png")
 
     plt = plot_spectrum(;xlim=(647, 656), title="Telluric model (H2O)")  # h2o
-    plot!(tf_model.tel.λ, tf_model.tel.lm.M[:,1] ./ norm(tf_model.tel.lm.M[:, 1]); label="basis 1")
-    plot!(tf_model.tel.λ, tf_model.tel.lm.M[:,2] ./ norm(tf_model.tel.lm.M[:, 2]); label="basis 2")
-    plot!(tf_model.tel.λ, tf_model.tel.lm.μ; label="μ")
+    plot!(model.tel.λ, model.tel.lm.M[:,1] ./ norm(model.tel.lm.M[:, 1]); label="basis 1")
+    plot!(model.tel.λ, model.tel.lm.M[:,2] ./ norm(model.tel.lm.M[:, 2]); label="basis 2")
+    plot!(model.tel.λ, model.tel.lm.μ; label="μ")
     png(plt, fig_dir * "model_tel_basis_h2o.png")
     plt = plot_spectrum(;xlim=(627.8,628.3), title="Telluric model (O2)")  # o2
-    plot!(tf_model.tel.λ, tf_model.tel.lm.M[:,1] ./ norm(tf_model.tel.lm.M[:, 1]); label="basis 1")
-    plot!(tf_model.tel.λ, tf_model.tel.lm.M[:,2] ./ norm(tf_model.tel.lm.M[:, 2]); label="basis 2")
-    plot!(tf_model.tel.λ, tf_model.tel.lm.μ; label="μ")
+    plot!(model.tel.λ, model.tel.lm.M[:,1] ./ norm(model.tel.lm.M[:, 1]); label="basis 1")
+    plot!(model.tel.λ, model.tel.lm.M[:,2] ./ norm(model.tel.lm.M[:, 2]); label="basis 2")
+    plot!(model.tel.λ, model.tel.lm.μ; label="μ")
     png(plt, fig_dir * "model_tel_basis_o2.png")
 
     plt = plot_scores(; title="Telluric model")
-    scatter!(times_nu, tf_model.tel.lm.s[1, :] .* norm(tf_model.tel.lm.M[:, 1]); label="weights 1")
-    scatter!(times_nu, tf_model.tel.lm.s[2, :] .* norm(tf_model.tel.lm.M[:, 2]); label="weights 2")
+    scatter!(times_nu, model.tel.lm.s[1, :] .* norm(model.tel.lm.M[:, 1]); label="weights 1")
+    scatter!(times_nu, model.tel.lm.s[2, :] .* norm(model.tel.lm.M[:, 2]); label="weights 2")
     scatter!(times_nu, airmasses; label="airmasses")
     png(plt, fig_dir * "model_tel_weights.png")
 end
