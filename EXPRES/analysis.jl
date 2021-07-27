@@ -1,5 +1,6 @@
 ## Importing packages
 using Pkg
+using JLD2
 Pkg.activate("EXPRES")
 
 # Pkg.develop(;path="C:\\Users\\chris\\OneDrive\\Documents\\GitHub\\EMPCA")
@@ -8,7 +9,6 @@ Pkg.activate("EXPRES")
 
 Pkg.instantiate()
 
-using JLD2
 using Statistics
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 using Plots

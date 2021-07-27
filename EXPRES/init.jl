@@ -1,5 +1,6 @@
 ## Setup
 using Pkg
+using JLD2
 Pkg.activate("EXPRES")
 Pkg.instantiate()
 
@@ -9,7 +10,6 @@ import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 using RvSpectMLBase, RvSpectML
 using EchelleInstruments, EchelleInstruments.EXPRES
 using CSV, DataFrames, Query, StatsBase, Statistics, Dates
-using JLD2
 
 stars = ["10700", "26965"]
 star = stars[SSOF.parse_args(1, Int, 1)]
