@@ -18,14 +18,10 @@ function general_lst_sq(
     dm::AbstractMatrix{T},
     data::AbstractVector,
     Σ::Union{Cholesky,Diagonal}) where {T<:Real}
-    if ndims(Σ) == 1
-        Σ = Diagonal(Σ)
-    else
-        Σ = GLOM.ridge_chol(Σ)
-    end
     return (dm' * (Σ \ dm)) \ (dm' * (Σ \ data))
 end
-
+general_lst_sq(dm, data, σ²::AbstractVector) =
+	general_lst_sq(dm, data, Diagonal(σ²))
 
 # using Plots
 # These were initially defined to act on all of the orders of the spectra at a
