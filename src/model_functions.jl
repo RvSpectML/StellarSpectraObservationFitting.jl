@@ -438,3 +438,4 @@ struct Output{T<:Real}
 		new{T}(tel, star, rv)
 	end
 end
+Base.copy(o::Output) = Output(copy(tel), copy(star), copy(rv))

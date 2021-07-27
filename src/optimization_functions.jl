@@ -137,9 +137,6 @@ struct WorkspaceTelStar <: OptimWorkspace
         @assert length(rv.θ) == 1
         new(telstar, rv, om, o, d)
     end
-    function WorkspaceTelStar(ws::WorkspaceTelStar)
-        WorkspaceTelStar(ws.telstar, rv, om, o, d)
-    end
 end
 
 struct WorkspaceTotal <: OptimWorkspace
