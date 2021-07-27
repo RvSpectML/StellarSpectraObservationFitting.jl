@@ -1,20 +1,20 @@
 using TemporalGPs, Stheno, Distributions
 import Base.copy
 
-struct TFData{T<:Real}
+struct Data{T<:Real}
     flux::AbstractMatrix{T}
     var::AbstractMatrix{T}
     log_λ_obs::AbstractMatrix{T}
     log_λ_star::AbstractMatrix{T}
-	function TFData(flux::AbstractMatrix{T}, var, log_λ_obs, log_λ_star) where {T<:Real}
+	function Data(flux::AbstractMatrix{T}, var, log_λ_obs, log_λ_star) where {T<:Real}
 		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
 		return new{T}(flux, var, log_λ_obs, log_λ_star)
 	end
 end
-(tfd::TFData)(inds::AbstractVecOrMat) =
-	TFData(view(tfd.flux, :, inds), view(tfd.var, :, inds),
+(tfd::Data)(inds::AbstractVecOrMat) =
+	Data(view(tfd.flux, :, inds), view(tfd.var, :, inds),
 	view(tfd.log_λ_obs, :, inds), view(tfd.log_λ_star, :, inds))
-Base.copy(tfd::TFData) = TFData(copy(tfd.flux), copy(tfd.var), copy(tfd.log_λ_obs), copy(tfd.log_λ_star))
+Base.copy(tfd::Data) = Data(copy(tfd.flux), copy(tfd.var), copy(tfd.log_λ_obs), copy(tfd.log_λ_star))
 
 
 function create_λ_template(log_λ_obs, resolution)
@@ -131,11 +131,11 @@ _eval_flm(M::AbstractVecOrMat, s::AbstractVecOrMat, μ::AbstractVector) =
 (flm::FullLinearModel)(inds::AbstractVecOrMat) = _eval_flm(view(flm.M, inds, :), flm.s, flm.μ)
 (blm::BaseLinearModel)(inds::AbstractVecOrMat) = _eval_blm(view(blm.M, inds, :), blm.s)
 
-struct TFSubmodel{T<:Number}
+struct Submodel{T<:Number}
     log_λ::AbstractVector{T}
     λ::AbstractVector{T}
 	lm::LinearModel
-    function TFSubmodel(log_λ_obs::AbstractVecOrMat, model_res::Real, n_comp::Int; include_mean::Bool=true)
+    function Submodel(log_λ_obs::AbstractVecOrMat, model_res::Real, n_comp::Int; include_mean::Bool=true)
         n_obs = size(log_λ_obs, 2)
 		len, log_λ, λ = create_λ_template(log_λ_obs, model_res)
 		if include_mean
@@ -143,17 +143,17 @@ struct TFSubmodel{T<:Number}
 		else
 			lm = BaseLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs))
 		end
-        return TFSubmodel(log_λ, λ, lm)
+        return Submodel(log_λ, λ, lm)
     end
-    function TFSubmodel(log_λ::AbstractVector{T}, λ, lm) where {T<:Number}
+    function Submodel(log_λ::AbstractVector{T}, λ, lm) where {T<:Number}
         @assert length(log_λ) == length(λ) == size(lm.M, 1)
         return new{T}(log_λ, λ, lm)
     end
 end
-(tfsm::TFSubmodel)(inds::AbstractVecOrMat) =
-	TFSubmodel(tfsm.log_λ, tfsm.λ, LinearModel(tfsm.lm, inds))
-(tfsm::TFSubmodel)() = tfsm.lm()
-Base.copy(tfsm::TFSubmodel) = TFSubmodel(tfsm.log_λ, tfsm.λ, copy(tfsm.lm))
+(tfsm::Submodel)(inds::AbstractVecOrMat) =
+	Submodel(tfsm.log_λ, tfsm.λ, LinearModel(tfsm.lm, inds))
+(tfsm::Submodel)() = tfsm.lm()
+Base.copy(tfsm::Submodel) = Submodel(tfsm.log_λ, tfsm.λ, copy(tfsm.lm))
 
 function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 	n_obs = size(log_λ_obs_from, 2)
@@ -170,10 +170,10 @@ default_reg_tel = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
 default_reg_star = Dict([(:L2_μ, 1e4), (:L1_μ, 1e3),
 	(:L1_μ₊_factor, 7.2), (:L2_M, 1e1), (:L1_M, 1e6)])
 
-struct TFOrderModel{T<:Number}
-    tel::TFSubmodel{T}
-    star::TFSubmodel{T}
-	rv::TFSubmodel{T}
+struct OrderModel{T<:Number}
+    tel::Submodel{T}
+    star::Submodel{T}
+	rv::Submodel{T}
 	reg_tel::Dict{Symbol, T}
 	reg_star::Dict{Symbol, T}
     lih_t2b::LinearInterpolationHelper
@@ -183,8 +183,8 @@ struct TFOrderModel{T<:Number}
     lih_t2o::LinearInterpolationHelper
     lih_o2t::LinearInterpolationHelper
 	metadata::Dict{Symbol, Any}
-    function TFOrderModel(
-		tfd::TFData,
+    function OrderModel(
+		tfd::Data,
 		star_model_res::Number,
 		tel_model_res::Number,
 		instrument::String,
@@ -193,9 +193,9 @@ struct TFOrderModel{T<:Number}
 		n_comp_tel::Int=2,
 		n_comp_star::Int=2)
 
-        tel = TFSubmodel(tfd.log_λ_obs, tel_model_res, n_comp_tel)
-        star = TFSubmodel(tfd.log_λ_star, star_model_res, n_comp_star)
-		rv = TFSubmodel(tfd.log_λ_star, star_model_res, 1; include_mean=false)
+        tel = Submodel(tfd.log_λ_obs, tel_model_res, n_comp_tel)
+        star = Submodel(tfd.log_λ_star, star_model_res, n_comp_star)
+		rv = Submodel(tfd.log_λ_star, star_model_res, 1; include_mean=false)
 
         n_obs = size(tfd.log_λ_obs, 2)
         lih_t2o, lih_o2t = LinearInterpolationHelper_maker(tel.log_λ, tfd.log_λ_obs)
@@ -208,23 +208,23 @@ struct TFOrderModel{T<:Number}
         lih_t2b, lih_b2t = LinearInterpolationHelper_maker(tel.log_λ, star_log_λ_tel)
 		todo = Dict([(:reg_improved, false), (:extra_chop, false), (:optimized, false), (:err_estimated, false)])
 		metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
-        return TFOrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), lih_t2b, lih_b2t,
+        return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), lih_t2b, lih_b2t,
 			lih_o2b, lih_b2o, lih_t2o, lih_o2t, metadata)
     end
-    function TFOrderModel(tel::TFSubmodel{T}, star, rv, reg_tel, reg_star, lih_t2b,
+    function OrderModel(tel::Submodel{T}, star, rv, reg_tel, reg_star, lih_t2b,
 		lih_b2t, lih_o2b, lih_b2o, lih_t2o, lih_o2t, metadata) where {T<:Number}
 		return new{T}(tel, star, rv, reg_tel, reg_star, lih_t2b, lih_b2t, lih_o2b, lih_b2o, lih_t2o, lih_o2t, metadata)
 	end
 end
-Base.copy(tfom::TFOrderModel) = TFOrderModel(copy(tfom.tel), copy(tfom.star), copy(tfom.rv), copy(tfom.reg_tel), copy(tfom.reg_star), tfom.lih_t2b,
+Base.copy(tfom::OrderModel) = OrderModel(copy(tfom.tel), copy(tfom.star), copy(tfom.rv), copy(tfom.reg_tel), copy(tfom.reg_star), tfom.lih_t2b,
 	tfom.lih_b2t, tfom.lih_o2b, tfom.lih_b2o, tfom.lih_t2o, tfom.lih_o2t, copy(tfom.metadata))
-(tfom::TFOrderModel)(inds::AbstractVecOrMat) =
-	TFOrderModel(tfom.tel(inds), tfom.star(inds), tfom.rv(inds), tfom.reg_tel, tfom.reg_star,
+(tfom::OrderModel)(inds::AbstractVecOrMat) =
+	OrderModel(tfom.tel(inds), tfom.star(inds), tfom.rv(inds), tfom.reg_tel, tfom.reg_star,
 	tfom.lih_t2b(inds, size(tfom.lih_o2t.li, 1)), tfom.lih_b2t(inds, size(tfom.lih_o2b.li, 1)),
 	tfom.lih_o2b(inds, size(tfom.lih_b2o.li, 1)), tfom.lih_b2o(inds, size(tfom.lih_o2b.li, 1)),
 	tfom.lih_t2o(inds, size(tfom.lih_o2t.li, 1)), tfom.lih_o2t(inds, size(tfom.lih_b2o.li, 1)),
 	copy(tfom.metadata))
-function zero_regularization(tfom::TFOrderModel)
+function zero_regularization(tfom::OrderModel)
 	for (key, value) in tfom.reg_tel
 		tfom.reg_tel[key] = 0
 	end
@@ -237,17 +237,17 @@ downsize(lm::FullLinearModel, n_comp::Int) =
 	FullLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :], lm.μ[:])
 downsize(lm::BaseLinearModel, n_comp::Int) =
 	BaseLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :])
-downsize(tfsm::TFSubmodel, n_comp::Int) =
-	TFSubmodel(tfsm.log_λ[:], tfsm.λ[:], downsize(tfsm.lm, n_comp))
-downsize(tfm::TFOrderModel, n_comp_tel::Int, n_comp_star::Int) =
-	TFOrderModel(
+downsize(tfsm::Submodel, n_comp::Int) =
+	Submodel(tfsm.log_λ[:], tfsm.λ[:], downsize(tfsm.lm, n_comp))
+downsize(tfm::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
+	OrderModel(
 		downsize(tfm.tel, n_comp_tel),
 		downsize(tfm.star, n_comp_star),
 		tfm.rv, tfm.reg_tel, tfm.reg_star, tfm.lih_t2b, tfm.lih_b2t,
 		tfm.lih_o2b, tfm.lih_b2o, tfm.lih_t2o, tfm.lih_o2t, tfm.metadata)
 
-tel_prior(tfom::TFOrderModel) = model_prior(tfom.tel.lm, tfom.reg_tel)
-star_prior(tfom::TFOrderModel) = model_prior(tfom.star.lm, tfom.reg_star)
+tel_prior(tfom::OrderModel) = model_prior(tfom.tel.lm, tfom.reg_tel)
+star_prior(tfom::OrderModel) = model_prior(tfom.star.lm, tfom.reg_star)
 
 spectra_interp(og_vals::AbstractMatrix, lih) =
     (og_vals[lih.li] .* (1 .- lih.ratios)) + (og_vals[lih.li .+ 1] .* (lih.ratios))
@@ -316,13 +316,13 @@ function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix
 	end
 end
 
-function n_comps_needed(tfsm::TFSubmodel; threshold::Real=0.05)
+function n_comps_needed(tfsm::Submodel; threshold::Real=0.05)
     @assert 0 < threshold < 1
     s_var = sum(abs2, tfsm.lm.s; dims=2)
     return findfirst(s_var ./ sum(s_var) .< threshold)[1] - 1
 end
 
-function initialize!(tfom::TFOrderModel, tfd::TFData; min::Number=0, max::Number=1.2, use_gp::Bool=false, kwargs...)
+function initialize!(tfom::OrderModel, tfd::Data; min::Number=0, max::Number=1.2, use_gp::Bool=false, kwargs...)
 
 	μ_min = min + 0.05
 	μ_max = max - 0.05
@@ -428,12 +428,12 @@ function model_prior(lm, reg::Dict{Symbol, <:Real})
 	return val
 end
 
-struct TFOutput{T<:Real}
+struct Output{T<:Real}
 	tel::AbstractMatrix{T}
 	star::AbstractMatrix{T}
 	rv::AbstractMatrix{T}
-	TFOutput(tfom::TFOrderModel) = TFOutput(tel_model(tfom), star_model(tfom), rv_model(tfom))
-	function TFOutput(tel::AbstractMatrix{T}, star, rv) where {T<:Real}
+	Output(tfom::OrderModel) = Output(tel_model(tfom), star_model(tfom), rv_model(tfom))
+	function Output(tel::AbstractMatrix{T}, star, rv) where {T<:Real}
 		@assert size(tel) == size(star) == size(rv)
 		new{T}(tel, star, rv)
 	end

@@ -36,12 +36,12 @@ else
     delete!(tf_model.reg_star, :shared_M)
 end
 
-tf_output = SSOF.TFOutput(tf_model)
+tf_output = SSOF.Output(tf_model)
 
 if use_telstar
-    tf_workspace, loss = SSOF.TFWorkspaceTelStar(tf_model, tf_output, tf_data; return_loss_f=true)
+    tf_workspace, loss = SSOF.WorkspaceTelStar(tf_model, tf_output, tf_data; return_loss_f=true)
 else
-    tf_workspace, loss = SSOF.TFWorkspace(tf_model, tf_output, tf_data; return_loss_f=true)
+    tf_workspace, loss = SSOF.Workspace(tf_model, tf_output, tf_data; return_loss_f=true)
 end
 
 using Plots
@@ -51,7 +51,7 @@ if plot_stuff
     plot_spectrum(; kwargs...) = plot(; xlabel = "Wavelength (nm)", ylabel = "Continuum Normalized Flux", dpi = 400, kwargs...)
     plot_rv(; kwargs...) = plot(; xlabel = "Time (d)", ylabel = "RV (m/s)", dpi = 400, kwargs...)
 
-    function status_plot(tfo::SSOF.TFOutput, tfd::SSOF.TFData; plot_epoch::Int=10, tracker::Int=0)
+    function status_plot(tfo::SSOF.Output, tfd::SSOF.Data; plot_epoch::Int=10, tracker::Int=0)
         obs_λ = exp.(tfd.log_λ_obs[:, plot_epoch])
         l = @layout [a; b]
         # plt = plot_spectrum(; legend = :bottomleft, size=(800,1200), layout = l)
@@ -79,7 +79,7 @@ println("guess $tracker, std=$(round(rvs_std(rvs_notel), digits=5))")
 rvs_notel_opt = copy(rvs_notel)
 
 @time for i in 1:8
-    SSOF.train_TFOrderModel!(tf_workspace)
+    SSOF.train_OrderModel!(tf_workspace)
     rvs_notel_opt[:] = (tf_model.rv.lm.s .* SSOF.light_speed_nu)'
 
     append!(resid_stds, [rvs_std(rvs_notel_opt)])

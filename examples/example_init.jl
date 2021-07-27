@@ -33,14 +33,14 @@ for i in 1:n_obs # 13s
     log_λ_obs[:, i] = Spectra[i].log_λ_obs
     log_λ_star[:, i] = Spectra[i].log_λ_bary
 end
-tf_data = SSOF.TFData(flux_obs, var_obs, log_λ_obs, log_λ_star)
+tf_data = SSOF.Data(flux_obs, var_obs, log_λ_obs, log_λ_star)
 
 ## Initializing models
 
 star_model_res = 2 * sqrt(2) * obs_resolution
 tel_model_res = sqrt(2) * obs_resolution
 
-@time tf_model = SSOF.TFOrderModel(tf_data, star_model_res, tel_model_res, "SOAP", 0)
+@time tf_model = SSOF.OrderModel(tf_data, star_model_res, tel_model_res, "SOAP", 0)
 
 @time rvs_notel, rvs_naive = SSOF.initialize!(tf_model, tf_data; use_gp=true)
 

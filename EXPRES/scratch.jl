@@ -57,7 +57,7 @@ function new_inds_M(M::AbstractArray, mask_inds::UnitRange, cutoff::Real)
     return [maximum([inds[1] for inds in possible_new_inds_mask]), minimum([inds[2] for inds in possible_new_inds_mask])],
         [maximum([inds[1] for inds in possible_new_inds_tfm]), minimum([inds[2] for inds in possible_new_inds_tfm])]
 end
-function new_inds(tfom::SSOF.TFOrderModel, mask_inds::UnitRange)
+function new_inds(tfom::SSOF.OrderModel, mask_inds::UnitRange)
     mask_inds_star, _ = new_inds_M(tfom.star.lm.M, mask_inds, 0.975)
     mask_inds_tel, _ = new_inds_M(tfom.tel.lm.M, mask_inds, 0.9975)
     return max(mask_inds_star[1], mask_inds_tel[1]):min(mask_inds_star[2], mask_inds_tel[2])

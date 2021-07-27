@@ -83,7 +83,7 @@ for desired_order in findfirst(useful_orders):findlast(useful_orders)
 	    log_λ_obs[:, i] = log.(all_spectra[i].λ_obs[mask_inds, desired_order])
 	    log_λ_star[:, i] = log.(all_spectra[i].λ[mask_inds, desired_order])
 	end
-	tf_data = SSOF.TFData(flux_obs, var_obs, log_λ_obs, log_λ_star)
+	tf_data = SSOF.Data(flux_obs, var_obs, log_λ_obs, log_λ_star)
 	SSOF.process!(tf_data; order=6)
 	@save save_path*"data.jld2" n_obs tf_data times_nu airmasses
 end

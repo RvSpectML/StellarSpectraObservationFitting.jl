@@ -1,21 +1,21 @@
-function eval_regularization(reg_field::Symbol, reg_key::Symbol, reg_val::Real, start_tfom::TFOrderModel, tfd::TFData, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat; use_telstar::Bool=true)
+function eval_regularization(reg_field::Symbol, reg_key::Symbol, reg_val::Real, start_tfom::OrderModel, tfd::Data, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat; use_telstar::Bool=true)
     tfom = copy(start_tfom)
     getfield(tfom, reg_field)[reg_key] = reg_val
     if use_telstar
-        train = TFWorkspaceTelStar(tfom, tfd, training_inds)
-        test, loss_test = TFWorkspaceTelStar(tfom, tfd, testing_inds; return_loss_f=true, only_s=true)
+        train = WorkspaceTelStar(tfom, tfd, training_inds)
+        test, loss_test = WorkspaceTelStar(tfom, tfd, testing_inds; return_loss_f=true, only_s=true)
     else
-        train = TFWorkspaceTotal(tfom, tfd, training_inds)
-        test, loss_test = TFWorkspaceTotal(tfom, tfd, testing_inds; return_loss_f=true, only_s=true)
+        train = WorkspaceTotal(tfom, tfd, training_inds)
+        test, loss_test = WorkspaceTotal(tfom, tfd, testing_inds; return_loss_f=true, only_s=true)
     end
-    train_TFOrderModel!(train)
-    train_TFOrderModel!(test)
+    train_OrderModel!(train)
+    train_OrderModel!(test)
     return loss_test()
 end
 
 
 
-function fit_regularization_helper!(reg_field::Symbol, reg_key::Symbol, tfom::TFOrderModel, tfd::TFData, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; kwargs...)
+function fit_regularization_helper!(reg_field::Symbol, reg_key::Symbol, tfom::OrderModel, tfd::Data, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; kwargs...)
     @assert 0 < reg_min < reg_max < Inf
     ℓs = zeros(2)
     regs = getfield(tfom, reg_field)
@@ -60,7 +60,7 @@ function check_for_valid_regularization(reg::Dict{Symbol, <:Real})
 end
 
 
-function fit_regularization!(tfom::TFOrderModel, tfd::TFData, training_inds::AbstractVecOrMat; key_list::Vector{Symbol}=_key_list, kwargs...)
+function fit_regularization!(tfom::OrderModel, tfd::Data, training_inds::AbstractVecOrMat; key_list::Vector{Symbol}=_key_list, kwargs...)
     n_obs = size(tfd.flux, 2)
     testing_inds = [i for i in 1:n_obs if !(i in training_inds)]
     println("starting regularization searches")
