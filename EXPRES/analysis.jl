@@ -51,7 +51,7 @@ end
 SSOF_path = dirname(dirname(pathof(SSOF)))
 if interactive
     include(SSOF_path * "/src/_plot_functions.jl")
-    status_plot(workspace.o, data)
+    status_plot(workspace.o, workspace.d)
 end
 
 ## Improving regularization
@@ -74,7 +74,7 @@ if !model.metadata[:todo][:optimized]
     @time results_telstar, _ = SSOF.train_OrderModel!(workspace; print_stuff=true)  # 16s
     @time results_telstar, _ = SSOF.train_OrderModel!(workspace; print_stuff=true, g_tol=SSOF._g_tol_def/10*sqrt(length(workspace.telstar.p0)), f_tol=1e-8)  # 50s
     rvs_notel_opt = (model.rv.lm.s .* SSOF.light_speed_nu)'
-    if interactive; status_plot(workspace.o, data) end
+    if interactive; status_plot(workspace.o, workspace.d) end
     model.metadata[:todo][:optimized] = true
     @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
@@ -141,6 +141,6 @@ if save_plots
     plt = plot_telluric_model_scores(model; inds=1:4, display_plt=interactive)
     png(plt, save_path * "model_tel_weights_few.png")
 
-    plt = status_plot(workspace.o, data; display_plt=interactive)
+    plt = status_plot(workspace.o, workspace.d; display_plt=interactive)
     png(plt, save_path * "status_plot.png")
 end

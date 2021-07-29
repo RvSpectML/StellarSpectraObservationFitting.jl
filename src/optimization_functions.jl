@@ -197,7 +197,7 @@ _g_tol_def = 400
 
 function train_OrderModel!(ow::Workspace; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def, kwargs...)
     optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
-    options = Optim.Options(iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
+    options = Optim.Options(;iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
     # optimize star
     _Flux_optimize!(ow.star, options)
     ow.o.star[:, :] = star_model(ow.om)
@@ -222,7 +222,7 @@ function train_OrderModel!(ow::WorkspaceTelStar; print_stuff::Bool=_print_stuff_
     end
 
     if train_telstar
-        options = Optim.Options(iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
+        options = Optim.Options(;iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
         # optimize tellurics and star
         result_telstar = _Flux_optimize!(ow.telstar, options)
         ow.o.star[:, :] = star_model(ow.om)
@@ -230,7 +230,7 @@ function train_OrderModel!(ow::WorkspaceTelStar; print_stuff::Bool=_print_stuff_
     end
 
     # optimize RVs
-    options = Optim.Options(callback=optim_cb_local, g_tol=g_tol*sqrt(length(ow.rv.p0) / length(ow.telstar.p0)), kwargs...)
+    options = Optim.Options(;callback=optim_cb_local, g_tol=g_tol*sqrt(length(ow.rv.p0) / length(ow.telstar.p0)), kwargs...)
     ow.om.rv.lm.M[:] = calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
     result_rv = _Flux_optimize!(ow.rv, options)
     ow.o.rv[:, :] = rv_model(ow.om)
@@ -244,7 +244,7 @@ end
 
 function train_OrderModel!(ow::WorkspaceTotal; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def*sqrt(length(ow.total.p0)), kwargs...)
     optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
-    options = Optim.Options(iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
+    options = Optim.Options(;iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
     # optimize tellurics and star
     result = _Flux_optimize!(ow.total, options)
     ow.om.rv.lm.M[:] = calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
