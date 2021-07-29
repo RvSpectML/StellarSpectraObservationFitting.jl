@@ -48,10 +48,26 @@ struct OptimSubWorkspace
         return OptimSubWorkspace(θ, loss; use_cg=!only_s)
     end
     function OptimSubWorkspace(sm1::Submodel, sm2::Submodel, loss::Function, only_s::Bool)
+        T1 = typeof(sm1.lm) <: TemplateModel
+        T2 = typeof(sm2.lm) <: TemplateModel
         if only_s
-            θ = Flux.params(sm1.lm.s, sm2.lm.s)
+            if T1
+                θ = Flux.params(sm2.lm.s)
+            elseif T2
+                θ = Flux.params(sm1.lm.s)
+            else
+                θ = Flux.params(sm1.lm.s, sm2.lm.s)
+            end
         else
-            θ = Flux.params(sm1.lm.M, sm1.lm.s, sm1.lm.μ, sm2.lm.M, sm2.lm.s, sm2.lm.μ)
+            if T1 && T2
+                θ = Flux.params(sm1.lm.μ, sm2.lm.μ)
+            elseif T1
+                θ = Flux.params(sm1.lm.μ, sm2.lm.M, sm2.lm.s, sm2.lm.μ)
+            elseif T2
+                θ = Flux.params(sm1.lm.M, sm1.lm.s, sm1.lm.μ, sm2.lm.μ)
+            else
+                θ = Flux.params(sm1.lm.M, sm1.lm.s, sm1.lm.μ, sm2.lm.M, sm2.lm.s, sm2.lm.μ)
+            end
         end
         return OptimSubWorkspace(θ, loss; use_cg=!only_s)
     end
@@ -133,7 +149,7 @@ struct WorkspaceTelStar <: OptimWorkspace
         o::Output,
         d::Data)
 
-        @assert (length(telstar.θ) == 2) || (length(telstar.θ) == 6)
+        # @assert (length(telstar.θ) == 2) || (length(telstar.θ) == 6)
         @assert length(rv.θ) == 1
         new(telstar, rv, om, o, d)
     end

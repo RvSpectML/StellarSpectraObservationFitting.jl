@@ -121,15 +121,26 @@ struct BaseLinearModel{T<:Number} <: LinearModel
 end
 Base.copy(blm::BaseLinearModel) = BaseLinearModel(copy(blm.M), copy(blm.s))
 
+# Template (no bases) model
+struct TemplateModel{T<:Number} <: LinearModel
+	μ::Vector{T}
+	n::Int
+	TemplateModel(μ::Vector{T}, n) where {T<:Number} = new{T}(μ, n)
+end
+Base.copy(tlm::TemplateModel) = TemplateModel(copy(tlm.μ), tlm.n)
+
 LinearModel(blm::BaseLinearModel, inds::AbstractVecOrMat) =
 	BaseLinearModel(blm.M, view(blm.s, :, inds))
 _eval_blm(M::AbstractVecOrMat, s::AbstractVecOrMat) = M * s
 _eval_flm(M::AbstractVecOrMat, s::AbstractVecOrMat, μ::AbstractVector) =
 	_eval_blm(M, s) .+ μ
+
 (flm::FullLinearModel)() = _eval_flm(flm.M, flm.s, flm.μ)
 (blm::BaseLinearModel)() = _eval_blm(blm.M, blm.s)
+(tlm::TemplateModel)() = repeat(tlm.μ, 1, tlm.n)
 (flm::FullLinearModel)(inds::AbstractVecOrMat) = _eval_flm(view(flm.M, inds, :), flm.s, flm.μ)
 (blm::BaseLinearModel)(inds::AbstractVecOrMat) = _eval_blm(view(blm.M, inds, :), blm.s)
+(tlm::TemplateModel)(inds::AbstractVecOrMat) = repeat(view(tlm.μ, inds), 1, tlm.n)
 
 struct Submodel{T<:Number}
     log_λ::AbstractVector{T}
@@ -146,7 +157,11 @@ struct Submodel{T<:Number}
         return Submodel(log_λ, λ, lm)
     end
     function Submodel(log_λ::AbstractVector{T}, λ, lm) where {T<:Number}
-        @assert length(log_λ) == length(λ) == size(lm.M, 1)
+		if typeof(lm) <: TemplateModel
+			@assert length(log_λ) == length(λ) == length(lm.μ)
+        else
+			@assert length(log_λ) == length(λ) == size(lm.M, 1)
+		end
         return new{T}(log_λ, λ, lm)
     end
 end
@@ -233,8 +248,13 @@ function zero_regularization(om::OrderModel)
 	end
 end
 
-downsize(lm::FullLinearModel, n_comp::Int) =
-	FullLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :], lm.μ[:])
+function downsize(lm::FullLinearModel, n_comp::Int)
+	if n_comp > 0
+		return FullLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :], lm.μ[:])
+	else
+		return TemplateModel(lm.μ[:], size(lm.M, 1))
+	end
+end
 downsize(lm::BaseLinearModel, n_comp::Int) =
 	BaseLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :])
 downsize(sm::Submodel, n_comp::Int) =
@@ -399,7 +419,7 @@ L1(a::AbstractArray) = sum(abs.(a))
 L2(a::AbstractArray) = sum(a .* a)
 shared_attention(v1::AbstractVector, v2::AbstractVector) = dot(abs.(v1), abs.(v2))
 
-function model_prior(lm, reg::Dict{Symbol, <:Real})
+function model_prior(lm::LinearModel, reg::Dict{Symbol, <:Real})
 	val = 0
 	if haskey(reg, :shared_M)
 		shared_att = 0
@@ -422,9 +442,11 @@ function model_prior(lm, reg::Dict{Symbol, <:Real})
 			end
 		end
 	end
-	if haskey(reg, :L2_M); val += L2(lm.M) * reg[:L2_M] end
-	if haskey(reg, :L1_M); val += L1(lm.M) * reg[:L1_M] end
-	if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0); val += L1(lm.s) end
+	if !(typeof(lm) <: TemplateModel)
+		if haskey(reg, :L2_M); val += L2(lm.M) * reg[:L2_M] end
+		if haskey(reg, :L1_M); val += L1(lm.M) * reg[:L1_M] end
+		if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0); val += L1(lm.s) end
+	end
 	return val
 end
 

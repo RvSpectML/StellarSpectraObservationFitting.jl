@@ -90,8 +90,11 @@ function test_ℓ_for_n_comps(n_comps::Vector; return_inters::Bool=false, kwargs
     end
 end
 
+test_n_comp_tel = 0:10
+test_n_comp_star = 0:10
+
 comp_ℓs = zeros(length(test_n_comp_tel), length(test_n_comp_star))
-for (i, n_tel) in enumerate(test_n_comp_tel)
+@progress for (i, n_tel) in enumerate(test_n_comp_tel)
     for (j, n_star) in enumerate(test_n_comp_star)
         comp_ℓs[i, j] = test_ℓ_for_n_comps([n_tel, n_star])
     end
