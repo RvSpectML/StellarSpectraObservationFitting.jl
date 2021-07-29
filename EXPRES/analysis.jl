@@ -79,25 +79,7 @@ if !model.metadata[:todo][:optimized]
     @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
 
-using Distributed
-use_distributed = true
-
-if use_distributed
-    function sendto(workers::Union{T,Vector{T}}; args...) where {T<:Integer}
-        for worker in workers
-            for (var_name, var_value) in args
-                @spawnat(worker, Core.eval(Main, Expr(:(=), var_name, var_value)))
-            end
-        end
-    end
-    addprocs(length(Sys.cpu_info()) - 2)
-    # addprocs(1)
-    @everywhere using Pkg; @everywhere Pkg.activate("EXPRES"); # @everywhere Pkg.instantiate()
-    @everywhere using StellarSpectraObservationFitting; @everywhere SSOF = StellarSpectraObservationFitting
-    sendto(workers(), model=model, workspace=workspace)
-end
-
-@everywhere function test_ℓ_for_n_comps(n_comps::Vector; return_inters::Bool=false, kwargs...)
+function test_ℓ_for_n_comps(n_comps::Vector; return_inters::Bool=false, kwargs...)
     ws, l = SSOF.WorkspaceTelStar(SSOF.downsize(model, n_comps[1], n_comps[2]), workspace.d; return_loss_f=true)
     SSOF.train_OrderModel!(ws; kwargs...)  # 16s
     SSOF.train_OrderModel!(ws; g_tol=SSOF._g_tol_def/10*sqrt(length(ws.telstar.p0)), f_tol=1e-8, kwargs...)  # 50s
@@ -108,46 +90,12 @@ end
     end
 end
 
-test_n_comp_tel = 1:5
-test_n_comp_star = 1:5
-
-n_comp_pairs = Vector{Int}[]
-for i in test_n_comp_tel
-    for j in test_n_comp_star
-        append!(n_comp_pairs, [[i,j]])
+comp_ℓs = zeros(length(test_n_comp_tel), length(test_n_comp_star))
+for (i, n_tel) in enumerate(test_n_comp_tel)
+    for (j, n_star) in enumerate(test_n_comp_star)
+        comp_ℓs[i, j] = test_ℓ_for_n_comps([n_tel, n_star])
     end
 end
-@time comp_ℓs_flat = pmap(x->test_ℓ_for_n_comps(x), n_comp_pairs, batch_size=Int(floor(length(n_comp_pairs) / (nworkers() + 1)) + 1))
-
-n_comps = [10,10]
-ws, l = SSOF.WorkspaceTelStar(SSOF.downsize(model, n_comps[1], n_comps[2]), workspace.d; return_loss_f=true)
-@time SSOF.train_OrderModel!(ws; show_trace=true)  # 10s
-@time SSOF.train_OrderModel!(ws; g_tol=SSOF._g_tol_def/10*sqrt(length(ws.telstar.p0)), f_tol=1e-8, show_trace=true)  # 50s
-l()
-
-@time ws, l, _, = test_ℓ_for_n_comps([1,1]; return_inters=true)
-status_plot(ws.o, ws.d)
-
-
-ws.o, ws.d
-x = reshape(n_comp_pairs, (3,3))'
-x = reshape(comp_ℓs_flat, (3,3))'
-x[2,1]
-if use_distributed
-
-else
-    comp_ℓs = zeros(length(test_n_comp_tel), length(test_n_comp_star))
-    for (i, n_tel) in enumerate(test_n_comp_tel)
-        for (j, n_star) in enumerate(test_n_comp_star)
-            comp_ℓs[i, j] = test_ℓ_for_n_comps([n_tel, n_star])
-        end
-    end
-end
-
-comp_ℓs
-
-
-holder = pmap(x->kep_unnormalized_posterior_distributed(x), period_grid, batch_size=Int(floor(amount_of_periods / (nworkers() + 1)) + 1))
 
 ## Getting RV error bars (only regularization held constant)
 
