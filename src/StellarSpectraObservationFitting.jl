@@ -7,5 +7,6 @@ include("FluxOptTools.jl")
 include("optimization_functions.jl")
 include("regularization_functions.jl")
 include("continuum_functions.jl")
+include("model_selection_functions.jl")
 
 end # module

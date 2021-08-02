@@ -79,49 +79,31 @@ if !model.metadata[:todo][:optimized]
     @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
 
-function test_ℓ_for_n_comps(n_comps::Vector; return_inters::Bool=false, kwargs...)
-    ws, l = SSOF.WorkspaceTelStar(SSOF.downsize(model, n_comps[1], n_comps[2]), workspace.d; return_loss_f=true)
-    SSOF.train_OrderModel!(ws; kwargs...)  # 16s
-    SSOF.train_OrderModel!(ws; g_tol=SSOF._g_tol_def/10*sqrt(length(ws.telstar.p0)), f_tol=1e-8, kwargs...)  # 50s
-    if return_inters
-        return ws, l, l(), (length(ws.telstar.p0) + length(ws.rv.p0))
-    else
-        return l(), (length(ws.telstar.p0) + length(ws.rv.p0))
+## Downsizing model
+
+if !model.metadata[:todo][:downsized]
+    test_n_comp_tel = 0:8
+    test_n_comp_star = 0:8
+    ks = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
+    comp_ls = zeros(length(test_n_comp_tel), length(test_n_comp_star))
+    @progress for (i, n_tel) in enumerate(test_n_comp_tel)
+        for (j, n_star) in enumerate(test_n_comp_star)
+            comp_ls[i, j], ks[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star])
+        end
     end
+    n_comps_best, aic, bic = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star; return_inters=true)
+    @save save_path*"model_decision.jld2" comp_ls aic bic ks test_n_comp_tel test_n_comp_star
+
+    model = SSOF.downsize(model, n_comps_best[1], n_comps_best[2])
+    model.metadata[:todo][:downsized] = true
+    model.metadata[:todo][:reg_improved] = true
+    workspace, loss = SSOF.WorkspaceTelStar(model, data; return_loss_f=true)
+    SSOF.train_OrderModel!(workspace; print_stuff=true)  # 16s
+    SSOF.train_OrderModel!(workspace; print_stuff=true, g_tol=SSOF._g_tol_def/10*sqrt(length(workspace.telstar.p0)), f_tol=1e-8)  # 50s
+    model.metadata[:todo][:optimized] = true
+    @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
 
-
-test_n_comp_tel = 0:7
-test_n_comp_star = 0:7
-
-ks = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
-comp_ls = zeros(length(test_n_comp_tel), length(test_n_comp_star))
-@progress for (i, n_tel) in enumerate(test_n_comp_tel)
-    for (j, n_star) in enumerate(test_n_comp_star)
-        comp_ls[i, j], ks[i, j] = test_ℓ_for_n_comps([n_tel, n_star])
-    end
-end
-
-@save save_path*"comp_grid.jld2" comp_ls test_n_comp_tel test_n_comp_star
-
-
-component_test_plot(comp_ls, test_n_comp_tel, test_n_comp_star)
-argmin(comp_ls)
-
-# https://en.wikipedia.org/wiki/Akaike_information_criterion
-mask = data.var .!= Inf
-n = sum(mask)
-ℓ = -1/2 .* (comp_ls .+ (sum(log.(data.var[mask])) + (n * log(2 * π))))
-aic = 2 .* (ks - ℓ)
-component_test_plot(aic, test_n_comp_tel, test_n_comp_star; ylabel="AIC")
-argmin(aic)
-
-# https://en.wikipedia.org/wiki/Bayesian_information_criterion
-bic = log(n) .* ks - 2 .* ℓ
-component_test_plot(bic, test_n_comp_tel, test_n_comp_star; ylabel="BIC")
-argmin(bic)
-
-using Polynomials
 
 ## Getting RV error bars (only regularization held constant)
 
@@ -186,4 +168,13 @@ if save_plots
 
     plt = status_plot(workspace.o, workspace.d; display_plt=interactive)
     png(plt, save_path * "status_plot.png")
+
+    plt = component_test_plot(comp_ls, test_n_comp_tel, test_n_comp_star)
+    png(plt, save_path * "ls_plot.png")
+
+    component_test_plot(aic, test_n_comp_tel, test_n_comp_star; ylabel="AIC")
+    png(plt, save_path * "aic_plot.png")
+
+    component_test_plot(bic, test_n_comp_tel, test_n_comp_star; ylabel="BIC")
+    png(plt, save_path * "bic_plot.png")
 end
