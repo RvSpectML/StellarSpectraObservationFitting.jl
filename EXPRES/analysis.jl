@@ -84,25 +84,42 @@ function test_ℓ_for_n_comps(n_comps::Vector; return_inters::Bool=false, kwargs
     SSOF.train_OrderModel!(ws; kwargs...)  # 16s
     SSOF.train_OrderModel!(ws; g_tol=SSOF._g_tol_def/10*sqrt(length(ws.telstar.p0)), f_tol=1e-8, kwargs...)  # 50s
     if return_inters
-        return ws, l, l()
+        return ws, l, l(), (length(ws.telstar.p0) + length(ws.rv.p0))
     else
-        return l()
+        return l(), (length(ws.telstar.p0) + length(ws.rv.p0))
     end
 end
 
-test_n_comp_tel = 0:10
-test_n_comp_star = 0:10
 
-comp_ℓs = zeros(length(test_n_comp_tel), length(test_n_comp_star))
+test_n_comp_tel = 0:7
+test_n_comp_star = 0:7
+
+ks = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
+comp_ls = zeros(length(test_n_comp_tel), length(test_n_comp_star))
 @progress for (i, n_tel) in enumerate(test_n_comp_tel)
     for (j, n_star) in enumerate(test_n_comp_star)
-        comp_ℓs[i, j] = test_ℓ_for_n_comps([n_tel, n_star])
+        comp_ls[i, j], ks[i, j] = test_ℓ_for_n_comps([n_tel, n_star])
     end
 end
 
-@save save_path*"comp_grid.jld2" comp_ℓs test_n_comp_tel test_n_comp_star
+@save save_path*"comp_grid.jld2" comp_ls test_n_comp_tel test_n_comp_star
 
-component_test_plot(comp_ℓs, test_n_comp_tel, test_n_comp_star)
+
+component_test_plot(comp_ls, test_n_comp_tel, test_n_comp_star)
+argmin(comp_ls)
+
+# https://en.wikipedia.org/wiki/Akaike_information_criterion
+mask = data.var .!= Inf
+n = sum(mask)
+ℓ = -1/2 .* (comp_ls .+ (sum(log.(data.var[mask])) + (n * log(2 * π))))
+aic = 2 .* (ks - ℓ)
+component_test_plot(aic, test_n_comp_tel, test_n_comp_star; ylabel="AIC")
+argmin(aic)
+
+# https://en.wikipedia.org/wiki/Bayesian_information_criterion
+bic = log(n) .* ks - 2 .* ℓ
+component_test_plot(bic, test_n_comp_tel, test_n_comp_star; ylabel="BIC")
+argmin(bic)
 
 using Polynomials
 

@@ -118,13 +118,13 @@ function separate_status_plot(o::StellarSpectraObservationFitting.Output, d::Ste
     return plt
 end
 
-function component_test_plot(comp_ℓs::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector; size=(_plt_size[1],_plt_size[2]*1.5))
-    plt = _my_plot(; ylabel="ℓ", layout=grid(2, 1), size=size)
+function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector; size=(_plt_size[1],_plt_size[2]*1.5), ylabel="ℓ")
+    plt = _my_plot(; ylabel=ylabel, layout=grid(2, 1), size=size)
     for i in 1:length(test_n_comp_tel)
-        plot!(plt[1], test_n_comp_star, comp_ℓs[i, :]; label="$(test_n_comp_tel[i]) tel", xlabel="# of stellar components")
+        plot!(plt[1], test_n_comp_star, ys[i, :]; label="$(test_n_comp_tel[i]) tel", xlabel="# of stellar components")
     end
     for i in 1:length(test_n_comp_star)
-        plot!(plt[2], test_n_comp_tel, comp_ℓs[:, i]; label="$(test_n_comp_star[i]) stellar", xlabel="# of telluric components")
+        plot!(plt[2], test_n_comp_tel, ys[:, i]; label="$(test_n_comp_star[i]) stellar", xlabel="# of telluric components")
     end
     display(plt)
     return plt
