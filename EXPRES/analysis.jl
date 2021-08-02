@@ -123,16 +123,6 @@ argmin(bic)
 
 using Polynomials
 
-function elbow(x::AbstractVector, y::AbstractVector)
-    poly = Polynomials.fit(x, y, length(x)-1)
-    d2poly = derivative(poly, 2)
-    d3poly = derivative(d2poly)
-    tester = append!(float.([x[1], x[end]]), roots(d3poly))
-    return tester[argmax(abs.(d2poly.(tester)))]
-end
-
-Int.([elbow(test_n_comp_star, comp_ℓs[i, :]) for i in 1:length(test_n_comp_tel)])  # number of suggested stellar components
-Int.([elbow(test_n_comp_tel, comp_ℓs[:, i]) for i in 1:length(test_n_comp_star)])  # number of suggested telluric components
 ## Getting RV error bars (only regularization held constant)
 
 if !model.metadata[:todo][:err_estimated]

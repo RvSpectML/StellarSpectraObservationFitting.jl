@@ -188,3 +188,28 @@ scatter(x, x; yerror=x)
 
 scatter(eo_time, eo_time-times_nu)
 histogram(eo_time - times_nu)
+
+
+## elbow testing
+
+using Polynomials
+
+function elbow(x::AbstractVector, y::AbstractVector)
+    poly = Polynomials.fit(x, y, length(x)-1)
+    d2poly = derivative(poly, 2)
+    d3poly = derivative(d2poly)
+    tester = append!(float.([x[1], x[end]]), roots(d3poly))
+    return tester[argmax(abs.(d2poly.(tester)))]
+end
+
+Int.([elbow(test_n_comp_star, comp_ℓs[i, :]) for i in 1:length(test_n_comp_tel)])  # number of suggested stellar components
+Int.([elbow(test_n_comp_tel, comp_ℓs[:, i]) for i in 1:length(test_n_comp_star)])  # number of suggested telluric components
+
+pltx = test_n_comp_tel[1]-1:0.1:test_n_comp_tel[end]+1
+poly = Polynomials.fit(test_n_comp_tel, comp_ℓs[:, 1], 5)
+scatter(test_n_comp_tel, comp_ℓs[:, 1])
+plot!(pltx, poly.(collect(pltx)))
+# plot!(pltx, derivative(poly, 1).(collect(pltx)))
+plot!(pltx, derivative(poly, 2).(collect(pltx)))
+plot!(pltx, derivative(poly, 3).(collect(pltx)))
+# plot!(pltx, derivative(poly, 4).(collect(pltx)))
