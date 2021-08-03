@@ -9,14 +9,14 @@ function test_ℓ_for_n_comps(n_comps::Vector, om::OrderModel, d::Data; return_i
     end
 end
 
-function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector; return_inters::Bool=false)
+function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector, var::AbstractMatrix; return_inters::Bool=false)
 
     ## max likelihood
     # ans_ml = argmin(ls)
 
-    mask = data.var .!= Inf
+    mask = var .!= Inf
     n = sum(mask)
-    ℓ = -1/2 .* (ls .+ (sum(log.(data.var[mask])) + (n * log(2 * π))))
+    ℓ = -1/2 .* (ls .+ (sum(log.(var[mask])) + (n * log(2 * π))))
     aic = 2 .* (ks - ℓ)
     ans_aic = argmin(aic)
 

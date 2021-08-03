@@ -39,6 +39,11 @@ else
     model = SSOF.downsize(model, 10, 10)
 end
 
+# @load save_path*"results.jld2" tf_model
+# SSOF.copy_dict!(tf_model.reg_tel, model.reg_tel)
+# SSOF.copy_dict!(tf_model.reg_star, model.reg_star)
+# model.metadata[:todo][:reg_improved]=true
+
 ## Creating optimization workspace
 if use_telstar
     workspace, loss = SSOF.WorkspaceTelStar(model, data; return_loss_f=true)
@@ -88,10 +93,10 @@ if !model.metadata[:todo][:downsized]
     comp_ls = zeros(length(test_n_comp_tel), length(test_n_comp_star))
     @progress for (i, n_tel) in enumerate(test_n_comp_tel)
         for (j, n_star) in enumerate(test_n_comp_star)
-            comp_ls[i, j], ks[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star])
+            comp_ls[i, j], ks[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star], model, data)
         end
     end
-    n_comps_best, aic, bic = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star; return_inters=true)
+    n_comps_best, aic, bic = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, data.var; return_inters=true)
     @save save_path*"model_decision.jld2" comp_ls aic bic ks test_n_comp_tel test_n_comp_star
 
     model = SSOF.downsize(model, n_comps_best[1], n_comps_best[2])
@@ -142,29 +147,21 @@ if save_plots
     plt = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1)
     png(plt, save_path * "model_rvs.png")
 
-    plt = plot_stellar_model_bases(model; display_plt=interactive)
-    png(plt, save_path * "model_star_basis.png")
+    if !(typeof(model.star.lm) <: SSOF.TemplateModel)
+        plt = plot_stellar_model_bases(model; display_plt=interactive)
+        png(plt, save_path * "model_star_basis.png")
 
-    plt = plot_stellar_model_scores(model; display_plt=interactive)
-    png(plt, save_path * "model_star_weights.png")
+        plt = plot_stellar_model_scores(model; display_plt=interactive)
+        png(plt, save_path * "model_star_weights.png")
+    end
 
-    plt = plot_telluric_model_bases(model; display_plt=interactive)
-    png(plt, save_path * "model_tel_basis.png")
+    if !(typeof(model.tel.lm) <: SSOF.TemplateModel)
+        plt = plot_telluric_model_bases(model; display_plt=interactive)
+        png(plt, save_path * "model_tel_basis.png")
 
-    plt = plot_telluric_model_scores(model; display_plt=interactive)
-    png(plt, save_path * "model_tel_weights.png")
-
-    plt = plot_stellar_model_bases(model; inds=1:4, display_plt=interactive)
-    png(plt, save_path * "model_star_basis_few.png")
-
-    plt = plot_stellar_model_scores(model; inds=1:4, display_plt=interactive)
-    png(plt, save_path * "model_star_weights_few.png")
-
-    plt = plot_telluric_model_bases(model; inds=1:4, display_plt=interactive)
-    png(plt, save_path * "model_tel_basis_few.png")
-
-    plt = plot_telluric_model_scores(model; inds=1:4, display_plt=interactive)
-    png(plt, save_path * "model_tel_weights_few.png")
+        plt = plot_telluric_model_scores(model; display_plt=interactive)
+        png(plt, save_path * "model_tel_weights.png")
+    end
 
     plt = status_plot(workspace.o, workspace.d; display_plt=interactive)
     png(plt, save_path * "status_plot.png")
