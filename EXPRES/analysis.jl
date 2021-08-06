@@ -53,6 +53,8 @@ SSOF_path = dirname(dirname(pathof(SSOF)))
 if interactive
     include(SSOF_path * "/src/_plot_functions.jl")
     status_plot(workspace.o, workspace.d)
+else
+    ENV["GKSwstype"] = "100"  # setting the GR workstation type to 100/nul
 end
 
 ## Improving regularization
@@ -164,9 +166,9 @@ if save_plots
     plt = component_test_plot(comp_ls, test_n_comp_tel, test_n_comp_star);
     png(plt, save_path * "ls_plot.png")
 
-    component_test_plot(aic, test_n_comp_tel, test_n_comp_star; ylabel="AIC");
+    plt = component_test_plot(aic, test_n_comp_tel, test_n_comp_star; ylabel="AIC");
     png(plt, save_path * "aic_plot.png")
 
-    component_test_plot(bic, test_n_comp_tel, test_n_comp_star; ylabel="BIC");
+    plt = component_test_plot(bic, test_n_comp_tel, test_n_comp_star; ylabel="BIC");
     png(plt, save_path * "bic_plot.png")
 end
