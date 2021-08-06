@@ -12,6 +12,7 @@ using JLD2
 using Statistics
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 using Plots
+import StatsBase
 
 ## Setting up necessary variables
 
@@ -59,9 +60,8 @@ end
 if !model.metadata[:todo][:reg_improved]
     @time results_telstar, _ = SSOF.train_OrderModel!(workspace; print_stuff=true, ignore_regularization=true)  # 16s
     @time results_telstar, _ = SSOF.train_OrderModel!(workspace; print_stuff=true, ignore_regularization=true, g_tol=SSOF._g_tol_def/10*sqrt(length(workspace.telstar.p0)), f_tol=1e-8)  # 50s
-    using StatsBase
     n_obs_train = Int(round(0.75 * n_obs))
-    training_inds = sort(sample(1:n_obs, n_obs_train; replace=false))
+    training_inds = sort(StatsBase.sample(1:n_obs, n_obs_train; replace=false))
     @time SSOF.fit_regularization!(model, data, training_inds; use_telstar=use_telstar)
     model.metadata[:todo][:reg_improved] = true
     model.metadata[:todo][:optimized] = false
