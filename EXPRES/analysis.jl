@@ -99,6 +99,7 @@ if !model.metadata[:todo][:downsized]
     n_comps_best, ℓ, aic, bic = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, data.var; return_inters=true)
     @save save_path*"model_decision.jld2" comp_ls ℓ aic bic ks test_n_comp_tel test_n_comp_star
 
+    model_large = copy(model)
     model = SSOF.downsize(model, n_comps_best[1], n_comps_best[2])
     model.metadata[:todo][:downsized] = true
     model.metadata[:todo][:reg_improved] = true
@@ -106,7 +107,7 @@ if !model.metadata[:todo][:downsized]
     SSOF.train_OrderModel!(workspace; print_stuff=true)  # 16s
     SSOF.train_OrderModel!(workspace; print_stuff=true, g_tol=SSOF._g_tol_def/10*sqrt(length(workspace.telstar.p0)), f_tol=1e-8)  # 50s
     model.metadata[:todo][:optimized] = true
-    @save save_path*"results.jld2" model rvs_naive rvs_notel
+    @save save_path*"results.jld2" model rvs_naive rvs_notel model_large
 end
 
 
