@@ -139,34 +139,34 @@ if save_plots
 
     # Compare RV differences to actual RVs from activity
     rvs_notel_opt = (model.rv.lm.s .* SSOF.light_speed_nu)'
-    plt = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1)
+    plt = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1);
     png(plt, save_path * "model_rvs.png")
 
     if !(typeof(model.star.lm) <: SSOF.TemplateModel)
-        plt = plot_stellar_model_bases(model; display_plt=interactive)
+        plt = plot_stellar_model_bases(model; display_plt=interactive);
         png(plt, save_path * "model_star_basis.png")
 
-        plt = plot_stellar_model_scores(model; display_plt=interactive)
+        plt = plot_stellar_model_scores(model; display_plt=interactive);
         png(plt, save_path * "model_star_weights.png")
     end
 
     if !(typeof(model.tel.lm) <: SSOF.TemplateModel)
-        plt = plot_telluric_model_bases(model; display_plt=interactive)
+        plt = plot_telluric_model_bases(model; display_plt=interactive);
         png(plt, save_path * "model_tel_basis.png")
 
-        plt = plot_telluric_model_scores(model; display_plt=interactive)
+        plt = plot_telluric_model_scores(model; display_plt=interactive);
         png(plt, save_path * "model_tel_weights.png")
     end
 
-    plt = status_plot(workspace.o, workspace.d; display_plt=interactive)
+    plt = status_plot(workspace.o, workspace.d; display_plt=interactive);
     png(plt, save_path * "status_plot.png")
 
-    plt = component_test_plot(comp_ls, test_n_comp_tel, test_n_comp_star)
+    plt = component_test_plot(comp_ls, test_n_comp_tel, test_n_comp_star);
     png(plt, save_path * "ls_plot.png")
 
-    component_test_plot(aic, test_n_comp_tel, test_n_comp_star; ylabel="AIC")
+    component_test_plot(aic, test_n_comp_tel, test_n_comp_star; ylabel="AIC");
     png(plt, save_path * "aic_plot.png")
 
-    component_test_plot(bic, test_n_comp_tel, test_n_comp_star; ylabel="BIC")
+    component_test_plot(bic, test_n_comp_tel, test_n_comp_star; ylabel="BIC");
     png(plt, save_path * "bic_plot.png")
 end
