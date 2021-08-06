@@ -97,7 +97,7 @@ if !model.metadata[:todo][:downsized]
         end
     end
     n_comps_best, ℓ, aic, bic = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, data.var; return_inters=true)
-    @save save_path*"model_decision.jld2" comp_ls aic bic ks test_n_comp_tel test_n_comp_star
+    @save save_path*"model_decision.jld2" comp_ls ℓ aic bic ks test_n_comp_tel test_n_comp_star
 
     model = SSOF.downsize(model, n_comps_best[1], n_comps_best[2])
     model.metadata[:todo][:downsized] = true
