@@ -34,7 +34,7 @@ if isfile(save_path*"results.jld2")
         @load save_path*"results.jld2" rv_errors
     end
     if model.metadata[:todo][:downsized]
-        @load save_path*"model_decision.jld2" comp_ls aic bic ks test_n_comp_tel test_n_comp_star
+        @load save_path*"model_decision.jld2" comp_ls ℓ aic bic ks test_n_comp_tel test_n_comp_star
     end
 else
     model_res = 2 * sqrt(2) * 150000
