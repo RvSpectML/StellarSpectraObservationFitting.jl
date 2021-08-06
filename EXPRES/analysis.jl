@@ -27,7 +27,7 @@ desired_order = SSOF.parse_args(3, Int, 68)  # 68 has a bunch of tels, 47 has ve
 save_path = expres_save_path * star * "/$(desired_order)/"
 @load save_path * "data.jld2" n_obs data times_nu airmasses
 
-if false#isfile(save_path*"results.jld2")
+if isfile(save_path*"results.jld2")
     @load save_path*"results.jld2" model rvs_naive rvs_notel
     if model.metadata[:todo][:err_estimated]
         @load save_path*"results.jld2" rv_errors
@@ -37,16 +37,7 @@ else
     @time model = SSOF.OrderModel(data, model_res, model_res, "EXPRES", desired_order, star; n_comp_tel=20, n_comp_star=20)
     @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
     model = SSOF.downsize(model, 10, 10)
-    @load save_path*"results.jld2" tf_model
-    SSOF.copy_dict!(tf_model.reg_tel, model.reg_tel)
-    SSOF.copy_dict!(tf_model.reg_star, model.reg_star)
-    model.metadata[:todo][:reg_improved]=true
 end
-
-# @load save_path*"results.jld2" tf_model
-# SSOF.copy_dict!(tf_model.reg_tel, model.reg_tel)
-# SSOF.copy_dict!(tf_model.reg_star, model.reg_star)
-# model.metadata[:todo][:reg_improved]=true
 
 ## Creating optimization workspace
 if use_telstar
@@ -91,8 +82,8 @@ end
 ## Downsizing model
 
 if !model.metadata[:todo][:downsized]
-    test_n_comp_tel = 0:1
-    test_n_comp_star = 0:1
+    test_n_comp_tel = 0:8
+    test_n_comp_star = 0:8
     ks = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
     comp_ls = zeros(length(test_n_comp_tel), length(test_n_comp_star))
     for (i, n_tel) in enumerate(test_n_comp_tel)
