@@ -27,7 +27,7 @@ function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector,
 
     n_comps = [test_n_comp_tel[ans_aic[1]], test_n_comp_star[ans_aic[2]]]
     if return_inters
-        return n_comps, aic, bic
+        return n_comps, ℓ, aic, bic
     else
         return n_comps
     end

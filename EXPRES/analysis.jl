@@ -96,7 +96,7 @@ if !model.metadata[:todo][:downsized]
             comp_ls[i, j], ks[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star], model, data)
         end
     end
-    n_comps_best, aic, bic = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, data.var; return_inters=true)
+    n_comps_best, ℓ, aic, bic = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, data.var; return_inters=true)
     @save save_path*"model_decision.jld2" comp_ls aic bic ks test_n_comp_tel test_n_comp_star
 
     model = SSOF.downsize(model, n_comps_best[1], n_comps_best[2])
@@ -166,8 +166,8 @@ if save_plots
     plt = status_plot(workspace.o, workspace.d; display_plt=interactive);
     png(plt, save_path * "status_plot.png")
 
-    plt = component_test_plot(comp_ls, test_n_comp_tel, test_n_comp_star);
-    png(plt, save_path * "ls_plot.png")
+    plt = component_test_plot(ℓ, test_n_comp_tel, test_n_comp_star);
+    png(plt, save_path * "l_plot.png")
 
     plt = component_test_plot(aic, test_n_comp_tel, test_n_comp_star; ylabel="AIC");
     png(plt, save_path * "aic_plot.png")
