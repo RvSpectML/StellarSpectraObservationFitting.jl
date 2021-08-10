@@ -20,6 +20,37 @@ star_ind = SSOF.parse_args(1, Int, 2)
 star = stars[star_ind]
 orders = orders_list[star_ind]
 
+## Looking at model components
+
+@load "$(star)_md.jld2" n_comps robust
+
+x = orders_list[star_ind]
+annot=text.(x, :top, :white, 9)
+plt = _my_plot(; ylabel="# of basis vectors", xlabel="Order", title="Best Models for $star (Based on AIC)")
+my_scatter!(plt, x, n_comps[:, 1]; alpha = 0.7, label = "# of telluric components", legend=:topleft, series_annotations=annot)
+my_scatter!(plt, x, n_comps[:, 2]; alpha = 0.7, label = "# of stellar components", series_annotations=annot)
+
+png(plt, "tester_$star.png")
+
+## Comparing to CCF RVs
+
+@load "EXPRES\\alex_stuff\\HD$(star)q0f0n1w1e=false_order_results.jld2" rvs_ccf_orders good_orders order_weights
+good_orders_mask = [i in orders for i in 12:83] .& good_orders_mask
+good_orders = (12:83)[good_orders_mask]
+
+using Plots.PlotMeasures
+
+myplt(x, y, z) = heatmap(x, y, z; size=(600,400), right_margin=20px, ylabel="orders", xlabel="obs", title="HD"*star)
+plt = myplt(1:size(rvs_ccf_orders,2), 12:83, rvs_ccf_orders)
+png(plt, "test1")
+ccf_rvs = rvs_ccf_orders[good_orders_mask, :]
+plt = myplt(1:size(ccf_rvs,2), (12:83)[good_orders_mask], ccf_rvs)
+png(plt, "test2")
+ccf_rvs .-= median(ccf_rvs; dims=2)
+heatmap(ccf_rvs)
+
+## RV reduction
+
 # orders[[i for i in 1:length(orders) if abs(rvs[i, 1]) > 100]]
 inds = orders2inds(orders[1:end-6])
 
