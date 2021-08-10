@@ -27,8 +27,9 @@ end
 function retrieve_md(order::Int, star::String)
     @load expres_save_path*star*"/$(order)/model_decision.jld2" comp_ls ℓ aic bic ks test_n_comp_tel test_n_comp_star
     ans_aic = argmin(aic)
+    ans_bic = argmin(bic)
     n_comps = [test_n_comp_tel[ans_aic[1]], test_n_comp_star[ans_aic[2]]]
-    return n_comps
+    return n_comps, ans_aic==ans_bic
 end
 
 # star_ind = SSOF.parse_args(1, Int, 2)
@@ -41,10 +42,11 @@ for star_ind in 1:2
     # rvs = zeros(n_ord,  n_obs)
     # rvs_σ = zeros(n_ord, n_obs)
     n_comps = zeros(Int, n_ord, 2)
+    robust = zeros(Bool, n_ord)
     for i in 1:n_ord
         try
             # rvs[i, :], rvs_σ[i, :] = retrieve(orders[i], star)
-            n_comps[i, :] = retrieve_md(orders[i], star)
+            n_comps[i, :], robust[i] = retrieve_md(orders[i], star)
         catch
             # rvs_σ[i, :] .= Inf
             n_comps[i, :] .= -1
@@ -53,5 +55,5 @@ for star_ind in 1:2
     end
 
     # @save "$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
-    @save "$(star)_md.jld2" n_comps
+    @save "$(star)_md.jld2" n_comps robust
 end
