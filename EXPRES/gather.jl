@@ -57,5 +57,5 @@ for star_ind in 1:2
     end
 
     # @save "$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
-    @save "$(star)_md.jld2" n_comps robust
+    @save "$(star)_md.jld2" n_comps n_comps_bic robust
 end
