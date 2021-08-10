@@ -22,13 +22,27 @@ orders = orders_list[star_ind]
 
 ## Looking at model components
 
-@load "$(star)_md.jld2" n_comps robust
+@load "$(star)_md.jld2" n_comps n_comps_bic robust
 
+n_robust = [!i for i in robust]
 x = orders_list[star_ind]
 annot=text.(x, :top, :white, 9)
-plt = _my_plot(; ylabel="# of basis vectors", xlabel="Order", title="Best Models for $star (Based on AIC)")
-my_scatter!(plt, x, n_comps[:, 1]; alpha = 0.7, label = "# of telluric components", legend=:topleft, series_annotations=annot)
-my_scatter!(plt, x, n_comps[:, 2]; alpha = 0.7, label = "# of stellar components", series_annotations=annot)
+α = 1
+# robust_str = ["" for i in x]
+# for i in 1:length(robust_str)
+#     robust_str[i] *= "$(x[i])"
+#     if !robust[i]; robust_str[i] *= "!" end
+# end
+# annot=text.(robust_str, :top, :white, 9)
+plt = _my_plot(; ylabel="# of basis vectors", xlabel="Order", title="Best Models for $star (Based on AIC)", xticks=false)
+my_scatter!(plt, x, n_comps[:, 1]; alpha=α, label="# of telluric components", legend=:topleft, series_annotations=annot)
+my_scatter!(plt, x, n_comps[:, 2]; alpha=α, label="# of stellar components", series_annotations=annot)
+plot!(plt, x, n_comps[:, 1]; label = "", alpha=α, color=plt_colors[1], ls=:dot)
+plot!(plt, x, n_comps[:, 2]; label = "", alpha=α, color=plt_colors[2], ls=:dot)
+my_scatter!(plt, x[n_robust], n_comps_bic[n_robust, 1]; alpha=α/2, color=plt_colors[11], label="# of telluric components (BIC)")
+my_scatter!(plt, x[n_robust], n_comps_bic[n_robust, 2]; alpha=α/2, color=plt_colors[12], label="# of stellar components (BIC)")
+plot!(plt, x, n_comps_bic[:, 1]; label = "", alpha=α/2, color=plt_colors[11], ls=:dot)
+plot!(plt, x, n_comps_bic[:, 2]; label = "", alpha=α/2, color=plt_colors[12], ls=:dot)
 
 png(plt, "tester_$star.png")
 
@@ -52,7 +66,7 @@ heatmap(ccf_rvs)
 ## RV reduction
 
 # orders[[i for i in 1:length(orders) if abs(rvs[i, 1]) > 100]]
-inds = orders2inds(orders[1:end-6])
+# inds = orders2inds(orders[1:end-6])
 inds = orders2inds(good_orders)
 
 @load "$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord

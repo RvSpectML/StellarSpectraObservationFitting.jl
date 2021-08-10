@@ -93,7 +93,8 @@ function project_doppler_comp!(M::AbstractMatrix, Xtmp::AbstractMatrix, scores::
 	end
 
 	# calculating radial velocities (in m/s) from redshifts
-	rvs = light_speed_nu * scores[1, :]  # c * z
+	# I have no idea why the negative sign needs to be here
+	rvs = -light_speed_nu * scores[1, :]  # c * z
 	return rvs
 end
 

@@ -182,7 +182,7 @@ eo_time = expres_output."Time [MJD]"
 
 # Compare RV differences to actual RVs from activity
 include("../src/_plot_functions.jl")
-rvs_notel_opt = (model.rv.lm.s .* light_speed_nu)'
+rvs_notel_opt = SSOF.rvs(model)
 plt = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ; markerstrokewidth=1, xlim=(58764.35, 58764.40))
 scatter(x, x; yerror=x)
 

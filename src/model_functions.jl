@@ -248,6 +248,8 @@ function zero_regularization(om::OrderModel)
 	end
 end
 
+rvs(model::OrderModel) = Array((model.rv.lm.s .* -light_speed_nu)')
+
 function downsize(lm::FullLinearModel, n_comp::Int)
 	if n_comp > 0
 		return FullLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :], lm.μ[:])

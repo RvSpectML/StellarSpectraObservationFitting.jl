@@ -70,7 +70,7 @@ if plot_stuff
     status_plot(output, data)
 end
 
-rvs_notel = (model.rv.lm.s .* SSOF.light_speed_nu)'
+rvs_notel = SSOF.rvs(model)
 rvs_std(rvs; inds=:) = std((rvs - rvs_kep_nu[inds]) - rvs_activ_no_noise[inds])
 resid_stds = [rvs_std(rvs_notel)]
 losses = [loss()]
@@ -80,7 +80,7 @@ rvs_notel_opt = copy(rvs_notel)
 
 @time for i in 1:8
     SSOF.train_OrderModel!(workspace)
-    rvs_notel_opt[:] = (model.rv.lm.s .* SSOF.light_speed_nu)'
+    rvs_notel_opt[:] = SSOF.rvs(model)
 
     append!(resid_stds, [rvs_std(rvs_notel_opt)])
     append!(losses, [loss()])
