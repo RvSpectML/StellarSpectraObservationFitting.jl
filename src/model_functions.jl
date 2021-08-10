@@ -248,6 +248,7 @@ function zero_regularization(om::OrderModel)
 	end
 end
 
+# I have no idea why the negative sign needs to be here
 rvs(model::OrderModel) = Array((model.rv.lm.s .* -light_speed_nu)')
 
 function downsize(lm::FullLinearModel, n_comp::Int)
