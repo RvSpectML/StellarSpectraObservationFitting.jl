@@ -128,6 +128,7 @@ if !model.metadata[:todo][:err_estimated]
         rv_holder[i, :] = (model_holder.rv.lm.s .* SSOF.light_speed_nu)'
     end
     rv_errors = std(rv_holder; dims=1)
+    model.metadata[:todo][:err_estimated] = true
     @save save_path*"results.jld2" model rvs_naive rvs_notel rv_errors
 end
 
