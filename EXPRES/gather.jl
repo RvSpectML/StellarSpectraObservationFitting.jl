@@ -38,24 +38,24 @@ for star_ind in 1:2
     star = stars[star_ind]
     orders = orders_list[star_ind]
 
-    # @load expres_save_path*star*"/$(orders[1])/data.jld2" n_obs times_nu airmasses
+    @load expres_save_path*star*"/$(orders[1])/data.jld2" n_obs times_nu airmasses
     n_ord = length(orders)
-    # rvs = zeros(n_ord,  n_obs)
-    # rvs_σ = zeros(n_ord, n_obs)
+    rvs = zeros(n_ord,  n_obs)
+    rvs_σ = zeros(n_ord, n_obs)
     n_comps = zeros(Int, n_ord, 2)
     n_comps_bic = zeros(Int, n_ord, 2)
     robust = zeros(Bool, n_ord)
     for i in 1:n_ord
         try
-            # rvs[i, :], rvs_σ[i, :] = retrieve(orders[i], star)
+            rvs[i, :], rvs_σ[i, :] = retrieve(orders[i], star)
             n_comps[i, :], n_comps_bic[i, :], robust[i] = retrieve_md(orders[i], star)
         catch
-            # rvs_σ[i, :] .= Inf
+            rvs_σ[i, :] .= Inf
             n_comps[i, :] .= -1
             println("order $(orders[i]) is missing")
         end
     end
 
-    # @save "$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
+    @save "$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
     @save "$(star)_md.jld2" n_comps n_comps_bic robust
 end

@@ -35,7 +35,7 @@ png(plt, "tester_$star.png")
 ## Comparing to CCF RVs
 
 @load "EXPRES\\alex_stuff\\HD$(star)q0f0n1w1e=false_order_results.jld2" rvs_ccf_orders good_orders order_weights
-good_orders_mask = [i in orders for i in 12:83] .& good_orders_mask
+good_orders_mask = [i in orders for i in 12:83] .& good_orders
 good_orders = (12:83)[good_orders_mask]
 
 using Plots.PlotMeasures
@@ -53,6 +53,7 @@ heatmap(ccf_rvs)
 
 # orders[[i for i in 1:length(orders) if abs(rvs[i, 1]) > 100]]
 inds = orders2inds(orders[1:end-6])
+inds = orders2inds(good_orders)
 
 @load "$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 
