@@ -2,12 +2,6 @@
 using Pkg
 Pkg.activate("EXPRES")
 
-# Pkg.develop(;path="C:\\Users\\chris\\OneDrive\\Documents\\GitHub\\EMPCA")
-# Pkg.develop(;path="C:\\Users\\chris\\Dropbox\\GP_research\\julia\\StellarSpectraObservationFitting")
-# Pkg.add(;url="https://github.com/RvSpectML/RvSpectML.jl")
-
-Pkg.instantiate()
-
 using JLD2
 using Statistics
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting

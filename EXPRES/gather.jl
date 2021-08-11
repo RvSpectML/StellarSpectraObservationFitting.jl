@@ -3,12 +3,6 @@ using Pkg
 Pkg.activate("EXPRES")
 Pkg.instantiate()
 
-# Pkg.develop(;path="D:\\Christian\\Documents\\GitHub\\EMPCA")
-# Pkg.develop(;path="C:\\Users\\Christian\\Dropbox\\GP_research\\julia\\StellarSpectraObservationFitting")
-# Pkg.add(;url="https://github.com/christiangil/RvSpectMLBase.jl")
-# Pkg.add(;url="https://github.com/christiangil/EchelleInstruments.jl")
-# Pkg.add(;url="https://github.com/RvSpectML/RvSpectML.jl")
-
 using JLD2
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 

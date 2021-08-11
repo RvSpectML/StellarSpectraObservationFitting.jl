@@ -213,3 +213,23 @@ plot!(pltx, poly.(collect(pltx)))
 plot!(pltx, derivative(poly, 2).(collect(pltx)))
 plot!(pltx, derivative(poly, 3).(collect(pltx)))
 # plot!(pltx, derivative(poly, 4).(collect(pltx)))
+
+
+## Fixing Manifest.jl
+
+Pkg.rm("EMPCA")
+Pkg.rm("StellarSpectraObservationFitting")
+Pkg.rm("RvSpectMLBase")
+Pkg.rm("EchelleInstruments")
+Pkg.rm("RvSpectML")
+
+Pkg.develop(;path="C:\\Users\\chris\\OneDrive\\Documents\\GitHub\\EMPCA.jl")
+Pkg.develop(;path="C:\\Users\\chris\\OneDrive\\Documents\\GitHub\\StellarSpectraObservationFitting")
+# Pkg.develop(;path="D:\\Christian\\Documents\\GitHub\\EMPCA")
+# Pkg.develop(;path="C:\\Users\\Christian\\Dropbox\\GP_research\\julia\\StellarSpectraObservationFitting")
+Pkg.add(;url="https://github.com/christiangil/RvSpectMLBase.jl")
+Pkg.add(;url="https://github.com/christiangil/EchelleInstruments.jl")
+Pkg.add(;url="https://github.com/RvSpectML/RvSpectML.jl")
+
+Pkg.instantiate()
+import Pkg; Pkg.precompile()
