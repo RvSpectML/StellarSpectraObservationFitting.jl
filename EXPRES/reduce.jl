@@ -44,18 +44,23 @@ my_scatter!(plt, x[n_robust], n_comps_bic[n_robust, 2]; alpha=α/2, color=plt_co
 plot!(plt, x, n_comps_bic[:, 1]; label = "", alpha=α/2, color=plt_colors[11], ls=:dot)
 plot!(plt, x, n_comps_bic[:, 2]; label = "", alpha=α/2, color=plt_colors[12], ls=:dot)
 
-png(plt, "tester_$star.png")
+png(plt, "md_$star.png")
 
 ## Comparing to CCF RVs
 
 @load "EXPRES\\alex_stuff\\HD$(star)q0f0n1w1e=false_order_results.jld2" rvs_ccf_orders good_orders order_weights
 good_orders_mask = [i in orders for i in 12:83] .& good_orders
-good_orders = (12:83)[good_orders_mask]
+good_orders_2 = (12:83)[good_orders_mask]
+
+plot(12:83,order_weights)
 
 using Plots.PlotMeasures
 
+rvs_ccf_orders[good_orders, :]
+
 myplt(x, y, z) = heatmap(x, y, z; size=(600,400), right_margin=20px, ylabel="orders", xlabel="obs", title="HD"*star)
-plt = myplt(1:size(rvs_ccf_orders,2), 12:83, rvs_ccf_orders)
+# plt = myplt(1:size(rvs_ccf_orders,2), 12:83, rvs_ccf_orders)
+plt = myplt(1:size(rvs_ccf_orders,2), (12:83)[good_orders], rvs_ccf_orders[good_orders, :] .- median(rvs_ccf_orders[good_orders, :]; dims=2))
 png(plt, "test1")
 ccf_rvs = rvs_ccf_orders[good_orders_mask, :]
 plt = myplt(1:size(ccf_rvs,2), (12:83)[good_orders_mask], ccf_rvs)
@@ -65,11 +70,25 @@ heatmap(ccf_rvs)
 
 ## RV reduction
 
-# orders[[i for i in 1:length(orders) if abs(rvs[i, 1]) > 100]]
-# inds = orders2inds(orders[1:end-6])
-inds = orders2inds(good_orders)
+std(rvs; dims=2)
+
+scatter(orders, std(rvs; dims=2); legend=:topleft, label="RV std per order")
+scatter(orders, median(rvs_σ; dims=2); label="median σ per order")
+scatter(orders, std(rvs; dims=2) ./ median(rvs_σ; dims=2); label="median σ per order")
+
+scatter(orders, sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2); label="χ²", legend=:topleft)
+
+[i for i in 1:length(orders) if abs(rvs[i, :]) > 100]])
+
+orders[[i for i in 1:length(orders) if abs(rvs[i, :]) > 100]]
+
+inds = orders2inds(orders[1:end-6])
+# inds = orders2inds(good_orders)
 
 @load "$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
+rvs .-= median(rvs)
+
+
 
 rvs_red = collect(Iterators.flatten((sum(rvs[inds, :] ./ (rvs_σ[inds, :] .^ 2); dims=1) ./ sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1))'))
 rvs_σ_red = collect(Iterators.flatten(1 ./ sqrt.(sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1)')))
@@ -81,23 +100,28 @@ eo_rv_σ = expres_output."CBC RV Err. [m/s]"
 eo_time = expres_output."Time [MJD]"
 
 # Compare RV differences to actual RVs from activity
-plt = plot_model_rvs_new(times_nu, rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ; markerstrokewidth=1)
+plt = plot_model_rvs_new(times_nu, -rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ; markerstrokewidth=1)
 png(plt, star * "_model_rvs.png")
 # end
-# using Distributions
-#
-# function helper(x::Real, i::Int)
-#     ans = 0
-#     for j in 1:length(selected_orders)
-#         ans += pdf(Distributions.Normal(rvs[j, i], rvs_σ[j, i]), x)
-#     end
-#     return ans / length(selected_orders)
-# end
-# helper(xs::AbstractVector, i::Int) = [helper(x, i) for x in xs]
-# x = LinRange(-10,10,1000)
-# plot(x, helper(x, 1); label = "model makeup")
-# plot!(x, pdf.(Distributions.Normal(eo_rv[1], eo_rv_σ[1]), x); label = "EXPRES")
-# plot!(x, pdf.(Distributions.Normal(rvs_red[1], rvs_σ_red[1]), x); label = "model")
+
+Pkg.add("Distributions")
+using Distributions
+
+selected_orders = good_orders
+
+function helper(x::Real, i::Int)
+    ans = 0
+    for j in 1:length(selected_orders)
+        ans += pdf(Distributions.Normal(rvs[j, i], rvs_σ[j, i]), x)
+    end
+    return ans / length(selected_orders)
+end
+helper(xs::AbstractVector, i::Int) = [helper(x, i) for x in xs]
+x = LinRange(-20,20,1000)
+u = 14
+plot(x, helper(x, u); label = "model makeup")
+plot!(x, pdf.(Distributions.Normal(eo_rv[u], eo_rv_σ[u]), x); label = "EXPRES")
+plot!(x, pdf.(Distributions.Normal(rvs_red[u], rvs_σ_red[u]), x); label = "model")
 
 
 ## Periodograms
