@@ -76,7 +76,7 @@ unnorm_posteriors = zeros(amount_of_periods)
 @progress for i in 1:length(period_grid)
     likelihoods[i], unnorm_posteriors[i] = kep_unnormalized_posterior_distributed(period_grid[i])
 end
-@save star*"_periodogram" likelihoods unnorm_posteriors
+@save star*"_periodogram" likelihoods unnorm_posteriors period_grid
 best_periods = period_grid[GLOM_RV.find_modes(unnorm_posteriors; amount=10)]
 best_period = best_periods[1]
 
