@@ -92,6 +92,7 @@ rvs_σ2_red = rvs_σ_red .^ 2
 
 expres_output = CSV.read(SSOF_path * "/EXPRES/" * star * "_activity.csv", DataFrame)
 eo_rv = expres_output."CBC RV [m/s]"
+eo_rv .-= median(eo_rv)
 eo_rv_σ = expres_output."CBC RV Err. [m/s]"
 eo_time = expres_output."Time [MJD]"
 
