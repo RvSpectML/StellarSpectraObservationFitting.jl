@@ -87,6 +87,7 @@ inds = orders2inds(orders[1:end-2])
 # inds = orders2inds(good_orders)
 
 rvs_red = collect(Iterators.flatten((sum(rvs[inds, :] ./ (rvs_σ[inds, :] .^ 2); dims=1) ./ sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1))'))
+rvs_red .-= median(rvs_red)
 rvs_σ_red = collect(Iterators.flatten(1 ./ sqrt.(sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1)')))
 rvs_σ2_red = rvs_σ_red .^ 2
 

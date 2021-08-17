@@ -233,3 +233,8 @@ Pkg.add(;url="https://github.com/RvSpectML/RvSpectML.jl")
 
 Pkg.instantiate()
 import Pkg; Pkg.precompile()
+
+Pkg.rm("GLOM_RV_Example")
+Pkg.rm("GPLinearODEMaker")
+Pkg.develop(;path="C:\\Users\\chris\\OneDrive\\Documents\\GitHub\\GPLinearODEMaker.jl")
+Pkg.develop(;path="C:\\Users\\chris\\OneDrive\\Documents\\GitHub\\GLOM_RV_Example")
