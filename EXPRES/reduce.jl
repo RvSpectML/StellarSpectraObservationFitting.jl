@@ -67,12 +67,13 @@ png(plt, "test2")
 ccf_rvs .-= median(ccf_rvs; dims=2)
 heatmap(ccf_rvs)
 
+
 ## RV reduction
 
 @load "$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 # # plotting order means which don't matter because the are constant shifts for the reduced rv
 # my_scatter(orders, mean(rvs; dims=2); series_annotations=annot, legend=:topleft)
-rvs .-= mean(rvs; dims=2)
+rvs .-= median(rvs; dims=2)
 
 plt = my_scatter(orders, std(rvs; dims=2); legend=:topleft, label="", title="$star RV std", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
 png(plt, "order_rv_std")
@@ -94,8 +95,12 @@ eo_rv = expres_output."CBC RV [m/s]"
 eo_rv_σ = expres_output."CBC RV Err. [m/s]"
 eo_time = expres_output."Time [MJD]"
 
+ccf_output = CSV.read(SSOF_path * "\\EXPRES\\alex_stuff\\HD$(star)q0f0n1w1e=false_RVs.csv", DataFrame; header=false)
+ccf_rvs = Array(ccf_output[1, :])
+ccf_rvs .-= median(ccf_rvs)
+
 # Compare RV differences to actual RVs from activity
-plt = plot_model_rvs_new(times_nu, -rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ; markerstrokewidth=1)
+plt = plot_model_rvs_new(times_nu, -rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ, ccf_rvs; markerstrokewidth=1, title="HD"*star)
 png(plt, star * "_model_rvs.png")
 # end
 

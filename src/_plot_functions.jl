@@ -31,10 +31,22 @@ function plot_model_rvs(times_nu::AbstractVector{T}, rvs_naive::AbstractVector{T
     if display_plt; display(plt) end
     return plt
 end
-function plot_model_rvs_new(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat{T}, model_rvs_σ::AbstractVecOrMat{T}, eo_times::AbstractVector{T}, eo_rvs::AbstractVector{T}, eo_rvs_σ::AbstractVector{T}; display_plt::Bool=true, kwargs...) where {T<:Real}
-    plt = plot_rv()
-    my_scatter!(plt, eo_times, eo_rvs .- median(eo_rvs); yerror=eo_rvs_σ, label="EXPRES RVs, std: $(round(std(eo_rv), digits=3))", kwargs...)
-    my_scatter!(plt, times_nu, model_rvs .- median(model_rvs); yerror=model_rvs_σ, label="Model RVs, std: $(round(std(model_rvs), digits=3))", alpha = 0.7, kwargs...)
+function plot_model_rvs_new(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat{T}, model_rvs_σ::AbstractVecOrMat{T}, eo_times::AbstractVector{T}, eo_rvs::AbstractVector{T}, eo_rvs_σ::AbstractVector{T}; display_plt::Bool=true, return_most_obs_night::Bool=false, kwargs...) where {T<:Real}
+    plt = plot_rv(; legend=:bottomleft)
+    oni = SSOF.observation_night_inds(eo_times)
+    most_obs_night = oni[argmax([length(i) for i in oni])]
+    my_scatter!(plt, eo_times, eo_rvs .- median(eo_rvs); yerror=eo_rvs_σ, label="EXPRES RVs, std: $(round(std(eo_rv), digits=3)), most obs night std: $(round(std(eo_rv[most_obs_night]), digits=3))", kwargs...)
+    my_scatter!(plt, times_nu, model_rvs .- median(model_rvs); yerror=model_rvs_σ, label="Model RVs,    std: $(round(std(model_rvs), digits=3)), most obs night std: $(round(std(rvs_red[most_obs_night]), digits=3))", alpha = 0.7, kwargs...)
+    if display_plt; display(plt) end
+    if return_most_obs_night
+        return plt, most_obs_night
+    else
+        return plt
+    end
+end
+function plot_model_rvs_new(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat{T}, model_rvs_σ::AbstractVecOrMat{T}, eo_times::AbstractVector{T}, eo_rvs::AbstractVector{T}, eo_rvs_σ::AbstractVector{T}, ccf_rvs::AbstractVector{T}; display_plt::Bool=true, kwargs...) where {T<:Real}
+    plt, most_obs_night = plot_model_rvs_new(times_nu, model_rvs, model_rvs_σ, eo_times, eo_rvs, eo_rvs_σ; markerstrokewidth=1, return_most_obs_night=true)
+    my_scatter!(plt, eo_times, ccf_rvs .- median(ccf_rvs); label="CCF RVs,      std: $(round(std(ccf_rvs), digits=3)), most obs night std: $(round(std(ccf_rvs[most_obs_night]), digits=3))", alpha = 0.7, kwargs...)
     if display_plt; display(plt) end
     return plt
 end
