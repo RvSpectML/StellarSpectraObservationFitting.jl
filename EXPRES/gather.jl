@@ -8,8 +8,8 @@ import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 
 ## Setting up necessary variables
 
-stars = ["10700", "26965"]
-orders_list = [42:77, 40:77]
+stars = ["10700", "26965", "34411"]
+orders_list = [42:77, 40:77, 38:77]
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 
 function retrieve(order::Int, star::String)

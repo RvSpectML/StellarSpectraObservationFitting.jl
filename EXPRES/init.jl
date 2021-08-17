@@ -1,18 +1,18 @@
 ## Setup
 using Pkg
-using JLD2
 Pkg.activate("EXPRES")
 Pkg.instantiate()
 
 ## Importing data with Eric's code
 
+using JLD2
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 using RvSpectMLBase, RvSpectML
 using EchelleInstruments, EchelleInstruments.EXPRES
 using CSV, DataFrames, Query, StatsBase, Statistics, Dates
 
-stars = ["10700", "26965"]
-star = stars[SSOF.parse_args(1, Int, 1)]
+stars = ["10700", "26965", "34411"]
+star = stars[SSOF.parse_args(1, Int, 3)]
 target_subdir = star * "/"   # USER: Replace with directory of your choice
 fits_target_str = star
 paths_to_search_for_param = ["EXPRES"]

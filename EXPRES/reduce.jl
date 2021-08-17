@@ -11,9 +11,9 @@ using CSV, DataFrames
 
 SSOF_path = dirname(dirname(pathof(SSOF)))
 include(SSOF_path * "/src/_plot_functions.jl")
-stars = ["10700", "26965"]
+stars = ["10700", "26965", "34411"]
 orders2inds(selected_orders::AbstractVector) = [searchsortedfirst(orders, order) for order in selected_orders]
-orders_list = [42:77, 40:77]
+orders_list = [42:77, 40:77, 38:77]
 
 # for star_ind in 1:2
 star_ind = SSOF.parse_args(1, Int, 2)

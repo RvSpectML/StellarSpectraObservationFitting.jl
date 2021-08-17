@@ -10,8 +10,8 @@ import StatsBase
 
 ## Setting up necessary variables
 
-stars = ["10700", "26965"]
-star = stars[SSOF.parse_args(1, Int, 1)]
+stars = ["10700", "26965", "34411"]
+star = stars[SSOF.parse_args(1, Int, 3)]
 interactive = length(ARGS) == 0
 save_plots = true
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
