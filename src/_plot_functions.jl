@@ -36,7 +36,7 @@ function plot_model_rvs_new(times_nu::AbstractVector{T}, model_rvs::AbstractVecO
     oni = SSOF.observation_night_inds(eo_times)
     most_obs_night = oni[argmax([length(i) for i in oni])]
     my_scatter!(plt, eo_times, eo_rvs .- median(eo_rvs); yerror=eo_rvs_σ, label="EXPRES RVs, std: $(round(std(eo_rv), digits=3)), most obs night std: $(round(std(eo_rv[most_obs_night]), digits=3))", kwargs...)
-    my_scatter!(plt, times_nu, model_rvs .- median(model_rvs); yerror=model_rvs_σ, label="Model RVs,    std: $(round(std(model_rvs), digits=3)), most obs night std: $(round(std(rvs_red[most_obs_night]), digits=3))", alpha = 0.7, kwargs...)
+    my_scatter!(plt, times_nu, model_rvs .- median(model_rvs); yerror=model_rvs_σ, label="Model RVs,    std: $(round(std(model_rvs), digits=3)), most obs night std: $(round(std(model_rvs[most_obs_night]), digits=3))", alpha = 0.7, kwargs...)
     if display_plt; display(plt) end
     if return_most_obs_night
         return plt, most_obs_night
