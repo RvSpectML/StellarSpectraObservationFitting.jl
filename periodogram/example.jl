@@ -16,16 +16,18 @@ orders2inds(selected_orders::AbstractVector) = [searchsortedfirst(orders, order)
 orders_list = [42:77, 40:77, 38:77]
 
 # for star_ind in 1:2
-star_ind = SSOF.parse_args(1, Int, 1)
+star_ind = SSOF.parse_args(1, Int, 3)
 star = stars[star_ind]
 orders = orders_list[star_ind]
 
 @load "$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
-# # plotting order means which don't matter because the are constant shifts for the reduced rv
-# my_scatter(orders, mean(rvs; dims=2); series_annotations=annot, legend=:topleft)
-rvs .-= median(rvs; dims=2)
+rvs .-= mean(rvs; dims=2)
 
-inds = orders2inds(orders[1:end-2])
+χ² = vec(sum((rvs .^ 2) ./ (rvs_σ .^ 2); dims=2))
+inds = sort(sortperm(χ²)[1:end-5])
+
+# inds = orders2inds(good_orders)
+
 rvs_red = collect(Iterators.flatten((sum(rvs[inds, :] ./ (rvs_σ[inds, :] .^ 2); dims=1) ./ sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1))'))
 rvs_red .-= median(rvs_red)
 rvs_σ_red = collect(Iterators.flatten(1 ./ sqrt.(sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1)')))

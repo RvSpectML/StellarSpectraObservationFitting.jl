@@ -46,26 +46,26 @@ plot!(plt, x, n_comps_bic[:, 2]; label = "", alpha=α/2, color=plt_colors[12], l
 
 png(plt, "md_$star.png")
 
-## Comparing to CCF RVs
-
-@load "EXPRES\\alex_stuff\\HD$(star)q0f0n1w1e=false_order_results.jld2" rvs_ccf_orders good_orders order_weights
-good_orders_mask = [i in orders for i in 12:83] .& good_orders
-good_orders_2 = (12:83)[good_orders_mask]
-bad_orders_2 = (12:83)[[i in orders for i in 12:83] .& .!(good_orders)]
-plt = my_scatter(12:83,order_weights; label="", title="$star Order Weights", xlabel="Orders", c=[i ? :green : :red for i in good_orders])
-png(plt, "order_weights")
-
-using Plots.PlotMeasures
-
-myplt(x, y, z) = heatmap(x, y, z; size=(600,400), right_margin=20px, ylabel="orders", xlabel="obs", title="HD"*star)
-# plt = myplt(1:size(rvs_ccf_orders,2), 12:83, rvs_ccf_orders)
-plt = myplt(1:size(rvs_ccf_orders,2), (12:83)[good_orders], rvs_ccf_orders[good_orders, :] .- median(rvs_ccf_orders[good_orders, :]; dims=2))
-png(plt, "test1")
-ccf_rvs = rvs_ccf_orders[good_orders_mask, :]
-plt = myplt(1:size(ccf_rvs,2), (12:83)[good_orders_mask], ccf_rvs)
-png(plt, "test2")
-ccf_rvs .-= median(ccf_rvs; dims=2)
-heatmap(ccf_rvs)
+# ## Comparing to CCF RVs
+#
+# @load "EXPRES\\alex_stuff\\HD$(star)q0f0n1w1e=false_order_results.jld2" rvs_ccf_orders good_orders order_weights
+# good_orders_mask = [i in orders for i in 12:83] .& good_orders
+# good_orders_2 = (12:83)[good_orders_mask]
+# bad_orders_2 = (12:83)[[i in orders for i in 12:83] .& .!(good_orders)]
+# plt = my_scatter(12:83,order_weights; label="", title="$star Order Weights", xlabel="Orders", c=[i ? :green : :red for i in good_orders])
+# png(plt, "order_weights")
+#
+# using Plots.PlotMeasures
+#
+# myplt(x, y, z) = heatmap(x, y, z; size=(600,400), right_margin=20px, ylabel="orders", xlabel="obs", title="HD"*star)
+# # plt = myplt(1:size(rvs_ccf_orders,2), 12:83, rvs_ccf_orders)
+# plt = myplt(1:size(rvs_ccf_orders,2), (12:83)[good_orders], rvs_ccf_orders[good_orders, :] .- median(rvs_ccf_orders[good_orders, :]; dims=2))
+# png(plt, "test1")
+# ccf_rvs = rvs_ccf_orders[good_orders_mask, :]
+# plt = myplt(1:size(ccf_rvs,2), (12:83)[good_orders_mask], ccf_rvs)
+# png(plt, "test2")
+# ccf_rvs .-= median(ccf_rvs; dims=2)
+# heatmap(ccf_rvs)
 
 
 ## RV reduction
@@ -81,9 +81,13 @@ plt = my_scatter(orders, median(rvs_σ; dims=2); legend=:topleft, label="", titl
 png(plt, star * "_order_rv_σ")
 plt = my_scatter(orders, std(rvs; dims=2) ./ median(rvs_σ; dims=2); legend=:topleft, label="", title="$star (RV std) / (Median σ)", xlabel="Order", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
 png(plt, star * "_order_rv_ratio")
-scatter(orders, sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2); label="χ²", legend=:topleft)
+χ² = vec(sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2))
+annot=text.(orders[sortperm(χ²)], :top, :white, 9)
+plt = my_scatter(1:length(χ²), sort(χ²); label="χ²", series_annotations=annot, legend=:topleft) #, yaxis=:log)
+png(plt, star * "_χ²")
 
 inds = orders2inds(orders[1:end-2])
+inds = sort(sortperm(χ²)[1:end-5])
 # inds = orders2inds(good_orders)
 
 rvs_red = collect(Iterators.flatten((sum(rvs[inds, :] ./ (rvs_σ[inds, :] .^ 2); dims=1) ./ sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1))'))
@@ -102,7 +106,7 @@ ccf_rvs = Array(ccf_output[1, :])
 ccf_rvs .-= median(ccf_rvs)
 
 # Compare RV differences to actual RVs from activity
-plt = plot_model_rvs_new(times_nu, -rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ, ccf_rvs; markerstrokewidth=1, title="HD"*star)
+plt = plot_model_rvs_new(times_nu, rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ, ccf_rvs; markerstrokewidth=1, title="HD"*star)
 png(plt, star * "_model_rvs.png")
 # end
 

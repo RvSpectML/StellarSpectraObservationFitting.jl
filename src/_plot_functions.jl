@@ -9,6 +9,10 @@ _thickness_scaling = 2
 _theme = :juno
 _my_plot(; dpi = _plt_dpi, size = _plt_size, thickness_scaling=_thickness_scaling, kwargs...) =
     plot(; dpi=dpi, size=size, thickness_scaling=thickness_scaling, kwargs...)
+function my_plot(x, y; kwargs...)
+    plt = _my_plot(; kwargs...)
+    plot!(plt, x, y; kwargs...)
+end
 plot_spectrum(; xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const", kwargs...) =
     _my_plot(; xlabel=xlabel, ylabel=ylabel, kwargs...)
 plot_rv(; xlabel = "Time (d)", ylabel = "RV (m/s)", kwargs...) =
