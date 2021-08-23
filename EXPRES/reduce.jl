@@ -16,7 +16,7 @@ orders2inds(selected_orders::AbstractVector) = [searchsortedfirst(orders, order)
 orders_list = [42:77, 40:77, 38:77]
 
 # for star_ind in 1:2
-star_ind = SSOF.parse_args(1, Int, 2)
+star_ind = SSOF.parse_args(1, Int, 3)
 star = stars[star_ind]
 orders = orders_list[star_ind]
 
@@ -76,11 +76,11 @@ heatmap(ccf_rvs)
 rvs .-= median(rvs; dims=2)
 
 plt = my_scatter(orders, std(rvs; dims=2); legend=:topleft, label="", title="$star RV std", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
-png(plt, "order_rv_std")
+png(plt, star * "_order_rv_std")
 plt = my_scatter(orders, median(rvs_σ; dims=2); legend=:topleft, label="", title="$star Median σ", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
-png(plt, "order_rv_σ")
+png(plt, star * "_order_rv_σ")
 plt = my_scatter(orders, std(rvs; dims=2) ./ median(rvs_σ; dims=2); legend=:topleft, label="", title="$star (RV std) / (Median σ)", xlabel="Order", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
-png(plt, "order_rv_ratio")
+png(plt, star * "_order_rv_ratio")
 scatter(orders, sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2); label="χ²", legend=:topleft)
 
 inds = orders2inds(orders[1:end-2])
