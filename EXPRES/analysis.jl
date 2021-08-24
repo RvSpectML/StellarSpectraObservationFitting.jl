@@ -17,10 +17,14 @@ save_plots = true
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 use_telstar = SSOF.parse_args(2, Bool, true)
 desired_order = SSOF.parse_args(3, Int, 68)  # 68 has a bunch of tels, 47 has very few
+use_reg = SSOF.parse_args(4, Bool, true)
 
 ## Loading in data and initializing model
 save_path = expres_save_path * star * "/$(desired_order)/"
 @load save_path * "data.jld2" n_obs data times_nu airmasses
+if !use_reg
+    save_path *= "noreg_"
+end
 
 if isfile(save_path*"results.jld2")
     @load save_path*"results.jld2" model rvs_naive rvs_notel
@@ -35,6 +39,10 @@ else
     @time model = SSOF.OrderModel(data, model_res, model_res, "EXPRES", desired_order, star; n_comp_tel=20, n_comp_star=20)
     @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
     model = SSOF.downsize(model, 10, 10)
+    if !use_reg
+        SSOF.zero_regularization(model)
+        model.metadata[:todo][:reg_improved] = true
+    end
 end
 
 ## Creating optimization workspace
