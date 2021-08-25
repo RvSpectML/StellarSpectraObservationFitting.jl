@@ -34,7 +34,7 @@ for star_ind in star_inds
     star = stars[star_ind]
     orders = orders_list[star_ind]
 
-    @load expres_save_path*star*"/$(orders[1])/$(prep_str)data.jld2" n_obs times_nu airmasses
+    @load expres_save_path*star*"/$(orders[1])/data.jld2" n_obs times_nu airmasses
     n_ord = length(orders)
     rvs = zeros(n_ord,  n_obs)
     rvs_σ = zeros(n_ord, n_obs)
