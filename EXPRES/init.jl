@@ -41,7 +41,7 @@ if need_to(pipeline_plan,:read_spectra)
 	function mask2range(mask::AbstractVector)
 		try
 			range = findfirst(mask):findlast(mask)
-			@assert all(mask[range, i] .== true)
+			@assert all(mask[range] .== true)
 			return range
 		catch exception
 			if typeof(exception)==MethodError
