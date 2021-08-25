@@ -120,7 +120,7 @@ function mask_bad_edges!(y::AbstractVector, σ²::AbstractVector; window_width::
 			break
 		end
 	end
-	for window_end in n_pix:-Int(floor(window_width/10)):window_width
+	for window_end in n_pix:-Int(floor(window_width/10)):(window_width + 1)
 		window_start = window_end - window_width
 		mean_snr = sqrt(mean((y[window_start:window_end] .^2) ./ σ²[window_start:window_end]))
 		if mean_snr > min_snr
