@@ -109,22 +109,3 @@ ccf_rvs .-= median(ccf_rvs)
 plt = plot_model_rvs_new(times_nu, rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ, ccf_rvs; markerstrokewidth=1, title="HD"*star)
 png(plt, star * "_model_rvs.png")
 # end
-
-Pkg.add("Distributions")
-using Distributions
-
-selected_orders = good_orders
-
-function helper(x::Real, i::Int)
-    ans = 0
-    for j in 1:length(selected_orders)
-        ans += pdf(Distributions.Normal(rvs[j, i], rvs_σ[j, i]), x)
-    end
-    return ans / length(selected_orders)
-end
-helper(xs::AbstractVector, i::Int) = [helper(x, i) for x in xs]
-x = LinRange(-20,20,1000)
-u = 14
-plot(x, helper(x, u); label = "model makeup")
-plot!(x, pdf.(Distributions.Normal(eo_rv[u], eo_rv_σ[u]), x); label = "EXPRES")
-plot!(x, pdf.(Distributions.Normal(rvs_red[u], rvs_σ_red[u]), x); label = "model")
