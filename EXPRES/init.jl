@@ -75,31 +75,35 @@ airmasses = [parse(Float64, s.metadata[:airmass]) for s in all_spectra]
 println("starting to write new files")
 
 # 68 has a bunch of tels, 47 has very few
+min_order_width = 1000
 for order in 1:n_orders
 	save_path = expres_save_path * star * "/$(order)/"
 	mkpath(save_path)
-	used_excal = length(excal_inds[order]) > 1000
+	used_excal = length(excal_inds[order]) > min_order_width
 	if used_excal
 		mask_inds = flatten_ranges([flux_inds[order], excal_inds[order]])
 	else
 		mask_inds = flux_inds[order]
 	end
-
-	len_obs = length(mask_inds)
-	flux_obs = ones(len_obs, n_obs)
-	var_obs = zeros(len_obs, n_obs)
-	log_λ_obs = zeros(len_obs, n_obs)
-	log_λ_star = zeros(len_obs, n_obs)
-	for i in 1:n_obs # 13s
-	    flux_obs[:, i] = all_spectra[i].flux[mask_inds, order]
-	    var_obs[:, i] = all_spectra[i].var[mask_inds, order]
-	    log_λ_obs[:, i] = log.(all_spectra[i].λ_obs[mask_inds, order])
-	    log_λ_star[:, i] = log.(all_spectra[i].λ[mask_inds, order])
+	if length(mask_inds) > min_order_width
+		len_obs = length(mask_inds)
+		flux_obs = ones(len_obs, n_obs)
+		var_obs = zeros(len_obs, n_obs)
+		log_λ_obs = zeros(len_obs, n_obs)
+		log_λ_star = zeros(len_obs, n_obs)
+		for i in 1:n_obs # 13s
+		    flux_obs[:, i] = all_spectra[i].flux[mask_inds, order]
+		    var_obs[:, i] = all_spectra[i].var[mask_inds, order]
+		    log_λ_obs[:, i] = log.(all_spectra[i].λ_obs[mask_inds, order])
+		    log_λ_star[:, i] = log.(all_spectra[i].λ[mask_inds, order])
+		end
+		data = SSOF.Data(flux_obs, var_obs, log_λ_obs, log_λ_star)
+		SSOF.process!(data; order=6)
+		# x = copy(data.flux)
+		# x[data.var .> 1] .= 0
+		# heatmap(x)
+		@save save_path*"data.jld2" n_obs data times_nu airmasses used_excal
+	else
+		println("order $order skipped for being only $(length(mask_inds)) useful pixels wide")
 	end
-	data = SSOF.Data(flux_obs, var_obs, log_λ_obs, log_λ_star)
-	SSOF.process!(data; order=6)
-	# x = copy(data.flux)
-	# x[data.var .> 1] .= 0
-	# heatmap(x)
-	@save save_path*"data.jld2" n_obs data times_nu airmasses used_excal
 end
