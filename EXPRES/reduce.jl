@@ -14,6 +14,8 @@ include(SSOF_path * "/src/_plot_functions.jl")
 stars = ["10700", "26965", "34411"]
 orders2inds(selected_orders::AbstractVector) = [searchsortedfirst(orders, order) for order in selected_orders]
 orders_list = [42:77, 40:77, 38:77]
+prep_str = "noreg_"
+prep_str = ""
 
 # for star_ind in 1:2
 star_ind = SSOF.parse_args(1, Int, 3)
@@ -22,7 +24,7 @@ orders = orders_list[star_ind]
 
 ## Looking at model components
 
-@load "$(star)_md.jld2" n_comps n_comps_bic robust
+@load "$(prep_str)$(star)_md.jld2" n_comps n_comps_bic robust
 
 n_robust = [!i for i in robust]
 x = orders_list[star_ind]
@@ -44,7 +46,7 @@ my_scatter!(plt, x[n_robust], n_comps_bic[n_robust, 2]; alpha=α/2, color=plt_co
 plot!(plt, x, n_comps_bic[:, 1]; label = "", alpha=α/2, color=plt_colors[11], ls=:dot)
 plot!(plt, x, n_comps_bic[:, 2]; label = "", alpha=α/2, color=plt_colors[12], ls=:dot)
 
-png(plt, "md_$star.png")
+png(plt, "$(prep_str)md_$star.png")
 
 # ## Comparing to CCF RVs
 #
@@ -70,23 +72,23 @@ png(plt, "md_$star.png")
 
 ## RV reduction
 
-@load "$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
+@load "$(prep_str)$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 # # plotting order means which don't matter because the are constant shifts for the reduced rv
 # my_scatter(orders, mean(rvs; dims=2); series_annotations=annot, legend=:topleft)
 rvs .-= median(rvs; dims=2)
 
-plt = my_scatter(orders, std(rvs; dims=2); legend=:topleft, label="", title="$star RV std", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
-png(plt, star * "_order_rv_std")
-plt = my_scatter(orders, median(rvs_σ; dims=2); legend=:topleft, label="", title="$star Median σ", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
-png(plt, star * "_order_rv_σ")
-plt = my_scatter(orders, std(rvs; dims=2) ./ median(rvs_σ; dims=2); legend=:topleft, label="", title="$star (RV std) / (Median σ)", xlabel="Order", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
-png(plt, star * "_order_rv_ratio")
+# plt = my_scatter(orders, std(rvs; dims=2); legend=:topleft, label="", title="$star RV std", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
+# png(plt, prep_str * star * "_order_rv_std")
+# plt = my_scatter(orders, median(rvs_σ; dims=2); legend=:topleft, label="", title="$star Median σ", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
+# png(plt, prep_str * star * "_order_rv_σ")
+# plt = my_scatter(orders, std(rvs; dims=2) ./ median(rvs_σ; dims=2); legend=:topleft, label="", title="$star (RV std) / (Median σ)", xlabel="Order", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
+# png(plt, prep_str * star * "_order_rv_ratio")
 χ² = vec(sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2))
 annot=text.(orders[sortperm(χ²)], :top, :white, 9)
-plt = my_scatter(1:length(χ²), sort(χ²); label="χ²", series_annotations=annot, legend=:topleft) #, yaxis=:log)
-png(plt, star * "_χ²")
+plt = my_scatter(1:length(χ²), sort(χ²); label="χ²", series_annotations=annot, legend=:topleft, title=prep_str * star * "_χ²") #, yaxis=:log)
+png(plt, prep_str * star * "_χ²")
 
-inds = orders2inds(orders[1:end-2])
+# inds = orders2inds(orders[1:end-2])
 inds = sort(sortperm(χ²)[1:end-5])
 # inds = orders2inds(good_orders)
 
@@ -107,5 +109,5 @@ ccf_rvs .-= median(ccf_rvs)
 
 # Compare RV differences to actual RVs from activity
 plt = plot_model_rvs_new(times_nu, rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ, ccf_rvs; markerstrokewidth=1, title="HD"*star)
-png(plt, star * "_model_rvs.png")
+png(plt, prep_str * star * "_model_rvs.png")
 # end
