@@ -36,9 +36,8 @@ if isfile(save_path*"results.jld2")
     end
 else
     model_res = 2 * sqrt(2) * 150000
-    @time model = SSOF.OrderModel(data, model_res, model_res, "EXPRES", desired_order, star; n_comp_tel=20, n_comp_star=20)
+    @time model = SSOF.OrderModel(data, model_res, model_res, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8)
     @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
-    model = SSOF.downsize(model, 10, 10)
     if !use_reg
         SSOF.zero_regularization(model)
         model.metadata[:todo][:reg_improved] = true
