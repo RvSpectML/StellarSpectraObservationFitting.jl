@@ -8,7 +8,7 @@ import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 ## Setting up necessary variables
 
 stars = ["10700", "26965", "34411"]
-star = stars[SSOF.parse_args(1, Int, 2)]
+star = stars[SSOF.parse_args(1, Int, 1)]
 interactive = length(ARGS) == 0
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 model_res = 2 * sqrt(2) * 150000
@@ -22,13 +22,12 @@ function sendto(workers::Union{T,Vector{T}}; args...) where {T<:Integer}
     end
 end
 addprocs(length(Sys.cpu_info()) - 2)
-# addprocs(1)
-@everywhere using Pkg; @everywhere Pkg.activate("EXPRES"); # @everywhere Pkg.instantiate()
+@everywhere using Pkg; @everywhere Pkg.activate("EXPRES");
 @everywhere using StellarSpectraObservationFitting; @everywhere SSOF = StellarSpectraObservationFitting
 @everywhere using JLD2
 @everywhere using Statistics
 datapath = expres_save_path * star
-sendto(workers(), datapath=datapath, data=data, model_res=model_res, star=star)
+sendto(workers(), datapath=datapath, model_res=model_res, star=star)
 @everywhere function f(desired_order::Int)
     @load datapath * "/$(desired_order)/data.jld2" n_obs data times_nu airmasses
     model = SSOF.OrderModel(data, model_res, model_res, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8)
@@ -38,3 +37,8 @@ sendto(workers(), datapath=datapath, data=data, model_res=model_res, star=star)
 end
 ords = 1:85
 res = pmap(x->f(x), ords, batch_size=Int(floor(length(ords) / (nworkers() + 1)) + 1))
+
+@save "useful_order_res_$star.jld2" res
+
+using Plots
+plot(res; yaxis=:log)
