@@ -128,7 +128,7 @@ if !model.metadata[:todo][:err_estimated]
         SSOF.train_OrderModel!(SSOF.WorkspaceTelStar(model_holder, data_holder), g_tol=SSOF._g_tol_def/1*sqrt(length(workspace.telstar.p0)), f_tol=1e-8)
         rv_holder[i, :] = SSOF.rvs(model_holder)
     end
-    rv_errors = std(rv_holder; dims=1)
+    rv_errors = vec(std(rv_holder; dims=1))
     model.metadata[:todo][:err_estimated] = true
     @save save_path*"results.jld2" model rvs_naive rvs_notel rv_errors
 end
@@ -147,7 +147,7 @@ if save_plots
 
     # Compare RV differences to actual RVs from activity
     rvs_notel_opt = SSOF.rvs(model)
-    plt = plot_model_rvs_new(times_nu, rvs_notel_opt, rv_errors, eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1);
+    plt = plot_model_rvs_new(times_nu, rvs_notel_opt, vec(rv_errors), eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1);
     png(plt, save_path * "model_rvs.png")
 
     if !(typeof(model.star.lm) <: SSOF.TemplateModel)
