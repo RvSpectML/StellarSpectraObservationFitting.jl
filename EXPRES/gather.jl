@@ -11,7 +11,8 @@ import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 stars = ["10700", "26965", "34411"]
 orders_list = [1:85, 1:85, 1:85]
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
-prep_str = "noreg_"  # prep_str = ""
+# prep_str = "noreg_"
+prep_str = ""
 
 function retrieve(order::Int, star::String)
     @load expres_save_path*star*"/$(order)/$(prep_str)results.jld2" model rv_errors
