@@ -13,7 +13,7 @@ SSOF_path = dirname(dirname(pathof(SSOF)))
 include(SSOF_path * "/src/_plot_functions.jl")
 stars = ["10700", "26965", "34411"]
 orders2inds(selected_orders::AbstractVector) = [searchsortedfirst(orders, order) for order in selected_orders]
-orders_list = [42:77, 40:77, 38:77]
+orders_list = [1:85, 1:85, 1:85]
 prep_str = "noreg_"
 prep_str = ""
 
