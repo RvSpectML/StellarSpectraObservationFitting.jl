@@ -249,7 +249,7 @@ function zero_regularization(om::OrderModel)
 end
 
 # I have no idea why the negative sign needs to be here
-rvs(model::OrderModel) = Array((model.rv.lm.s .* -light_speed_nu)')
+rvs(model::OrderModel) = vec(Array((model.rv.lm.s .* -light_speed_nu)'))
 
 function downsize(lm::FullLinearModel, n_comp::Int)
 	if n_comp > 0
@@ -464,3 +464,8 @@ struct Output{T<:Real}
 	end
 end
 Base.copy(o::Output) = Output(copy(tel), copy(star), copy(rv))
+
+function copy_reg!(from::OrderModel, to::OrderModel)
+	copy_dict!(from.reg_tel, to.reg_tel)
+	copy_dict!(from.reg_star, to.reg_star)
+end
