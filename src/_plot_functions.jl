@@ -123,9 +123,9 @@ function status_plot(o::StellarSpectraObservationFitting.Output, d::StellarSpect
 
     shift += 1.1 - minimum(star_model)
     my_scatter!(plt[1], obs_λ, d.flux[:, plot_epoch] .- shift, label="Observed Data", color=:white, alpha=0.1, xlabel="")
-    plot!(plt[1], obs_λ, o.tel[:, plot_epoch] + star_model .- (1 + shift), label="Full Model", ls=:dash, color=:white)
+    plot!(plt[1], obs_λ, o.tel[:, plot_epoch] .* star_model .- shift, label="Full Model", ls=:dash, color=:white)
 
-    my_scatter!(plt[2], obs_λ, d.flux[:, plot_epoch] - (o.tel[:, plot_epoch] .* (o.star[:, plot_epoch] + o.rv[:, plot_epoch])), ylabel="Residuals", label="", alpha=0.1, color=:white)
+    my_scatter!(plt[2], obs_λ, d.flux[:, plot_epoch] - (o.tel[:, plot_epoch] .* star_model), ylabel="Residuals", label="", alpha=0.1, color=:white)
     if display_plt; display(plt) end
     return plt
 end
