@@ -14,11 +14,11 @@ include(SSOF_path * "/src/_plot_functions.jl")
 stars = ["10700", "26965", "34411"]
 orders2inds(selected_orders::AbstractVector) = [searchsortedfirst(orders, order) for order in selected_orders]
 orders_list = [1:85, 1:85, 1:85]
-prep_str = "noreg_"
+# prep_str = "noreg_"
 prep_str = ""
 
 # for star_ind in 1:2
-star_ind = SSOF.parse_args(1, Int, 3)
+star_ind = SSOF.parse_args(1, Int, 2)
 star = stars[star_ind]
 orders = orders_list[star_ind]
 
@@ -28,7 +28,7 @@ orders = orders_list[star_ind]
 
 n_robust = [!i for i in robust]
 x = orders_list[star_ind]
-annot=text.(x, :top, :white, 9)
+annot=text.(x, :top, :white, 5)
 α = 1
 # robust_str = ["" for i in x]
 # for i in 1:length(robust_str)
@@ -37,7 +37,7 @@ annot=text.(x, :top, :white, 9)
 # end
 # annot=text.(robust_str, :top, :white, 9)
 plt = _my_plot(; ylabel="# of basis vectors", xlabel="Order", title="Best Models for $star (Based on AIC)", xticks=false)
-my_scatter!(plt, x, n_comps[:, 1]; alpha=α, label="# of telluric components", legend=:topleft, series_annotations=annot)
+my_scatter!(plt, x, n_comps[:, 1]; alpha=α, label="# of telluric components", legend=:top, series_annotations=annot)
 my_scatter!(plt, x, n_comps[:, 2]; alpha=α, label="# of stellar components", series_annotations=annot)
 plot!(plt, x, n_comps[:, 1]; label = "", alpha=α, color=plt_colors[1], ls=:dot)
 plot!(plt, x, n_comps[:, 2]; label = "", alpha=α, color=plt_colors[2], ls=:dot)
@@ -76,21 +76,25 @@ png(plt, "$(prep_str)md_$star.png")
 # # plotting order means which don't matter because the are constant shifts for the reduced rv
 # my_scatter(orders, mean(rvs; dims=2); series_annotations=annot, legend=:topleft)
 rvs .-= median(rvs; dims=2)
+med_rvs_σ = vec(median(rvs_σ; dims=2))
+σ_floor = 50
 
 # plt = my_scatter(orders, std(rvs; dims=2); legend=:topleft, label="", title="$star RV std", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
 # png(plt, prep_str * star * "_order_rv_std")
-# plt = my_scatter(orders, median(rvs_σ; dims=2); legend=:topleft, label="", title="$star Median σ", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
+# annot = text.(orders, :center, :black, 3)
+# plt = my_scatter(orders, med_rvs_σ; legend=:topleft, label="", title="$star Median σ", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, yaxis=:log)
+annot = text.(orders[med_rvs_σ .< σ_floor], :center, :black, 3)
+plt = my_scatter(orders[med_rvs_σ .< σ_floor], med_rvs_σ[med_rvs_σ .< σ_floor]; legend=:topleft, label="", title="$star Median σ", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor])
 # png(plt, prep_str * star * "_order_rv_σ")
-# plt = my_scatter(orders, std(rvs; dims=2) ./ median(rvs_σ; dims=2); legend=:topleft, label="", title="$star (RV std) / (Median σ)", xlabel="Order", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
+# plt = my_scatter(orders, std(rvs; dims=2) ./ med_rvs_σ; legend=:topleft, label="", title="$star (RV std) / (Median σ)", xlabel="Order", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
 # png(plt, prep_str * star * "_order_rv_ratio")
 χ² = vec(sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2))
-annot=text.(orders[sortperm(χ²)], :top, :white, 9)
+annot = text.(orders[sortperm(χ²)], :center, :black, 4)
 plt = my_scatter(1:length(χ²), sort(χ²); label="χ²", series_annotations=annot, legend=:topleft, title=prep_str * star * "_χ²") #, yaxis=:log)
 png(plt, prep_str * star * "_χ²")
 
-# inds = orders2inds(orders[1:end-2])
-inds = sort(sortperm(χ²)[1:end-5])
-# inds = orders2inds(good_orders)
+χ²_orders = sortperm(χ²)[1:end-5]
+inds = [orders[i] for i in 1:length(orders) if (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders)]
 
 rvs_red = collect(Iterators.flatten((sum(rvs[inds, :] ./ (rvs_σ[inds, :] .^ 2); dims=1) ./ sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1))'))
 rvs_red .-= median(rvs_red)
@@ -103,11 +107,7 @@ eo_rv .-= median(eo_rv)
 eo_rv_σ = expres_output."CBC RV Err. [m/s]"
 eo_time = expres_output."Time [MJD]"
 
-ccf_output = CSV.read(SSOF_path * "\\EXPRES\\alex_stuff\\HD$(star)q0f0n1w1e=false_RVs.csv", DataFrame; header=false)
-ccf_rvs = Array(ccf_output[1, :])
-ccf_rvs .-= median(ccf_rvs)
-
 # Compare RV differences to actual RVs from activity
-plt = plot_model_rvs_new(times_nu, rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ, ccf_rvs; markerstrokewidth=1, title="HD"*star)
+plt = plot_model_rvs_new(times_nu, rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ; markerstrokewidth=1, title="HD"*star)
 png(plt, prep_str * star * "_model_rvs.png")
 # end
