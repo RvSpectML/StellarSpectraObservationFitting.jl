@@ -278,3 +278,8 @@ end
 
 train_OrderModel!(ow::WorkspaceTotal, iterations::Int; kwargs...) =
     train_OrderModel!(ow; iterations=iterations, kwargs...)
+
+function fine_train_OrderModel!(ow::OptimWorkspace; g_tol::Real=_g_tol_def*sqrt(length(ow.telstar.p0)), kwargs...)
+    train_OrderModel!(ow; kwargs...)  # 16s
+    return train_OrderModel!(ow; g_tol=g_tol/10, f_tol=1e-8, kwargs...)
+end

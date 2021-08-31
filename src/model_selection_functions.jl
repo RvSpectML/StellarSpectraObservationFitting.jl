@@ -1,7 +1,6 @@
 function test_ℓ_for_n_comps(n_comps::Vector, om::OrderModel, d::Data; return_inters::Bool=false, kwargs...)
     ws, l = WorkspaceTelStar(downsize(om, n_comps[1], n_comps[2]), d; return_loss_f=true)
-    train_OrderModel!(ws; kwargs...)  # 16s
-    train_OrderModel!(ws; g_tol=_g_tol_def/10*sqrt(length(ws.telstar.p0)), f_tol=1e-8, kwargs...)  # 50s
+    fine_train_OrderModel!(ws; kwargs...)  # 16s
     if return_inters
         return ws, l, l(), (length(ws.telstar.p0) + length(ws.rv.p0))
     else

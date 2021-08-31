@@ -64,8 +64,7 @@ end
 ## Improving regularization
 
 if !model.metadata[:todo][:reg_improved]
-    @time results_telstar, _ = SSOF.train_OrderModel!(workspace; print_stuff=true, ignore_regularization=true)  # 16s
-    @time results_telstar, _ = SSOF.train_OrderModel!(workspace; print_stuff=true, ignore_regularization=true, g_tol=SSOF._g_tol_def/10*sqrt(length(workspace.telstar.p0)), f_tol=1e-8)  # 50s
+    @time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true, ignore_regularization=true)  # 16s
     n_obs_train = Int(round(0.75 * n_obs))
     training_inds = sort(StatsBase.sample(1:n_obs, n_obs_train; replace=false))
     @time SSOF.fit_regularization!(model, data, training_inds; use_telstar=use_telstar)
@@ -77,8 +76,7 @@ end
 ## Optimizing model
 
 if !model.metadata[:todo][:optimized]
-    @time results_telstar, _ = SSOF.train_OrderModel!(workspace; print_stuff=true)  # 16s
-    @time results_telstar, _ = SSOF.train_OrderModel!(workspace; print_stuff=true, g_tol=SSOF._g_tol_def/10*sqrt(length(workspace.telstar.p0)), f_tol=1e-8)  # 50s
+    @time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
     rvs_notel_opt = SSOF.rvs(model)
     if interactive; status_plot(workspace.o, workspace.d) end
     model.metadata[:todo][:optimized] = true
@@ -105,10 +103,9 @@ if !model.metadata[:todo][:downsized]
     model.metadata[:todo][:downsized] = true
     model.metadata[:todo][:reg_improved] = true
     workspace, loss = SSOF.WorkspaceTelStar(model, data; return_loss_f=true)
-    SSOF.train_OrderModel!(workspace; print_stuff=true)  # 16s
-    SSOF.train_OrderModel!(workspace; print_stuff=true, g_tol=SSOF._g_tol_def/10*sqrt(length(workspace.telstar.p0)), f_tol=1e-8)  # 50s
+    SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
     model.metadata[:todo][:optimized] = true
-    @save save_path*"results.jld2" model rvs_naive rvs_notel model_large
+    @save save_path*"results.jld2" model rvs_naive rvs_notel # model_large
 end
 
 
@@ -125,7 +122,7 @@ if !model.metadata[:todo][:err_estimated]
     rv_holder = zeros(n, length(model.rv.lm.s))
     @time for i in 1:n
         data_holder.flux[:, :] = data.flux + (data_noise .* randn(size(data_holder.var)))
-        SSOF.train_OrderModel!(SSOF.WorkspaceTelStar(model_holder, data_holder), g_tol=SSOF._g_tol_def/1*sqrt(length(workspace.telstar.p0)), f_tol=1e-8)
+        SSOF.train_OrderModel!(SSOF.WorkspaceTelStar(model_holder, data_holder), f_tol=1e-8)
         rv_holder[i, :] = SSOF.rvs(model_holder)
     end
     rv_errors = vec(std(rv_holder; dims=1))
