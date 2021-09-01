@@ -81,5 +81,5 @@ for star_ind in star_inds
         end
     end
 
-    @save "$(prep_str)$(star)_md.jld2" rvs rvs_σ
+    @save "$(prep_str)$(star)_lcrvs.jld2" rvs rvs_σ
 end
