@@ -85,6 +85,7 @@ for (i, n_tel) in enumerate(test_n_comp_tel)
             rv_holder[i, :] = SSOF.rvs(model_holder)
         end
         rvs_σ = vec(std(rv_holder; dims=1))
+        @save save_path*"low_comp_rvs.jld2" rvs rvs_σ test_n_comp_tel test_n_comp_star
     end
 end
 
