@@ -69,8 +69,8 @@ n_err = 25
 n_obs = length(test_model.rv.lm.s)
 rv_holder = zeros(n_err, n_obs)
 
-test_n_comp_tel = 0:0
-test_n_comp_star = 0:0
+test_n_comp_tel = 0:2
+test_n_comp_star = 0:2
 rvs = zeros(length(test_n_comp_tel), length(test_n_comp_star), n_obs)
 rvs_σ = zeros(length(test_n_comp_tel), length(test_n_comp_star), n_obs)
 for (i, n_tel) in enumerate(test_n_comp_tel)
