@@ -59,8 +59,8 @@ function plot_model_rvs_new(times_nu::AbstractVector{T}, model_rvs::AbstractVecO
     return plt
 end
 
-function plot_stellar_model_bases(om::StellarSpectraObservationFitting.OrderModel; inds::UnitRange=1:size(om.star.lm.M, 2), display_plt::Bool=true)
-    plt = plot_spectrum(; title="Stellar Model Bases", legend=:outerright)
+function plot_stellar_model_bases(om::StellarSpectraObservationFitting.OrderModel; inds::UnitRange=1:size(om.star.lm.M, 2), display_plt::Bool=true, kwargs...)
+    plt = plot_spectrum(; title="Stellar Model Bases", legend=:outerright, kwargs...)
     plot!(om.tel.λ, om.tel.lm.μ; label="μₜₑₗ", alpha=0.3, color=:white)
     plot!(om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ")
     shift = 0.2
@@ -71,8 +71,8 @@ function plot_stellar_model_bases(om::StellarSpectraObservationFitting.OrderMode
     if display_plt; display(plt) end
     return plt
 end
-function plot_stellar_model_scores(om::StellarSpectraObservationFitting.OrderModel; inds::UnitRange=1:size(om.star.lm.M, 2), display_plt::Bool=true)
-    plt = plot_scores(; title="Stellar Model Weights", legend=:outerright)
+function plot_stellar_model_scores(om::StellarSpectraObservationFitting.OrderModel; inds::UnitRange=1:size(om.star.lm.M, 2), display_plt::Bool=true, kwargs...)
+    plt = plot_scores(; title="Stellar Model Weights", legend=:outerright, kwargs...)
     shift = ceil(10 * maximum([std(om.star.lm.s[inds[i], :] .* norm(om.star.lm.M[:, inds[i]])) for i in inds])) / 2
     for i in reverse(inds)
         c_ind = ((i - inds[1] + 3) % 19) + 1
@@ -83,8 +83,8 @@ function plot_stellar_model_scores(om::StellarSpectraObservationFitting.OrderMod
     return plt
 end
 
-function plot_telluric_model_bases(om::StellarSpectraObservationFitting.OrderModel; inds::UnitRange=1:size(om.tel.lm.M, 2), display_plt::Bool=true)
-    plt = plot_spectrum(; title="Telluric Model Bases", legend=:outerright)
+function plot_telluric_model_bases(om::StellarSpectraObservationFitting.OrderModel; inds::UnitRange=1:size(om.tel.lm.M, 2), display_plt::Bool=true, kwargs...)
+    plt = plot_spectrum(; title="Telluric Model Bases", legend=:outerright, kwargs...)
     plot!(om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ", alpha=0.3, color=:white)
     plot!(om.tel.λ, om.tel.lm.μ; label="μₜₑₗ")
     shift = 0.2
@@ -95,8 +95,8 @@ function plot_telluric_model_bases(om::StellarSpectraObservationFitting.OrderMod
     if display_plt; display(plt) end
     return plt
 end
-function plot_telluric_model_scores(om::StellarSpectraObservationFitting.OrderModel; inds::UnitRange=1:size(om.tel.lm.M, 2), display_plt::Bool=true)
-    plt = plot_scores(; title="Telluric Model Weights", legend=:outerright)
+function plot_telluric_model_scores(om::StellarSpectraObservationFitting.OrderModel; inds::UnitRange=1:size(om.tel.lm.M, 2), display_plt::Bool=true, kwargs...)
+    plt = plot_scores(; title="Telluric Model Weights", legend=:outerright, kwargs...)
     my_scatter!(plt, times_nu, airmasses; label="Airmasses")
     hline!([1]; label="", color=plt_colors[1], lw=3, alpha=0.4)
     shift = ceil(10 * maximum([std(om.tel.lm.s[inds[i], :] .* norm(om.tel.lm.M[:, inds[i]])) for i in inds])) / 2
@@ -110,10 +110,10 @@ function plot_telluric_model_scores(om::StellarSpectraObservationFitting.OrderMo
     return plt
 end
 
-function status_plot(o::StellarSpectraObservationFitting.Output, d::StellarSpectraObservationFitting.Data; plot_epoch::Int=10, tracker::Int=0, display_plt::Bool=true)
+function status_plot(o::StellarSpectraObservationFitting.Output, d::StellarSpectraObservationFitting.Data; plot_epoch::Int=10, tracker::Int=0, display_plt::Bool=true, kwargs...)
     obs_λ = exp.(d.log_λ_obs[:, plot_epoch])
     plot_star_λs = exp.(d.log_λ_star[:, plot_epoch])
-    plt = plot_spectrum(; legend = :bottomright, layout = grid(2, 1, heights=[0.85, 0.15]))
+    plt = plot_spectrum(; legend = :bottomright, layout = grid(2, 1, heights=[0.85, 0.15]), kwargs...)
 
     plot!(plt[1], obs_λ, o.tel[:, plot_epoch], label="Telluric Model")
 
