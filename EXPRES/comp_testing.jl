@@ -55,7 +55,7 @@ end
 ## Optimizing model
 
 @time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
-rvs_notel_opt = SSOF.rvs(model)
+rvs_notel_opt = SSOF.rvs(test_model)
 if interactive; status_plot(workspace.o, workspace.d) end
 test_model.metadata[:todo][:optimized] = true
 
@@ -84,7 +84,7 @@ for (i, n_tel) in enumerate(test_n_comp_tel)
             SSOF.train_OrderModel!(SSOF.WorkspaceTelStar(model_holder, data_holder), f_tol=1e-8)
             rv_holder[i, :] = SSOF.rvs(model_holder)
         end
-        rvs_σ = vec(std(rv_holder; dims=1))
+        rvs_σ[i, j, :] = vec(std(rv_holder; dims=1))
         @save save_path*"low_comp_rvs.jld2" rvs rvs_σ test_n_comp_tel test_n_comp_star
     end
 end
