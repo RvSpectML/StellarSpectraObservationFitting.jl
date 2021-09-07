@@ -34,6 +34,12 @@ function retrieve_lcrvs(order::Int, star::String)
     return rvs, rvs_σ
 end
 
+keys = SSOF._key_list[1:5]
+function retrieve_reg(order::Int, star::String)
+    @load expres_save_path*star*"/$(order)/$(prep_str)results.jld2" model
+    return [model.reg_tel[k] for k in keys], [model.reg_star[k] for k in keys]
+end
+
 input_ind = SSOF.parse_args(1, Int, 0)
 input_ind == 0 ? star_inds = (1:3) : star_inds = input_ind
 for star_ind in star_inds
@@ -52,7 +58,6 @@ for star_ind in star_inds
     #         println("order $(orders[i]) is missing")
     #     end
     # end
-    #
     # @save "$(prep_str)$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 
     # @load expres_save_path*star*"/$(orders[1])/data.jld2" n_obs times_nu airmasses
@@ -67,19 +72,28 @@ for star_ind in star_inds
     #         println("order $(orders[i]) is missing")
     #     end
     # end
-    #
     # @save "$(prep_str)$(star)_md.jld2" n_comps n_comps_bic robust
 
-    rvs = zeros(n_ord, 3, 3, n_obs)
-    rvs_σ = zeros(n_ord, 3, 3, n_obs)
+    # rvs = zeros(n_ord, 3, 3, n_obs)
+    # rvs_σ = zeros(n_ord, 3, 3, n_obs)
+    # for i in 1:n_ord
+    #     try
+    #         rvs[i, :, :, :], rvs_σ[i, :, :, :] = retrieve_lcrvs(orders[i], star)
+    #     catch
+    #         rvs_σ[i, :, :, :] .= Inf
+    #         println("order $(orders[i]) is missing")
+    #     end
+    # end
+    # @save "$(prep_str)$(star)_lcrvs.jld2" rvs rvs_σ
+
+    reg_tels = zeros(n_ord, length(keys))
+    reg_stars = zeros(n_ord, length(keys))
     for i in 1:n_ord
         try
-            rvs[i, :, :, :], rvs_σ[i, :, :, :] = retrieve_lcrvs(orders[i], star)
+            reg_tels[i, :], reg_stars[i, :] = retrieve_reg(orders[i], star)
         catch
-            rvs_σ[i, :, :, :] .= Inf
             println("order $(orders[i]) is missing")
         end
     end
-
-    @save "$(prep_str)$(star)_lcrvs.jld2" rvs rvs_σ
+    @save "$(prep_str)$(star)_regs.jld2" reg_tels reg_stars
 end
