@@ -217,6 +217,13 @@ plot!(pltx, derivative(poly, 3).(collect(pltx)))
 
 ## Fixing Manifest.jl
 
+using Pkg
+Pkg.add("CSV")
+using CSV
+
+Pkg.activate("EXPRES")
+Pkg.instantiate()
+
 Pkg.rm("EMPCA")
 Pkg.rm("StellarSpectraObservationFitting")
 Pkg.rm("RvSpectMLBase")
@@ -233,6 +240,8 @@ Pkg.add(;url="https://github.com/RvSpectML/RvSpectML.jl")
 
 Pkg.instantiate()
 import Pkg; Pkg.precompile()
+
+using CSV
 
 Pkg.rm("GLOM_RV_Example")
 Pkg.rm("GPLinearODEMaker")
