@@ -72,6 +72,8 @@ png(plt, "$(prep_str)md_$star.png")
 
 ## RV reduction
 
+@load "$(prep_str)$(star)_lcrvs.jld2" rvs rvs_σ
+lc_rvs = rvs .- median(rvs; dims=4); lc_rvs_σ = copy(rvs_σ)
 @load "$(prep_str)$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 # # plotting order means which don't matter because the are constant shifts for the reduced rv
 # my_scatter(orders, mean(rvs; dims=2); series_annotations=annot, legend=:topleft)
@@ -111,3 +113,64 @@ eo_time = expres_output."Time [MJD]"
 plt = plot_model_rvs_new(times_nu, rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ; markerstrokewidth=1, title="HD"*star)
 png(plt, prep_str * star * "_model_rvs.png")
 # end
+
+## low component testing plot
+using StatsBase
+use_mad = true
+use_mad ? hmm = mad(lc_rvs; dims=4) : hmm = std(lc_rvs; dims=4)
+hmm[hmm .== 0] .= Inf
+hmm2 = median(lc_rvs_σ; dims=4)
+hmm2[hmm .== Inf] .= Inf
+
+plt = my_plot(orders, std(rvs; dims=2); ylim=[0,10], label="AIC-chosen", legend=:top, xlabel="Order", ylabel="m/s", title="mean RV std per order (HD$star)", ms=3, markerstrokewidth=0, markershape=:circle)
+for i in 1:3
+    for j in 1:3
+        if (j==1 && (i==1 || i==3)) || (i==1 && j==3)
+            plot!(plt, orders, hmm[:, i, j, 1]; label="$(i-1) tel - $(j-1) star", alpha=0.4, ms=2, markerstrokewidth=0, markershape=:circle)
+        else
+            scatter!(plt, orders, hmm[:, i, j, 1]; label="$(i-1) tel - $(j-1) star", alpha=1, ms=2, markerstrokewidth=0)
+        end
+    end
+end
+for i in 1:3
+    for j in 1:3
+        val = 3 * (i - 1) + j
+        scatter!(plt, orders, hmm2[:, i, j, 1]; label="", alpha=0.4, ms=2, markerstrokewidth=0, markershape=:x, c=plt_colors[val])
+    end
+end
+scatter!(plt, orders, median(rvs_σ; dims=2); label="median order σ", alpha=0.4, ms=3, markerstrokewidth=0, markershape=:x, c=plt_colors[1])
+use_mad ? png(plt, "lc_mad_test") : png(plt, "lc_test")
+
+
+## regularization by order
+
+@load "$(prep_str)$(star)_regs.jld2" reg_tels reg_stars
+keys = SSOF._key_list[1:5]
+
+plt = _my_plot(;xlabel="Order", ylabel="Regularization", title="Regularizations per order (HD$star)", yaxis=:log)
+for i in 1:length(keys)
+    plot!(plt, orders, reg_tels[:, i], label="reg_$(keys[i])", markershape=:circle, markerstrokewidth=0)
+end
+# for i in 1:length(keys)
+#     plot!(plt, orders, reg_stars[:, i], label="star_$(keys[i])", markershape=:circle, markerstrokewidth=0)
+# end
+for i in 1:length(keys)
+    hline!(plt, [SSOF.default_reg_tel[keys[i]]], c=plt_colors[i], label="")
+    # hline!(plt, [SSOF.default_reg_star[keys[i]]], c=plt_colors[i+length(keys)], label="")
+end
+display(plt)
+png(plt, "reg_tel_test")
+
+plt = _my_plot(;xlabel="Order", ylabel="Regularization", title="Regularizations per order (HD$star)", yaxis=:log)
+# for i in 1:length(keys)
+#     plot!(plt, orders, reg_tels[:, i], label="reg_$(keys[i])", markershape=:circle, markerstrokewidth=0)
+# end
+for i in 1:length(keys)
+    plot!(plt, orders, reg_stars[:, i], label="star_$(keys[i])", markershape=:circle, markerstrokewidth=0)
+end
+for i in 1:length(keys)
+    # hline!(plt, [SSOF.default_reg_tel[keys[i]]], c=plt_colors[i], label="")
+    hline!(plt, [SSOF.default_reg_star[keys[i]]], c=plt_colors[i], label="")
+end
+display(plt)
+png(plt, "reg_star_test")
