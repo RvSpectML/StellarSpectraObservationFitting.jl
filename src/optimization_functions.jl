@@ -1,12 +1,20 @@
 using LineSearches
-_EXPRES_lsf_FWHM = 4.5  # roughly. See http://exoplanets.astro.yale.edu/science/activity.php
-_EXPRES_lsf_σ = _EXPRES_lsf_FWHM / (2 * sqrt(2 * log(2)))
 
-function _loss_EXPRES(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::Data)
-    diff = ((tel .* (star + rv)) - d.flux) .^ 2
-
-# _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::Data) =
-#     sum((((tel .* (star + rv)) - d.flux) .^ 2) ./ d.var)
+function _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::EXPRESData)
+    y = (tel .* (star + rv)) - d.flux
+    ans = 0
+    Σ_thing = copy(d.Σ_lsf)
+    for i in 1:size(y, 1)  # for each time
+        yview = view(y, :, i)
+        for j in 1:size(y, 2)  # for each pixel
+            Σ_thing[:, j] = view(d.Σ_lsf, :, j) .* d.var[i, j]
+        end
+        ans += yview' * (Σ_thing \ yview)
+    end
+    return ans
+end
+_loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericData) =
+    sum((((tel .* (star + rv)) - d.flux) .^ 2) ./ d.var)
 _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::Data) =
     _loss_EXPRES(tel, star, rv, d)
 loss(o::Output, d::Data) = _loss(o.tel, o.star, o.rv, d)

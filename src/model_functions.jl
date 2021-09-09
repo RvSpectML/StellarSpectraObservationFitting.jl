@@ -1,7 +1,34 @@
 using TemporalGPs, Stheno, Distributions
 import Base.copy
+using BandedMatrices
+using SpecialFunctions
 
-struct Data{T<:Real}
+abstract type Data end
+
+_EXPRES_lsf_FWHM = 4.5  # roughly. See http://exoplanets.astro.yale.edu/science/activity.php
+_EXPRES_lsf_σ = _EXPRES_lsf_FWHM / (2 * sqrt(2 * log(2)))
+
+struct EXPRESData{T<:Real} <: Data
+    flux::AbstractMatrix{T}
+    var::AbstractMatrix{T}
+    log_λ_obs::AbstractMatrix{T}
+    log_λ_star::AbstractMatrix{T}
+	Σ_lsf::AbstractMatrix{T}
+	function EXPRESData(flux::AbstractMatrix{T}, var, log_λ_obs, log_λ_star; span::Int=4) where {T<:Real}
+		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
+		lsf_pm_4 = [erf((i+0.5)/_EXPRES_lsf_σ) - erf((i-0.5)/_EXPRES_lsf_σ) for i in -span:span]
+		x = zeros(20, 20)
+		xl = size(x, 2)
+		for i in 1:xl
+		    low = max(i - span, 1); high = min(i + span, xl);
+		    x[low:high, i] = view(lsf_pm_4, (low + span + 1 - i):(high + span + 1 - i))
+		    x[low:high, i] ./= sum(x[low:high, i])
+		end
+		Σ_lsf = BandedMatrix(x, (span, span))
+		return new{T}(flux, var, log_λ_obs, log_λ_star, Σ_lsf)
+	end
+end
+struct GenericData{T<:Real} <: Data
     flux::AbstractMatrix{T}
     var::AbstractMatrix{T}
     log_λ_obs::AbstractMatrix{T}
@@ -11,10 +38,10 @@ struct Data{T<:Real}
 		return new{T}(flux, var, log_λ_obs, log_λ_star)
 	end
 end
-(d::Data)(inds::AbstractVecOrMat) =
-	Data(view(d.flux, :, inds), view(d.var, :, inds),
+(d::GenericData)(inds::AbstractVecOrMat) =
+	GenericData(view(d.flux, :, inds), view(d.var, :, inds),
 	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds))
-Base.copy(d::Data) = Data(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star))
+Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star))
 
 
 function create_λ_template(log_λ_obs, resolution)
