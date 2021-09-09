@@ -1,6 +1,14 @@
 using LineSearches
+_EXPRES_lsf_FWHM = 4.5  # roughly. See http://exoplanets.astro.yale.edu/science/activity.php
+_EXPRES_lsf_σ = _EXPRES_lsf_FWHM / (2 * sqrt(2 * log(2)))
+
+function _loss_EXPRES(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::Data)
+    diff = ((tel .* (star + rv)) - d.flux) .^ 2
+
+# _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::Data) =
+#     sum((((tel .* (star + rv)) - d.flux) .^ 2) ./ d.var)
 _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::Data) =
-    sum((((tel .* (star + rv)) - d.flux) .^ 2) ./ d.var)
+    _loss_EXPRES(tel, star, rv, d)
 loss(o::Output, d::Data) = _loss(o.tel, o.star, o.rv, d)
 loss(om::OrderModel, d::Data) = _loss(tel_model(om), star_model(om), rv_model(om), d)
 loss_tel(o::Output, om::OrderModel, d::Data) = _loss(tel_model(om), o.star, o.rv, d) + tel_prior(om)
