@@ -1,4 +1,6 @@
 using LineSearches
+using ParameterHandling
+using Optim
 
 function _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::EXPRESData)
     y = (tel .* (star + rv)) - d.flux
@@ -15,8 +17,6 @@ function _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d:
 end
 _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericData) =
     sum((((tel .* (star + rv)) - d.flux) .^ 2) ./ d.var)
-_loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::Data) =
-    _loss_EXPRES(tel, star, rv, d)
 loss(o::Output, d::Data) = _loss(o.tel, o.star, o.rv, d)
 loss(om::OrderModel, d::Data) = _loss(tel_model(om), star_model(om), rv_model(om), d)
 loss_tel(o::Output, om::OrderModel, d::Data) = _loss(tel_model(om), o.star, o.rv, d) + tel_prior(om)
@@ -34,6 +34,17 @@ loss_opt(om::OrderModel, d::Data) =
         d) + star_prior(om) + tel_prior(om)
 function loss_funcs(o::Output, om::OrderModel, d::Data)
     l() = loss(o, d)
+    _loss(tel, star, rv, d)
+    l_tel(nt::NamedTuple) = loss_tel(o, om, d)
+    l_star(nt::NamedTuple) = loss_star(o, om, d)
+    l_telstar(nt::NamedTuple) = loss_telstar(o, om, d)
+    l_rv(nt::NamedTuple) = loss_rv(o, om, d)
+    l_opt(nt::NamedTuple) = loss_opt(om, d)
+    return l, l_tel, l_star, l_telstar, l_rv, l_opt
+end
+
+function loss_funcs(o::Output, om::OrderModel, d::Data)
+    l() = loss(o, d)
     l_tel() = loss_tel(o, om, d)
     l_star() = loss_star(o, om, d)
     l_telstar() = loss_telstar(o, om, d)
@@ -42,13 +53,26 @@ function loss_funcs(o::Output, om::OrderModel, d::Data)
     return l, l_tel, l_star, l_telstar, l_rv, l_opt
 end
 
+function opt_funcs(loss::Function, pars::NamedTuple)
+    flat_initial_params, unflatten = value_flatten(pars)  # unflatten returns NamedTuple of untransformed params
+    f = loss ∘ unflatten
+    function g!(G, θ)
+        G[:] = only(Zygote.gradient(f, θ))
+    end
+    function fg_obj!(G, θ)
+        l, back = Zygote.pullback(f, θ)
+        G[:] = only(back(1))
+        return l
+    end
+    return flat_initial_params, OnceDifferentiable(f, g!, fg_obj!, flat_initial_params), unflatten
+end
 
 struct OptimSubWorkspace
-    θ::Flux.Params
+    θ::NamedTuple
     obj::OnceDifferentiable
     opt::Optim.FirstOrderOptimizer
     p0::Vector
-    function OptimSubWorkspace(θ::Flux.Params, loss::Function; use_cg::Bool=true)
+    function OptimSubWorkspace(θ::NamedTuple, loss::Function; use_cg::Bool=true)
         _, _, _, p0, obj = opt_funcs(loss, θ)
         # opt = LBFGS(alphaguess = LineSearches.InitialHagerZhang(α0=NaN))
         use_cg ? opt = ConjugateGradient() : opt = LBFGS()
@@ -57,9 +81,9 @@ struct OptimSubWorkspace
     end
     function OptimSubWorkspace(sm::Submodel, loss::Function, only_s::Bool)
         if only_s
-            θ = Flux.params(sm.lm.s)
+            θ = (s = sm.lm.s)
         else
-            θ = Flux.params(sm.lm.M, sm.lm.s, sm.lm.μ)
+            θ = (M = sm.lm.M, s = sm.lm.s, μ = sm.lm.μ)
         end
         return OptimSubWorkspace(θ, loss; use_cg=!only_s)
     end
@@ -68,17 +92,17 @@ struct OptimSubWorkspace
         T2 = typeof(sm2.lm) <: TemplateModel
         if only_s
             if T1
-                θ = Flux.params(sm2.lm.s)
+                θ = Flux.params(s = sm2.lm.s)
             elseif T2
-                θ = Flux.params(sm1.lm.s)
+                θ = Flux.params(s = sm1.lm.s)
             else
-                θ = Flux.params(sm1.lm.s, sm2.lm.s)
+                θ = Flux.params(s1 = sm1.lm.s, s2 = sm2.lm.s)
             end
         else
             if T1 && T2
-                θ = Flux.params(sm1.lm.μ, sm2.lm.μ)
+                θ = Flux.params(μ1 = sm1.lm.μ, μ2 = sm2.lm.μ)
             elseif T1
-                θ = Flux.params(sm1.lm.μ, sm2.lm.M, sm2.lm.s, sm2.lm.μ)
+                θ = Flux.params(μ1 = sm1.lm.μ, M2 = sm2.lm.M, s2 = sm2.lm.s, μ2 = sm2.lm.μ)
             elseif T2
                 θ = Flux.params(sm1.lm.M, sm1.lm.s, sm1.lm.μ, sm2.lm.μ)
             else
@@ -196,7 +220,7 @@ struct WorkspaceTotal <: OptimWorkspace
     end
 end
 
-function _Flux_optimize!(θ::Flux.Params, obj::OnceDifferentiable, p0::Vector,
+function _Flux_optimize!(θ::NamedTuple, obj::OnceDifferentiable, p0::Vector,
     opt::Optim.FirstOrderOptimizer, options::Optim.Options)
     result = Optim.optimize(obj, p0, opt, options)
     copyto!(p0, θ)
