@@ -1,4 +1,9 @@
-using TemporalGPs, Stheno, Distributions
+using AbstractGPs
+using KernelFunctions
+using TemporalGPs
+using ParameterHandling
+using Stheno
+using Distributions
 import Base.copy
 using BandedMatrices
 using SpecialFunctions
@@ -337,15 +342,19 @@ function get_mean_GP(
     return mean.(get_marginal_GP(finite_GP, ys, xs))
 end
 
-function build_gp(θ)
-    σ², l = θ
-    k = σ² * TemporalGPs.stretch(TemporalGPs.Matern52(), 1 / l)
-    f_naive = TemporalGPs.GP(k, TemporalGPs.GPC())
-    f = to_sde(f_naive, SArrayStorage(Float64))
-    #f = to_sde(f_naive)   # if develop issues with StaticArrays could revert to this
+SOAP_gp_params, unflatten = flatten((
+    var_kernel = positive(3.3270754364467443),
+    λ = positive(1 / 9.021560480866474e-5),
+))
+
+function build_gp(params)
+    f_naive = GP(params.var_kernel * Matern52Kernel() ∘ ScaleTransform(params.λ))
+    return to_sde(f_naive, SArrayStorage(Float64))
 end
 
-SOAP_gp = build_gp([3.3270754364467443, 9.021560480866474e-5])
+unpack = ParameterHandling.value ∘ unflatten
+params = unpack(SOAP_gp_params)
+SOAP_gp = build_gp(params)
 
 function _spectra_interp_gp!(fluxes, vars, log_λ, flux_obs, var_obs, log_λ_obs; gp_mean::Number=1.)
 	for i in 1:size(flux_obs, 2)
