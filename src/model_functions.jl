@@ -33,6 +33,7 @@ struct EXPRESData{T<:Real} <: Data
 		return new{T}(flux, var, log_λ_obs, log_λ_star, Σ_lsf)
 	end
 end
+EXPRESData(d::GenericData; kwargs...) = EXPRESData(d.flux, d.var, d.log_λ_obs, d.log_λ_star; kwargs...)
 struct GenericData{T<:Real} <: Data
     flux::AbstractMatrix{T}
     var::AbstractMatrix{T}
@@ -375,11 +376,11 @@ function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix
 	end
 end
 
-function n_comps_needed(sm::Submodel; threshold::Real=0.05)
-    @assert 0 < threshold < 1
-    s_var = sum(abs2, sm.lm.s; dims=2)
-    return findfirst(s_var ./ sum(s_var) .< threshold)[1] - 1
-end
+# function n_comps_needed(sm::Submodel; threshold::Real=0.05)
+#     @assert 0 < threshold < 1
+#     s_var = sum(abs2, sm.lm.s; dims=2)
+#     return findfirst(s_var ./ sum(s_var) .< threshold)[1] - 1
+# end
 
 function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2, use_gp::Bool=false, kwargs...)
 
