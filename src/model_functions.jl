@@ -1,14 +1,27 @@
 using AbstractGPs
 using KernelFunctions
 using TemporalGPs
-using ParameterHandling
-using Stheno
 using Distributions
 import Base.copy
 using BandedMatrices
 using SpecialFunctions
 
 abstract type Data end
+
+struct GenericData{T<:Real} <: Data
+    flux::AbstractMatrix{T}
+    var::AbstractMatrix{T}
+    log_λ_obs::AbstractMatrix{T}
+    log_λ_star::AbstractMatrix{T}
+	function GenericData(flux::AbstractMatrix{T}, var, log_λ_obs, log_λ_star) where {T<:Real}
+		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
+		return new{T}(flux, var, log_λ_obs, log_λ_star)
+	end
+end
+(d::GenericData)(inds::AbstractVecOrMat) =
+	GenericData(view(d.flux, :, inds), view(d.var, :, inds),
+	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds))
+Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star))
 
 _EXPRES_lsf_FWHM = 4.5  # roughly. See http://exoplanets.astro.yale.edu/science/activity.php
 _EXPRES_lsf_σ = _EXPRES_lsf_FWHM / (2 * sqrt(2 * log(2)))
@@ -34,21 +47,6 @@ struct EXPRESData{T<:Real} <: Data
 	end
 end
 EXPRESData(d::GenericData; kwargs...) = EXPRESData(d.flux, d.var, d.log_λ_obs, d.log_λ_star; kwargs...)
-struct GenericData{T<:Real} <: Data
-    flux::AbstractMatrix{T}
-    var::AbstractMatrix{T}
-    log_λ_obs::AbstractMatrix{T}
-    log_λ_star::AbstractMatrix{T}
-	function Data(flux::AbstractMatrix{T}, var, log_λ_obs, log_λ_star) where {T<:Real}
-		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
-		return new{T}(flux, var, log_λ_obs, log_λ_star)
-	end
-end
-(d::GenericData)(inds::AbstractVecOrMat) =
-	GenericData(view(d.flux, :, inds), view(d.var, :, inds),
-	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds))
-Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star))
-
 
 function create_λ_template(log_λ_obs, resolution)
     log_min_wav, log_max_wav = [minimum(log_λ_obs), maximum(log_λ_obs)]
@@ -343,19 +341,19 @@ function get_mean_GP(
     return mean.(get_marginal_GP(finite_GP, ys, xs))
 end
 
-SOAP_gp_params, unflatten = flatten((
-    var_kernel = positive(3.3270754364467443),
-    λ = positive(1 / 9.021560480866474e-5),
-))
-
-function build_gp(params)
-    f_naive = GP(params.var_kernel * Matern52Kernel() ∘ ScaleTransform(params.λ))
-    return to_sde(f_naive, SArrayStorage(Float64))
+function build_gp(params::NamedTuple)
+	f_naive = GP(params.var_kernel * Matern52Kernel() ∘ ScaleTransform(params.λ))
+	return to_sde(f_naive, SArrayStorage(Float64))
 end
 
-unpack = ParameterHandling.value ∘ unflatten
-params = unpack(SOAP_gp_params)
-SOAP_gp = build_gp(params)
+SOAP_gp_params = (var_kernel = 3.3270754364467443, λ = 1 / 9.021560480866474e-5)
+SOAP_gp = build_gp(SOAP_gp_params)
+
+# ParameterHandling version
+# SOAP_gp_params = (var_kernel = positive(3.3270754364467443), λ = positive(1 / 9.021560480866474e-5))
+# flat_SOAP_gp_params, unflatten = value_flatten(SOAP_gp_params)
+# # unflatten(flat_SOAP_gp_params) == ParameterHandling.value(SOAP_gp_params)  # true
+# SOAP_gp = build_gp(ParameterHandling.value(SOAP_gp_params))
 
 function _spectra_interp_gp!(fluxes, vars, log_λ, flux_obs, var_obs, log_λ_obs; gp_mean::Number=1.)
 	for i in 1:size(flux_obs, 2)
