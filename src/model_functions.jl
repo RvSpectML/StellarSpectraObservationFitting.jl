@@ -186,6 +186,13 @@ _eval_lm(M::AbstractVecOrMat, s::AbstractVecOrMat, μ::AbstractVector) = _eval_f
 (blm::BaseLinearModel)(inds::AbstractVecOrMat) = _eval_blm(view(blm.M, inds, :), blm.s)
 (tlm::TemplateModel)(inds::AbstractVecOrMat) = repeat(view(tlm.μ, inds), 1, tlm.n)
 
+function copy_LinearModel!(from::LinearModel, to::LinearModel)
+	@assert typeof(to)==typeof(from)
+	for i in fieldnames(typeof(from))
+		getfield(to, i)[:] = getfield(from, i)
+	end
+end
+
 struct Submodel{T<:Number}
     log_λ::AbstractVector{T}
     λ::AbstractVector{T}
