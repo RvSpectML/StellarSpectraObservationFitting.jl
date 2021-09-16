@@ -79,17 +79,25 @@ lc_rvs = rvs .- median(rvs; dims=4); lc_rvs_σ = copy(rvs_σ)
 # my_scatter(orders, mean(rvs; dims=2); series_annotations=annot, legend=:topleft)
 rvs .-= median(rvs; dims=2)
 med_rvs_σ = vec(median(rvs_σ; dims=2))
+rvs_std = vec(std(rvs; dims=2))
 σ_floor = 50
 
-# plt = my_scatter(orders, std(rvs; dims=2); legend=:topleft, label="", title="$star RV std", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
-# png(plt, prep_str * star * "_order_rv_std")
-# annot = text.(orders, :center, :black, 3)
-# plt = my_scatter(orders, med_rvs_σ; legend=:topleft, label="", title="$star Median σ", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, yaxis=:log)
+annot = text.(orders[rvs_std .< σ_floor], :center, :black, 3)
+plt = my_scatter(orders[rvs_std .< σ_floor], rvs_std[rvs_std .< σ_floor]; legend=:topleft, label="", title="$star RV std", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor])
+annot = text.(orders[rvs_std .> σ_floor], :center, :black, 3)
+my_scatter!(plt, orders[rvs_std .> σ_floor], ones(sum(rvs_std .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=plt_colors[1])
+png(plt, prep_str * star * "_order_rv_std")
+
 annot = text.(orders[med_rvs_σ .< σ_floor], :center, :black, 3)
 plt = my_scatter(orders[med_rvs_σ .< σ_floor], med_rvs_σ[med_rvs_σ .< σ_floor]; legend=:topleft, label="", title="$star Median σ", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor])
-# png(plt, prep_str * star * "_order_rv_σ")
-# plt = my_scatter(orders, std(rvs; dims=2) ./ med_rvs_σ; legend=:topleft, label="", title="$star (RV std) / (Median σ)", xlabel="Order", size=(_plt_size[1]*0.5,_plt_size[2]*0.75))
-# png(plt, prep_str * star * "_order_rv_ratio")
+annot = text.(orders[med_rvs_σ .> σ_floor], :center, :black, 3)
+my_scatter!(plt, orders[med_rvs_σ .> σ_floor], ones(sum(med_rvs_σ .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=plt_colors[1])
+png(plt, prep_str * star * "_order_rv_σ")
+
+annot = text.(orders, :center, :black, 3)
+plt = my_scatter(orders, std(rvs; dims=2) ./ med_rvs_σ; legend=:topleft, label="", title="$star (RV std) / (Median σ)", xlabel="Order", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot)
+png(plt, prep_str * star * "_order_rv_ratio")
+
 χ² = vec(sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2))
 annot = text.(orders[sortperm(χ²)], :center, :black, 4)
 plt = my_scatter(1:length(χ²), sort(χ²); label="χ²", series_annotations=annot, legend=:topleft, title=prep_str * star * "_χ²") #, yaxis=:log)
@@ -110,13 +118,13 @@ eo_rv_σ = expres_output."CBC RV Err. [m/s]"
 eo_time = expres_output."Time [MJD]"
 
 # Compare RV differences to actual RVs from activity
-plt = plot_model_rvs_new(times_nu, rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ; markerstrokewidth=1, title="HD"*star)
+plt = plot_model_rvs_new(times_nu, rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ; markerstrokewidth=1, title="HD$star (median σ: $(round(median(rvs_σ_red), digits=3)))")
 png(plt, prep_str * star * "_model_rvs.png")
 # end
 
 ## low component testing plot
 using StatsBase
-use_mad = true
+use_mad = false
 use_mad ? hmm = mad(lc_rvs; dims=4) : hmm = std(lc_rvs; dims=4)
 hmm[hmm .== 0] .= Inf
 hmm2 = median(lc_rvs_σ; dims=4)
