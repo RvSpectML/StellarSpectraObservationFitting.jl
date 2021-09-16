@@ -151,6 +151,8 @@ struct BaseLinearModel{T<:Number} <: LinearModel
 	end
 end
 Base.copy(blm::BaseLinearModel) = BaseLinearModel(copy(blm.M), copy(blm.s))
+LinearModel(blm::BaseLinearModel, inds::AbstractVecOrMat) =
+	BaseLinearModel(blm.M, view(blm.s, :, inds))
 
 # Template (no bases) model
 struct TemplateModel{T<:Number} <: LinearModel
@@ -159,12 +161,23 @@ struct TemplateModel{T<:Number} <: LinearModel
 	TemplateModel(μ::Vector{T}, n) where {T<:Number} = new{T}(μ, n)
 end
 Base.copy(tlm::TemplateModel) = TemplateModel(copy(tlm.μ), tlm.n)
+LinearModel(tm::TemplateModel, inds::AbstractVecOrMat) = tm
+
+LinearModel(M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector) = FullLinearModel(M, s, μ)
+LinearModel(M::AbstractMatrix, s::AbstractMatrix) = BaseLinearModel(M, s)
+LinearModel(μ::AbstractVector, n::Int) = TemplateModel(μ, n)
+
+LinearModel(lm::FullLinearModel, s::AbstractMatrix) = FullLinearModel(lm.M, s, lm.μ)
+LinearModel(lm::BaseLinearModel, s::AbstractMatrix) = BaseLinearModel(lm.M, s)
+LinearModel(lm::TemplateModel, s::AbstractMatrix) = lm
 
 LinearModel(blm::BaseLinearModel, inds::AbstractVecOrMat) =
 	BaseLinearModel(blm.M, view(blm.s, :, inds))
 _eval_blm(M::AbstractVecOrMat, s::AbstractVecOrMat) = M * s
 _eval_flm(M::AbstractVecOrMat, s::AbstractVecOrMat, μ::AbstractVector) =
 	_eval_blm(M, s) .+ μ
+_eval_lm(M::AbstractVecOrMat, s::AbstractVecOrMat) = _eval_blm(M, s)
+_eval_lm(M::AbstractVecOrMat, s::AbstractVecOrMat, μ::AbstractVector) = _eval_flm(M, s, μ)
 
 (flm::FullLinearModel)() = _eval_flm(flm.M, flm.s, flm.μ)
 (blm::BaseLinearModel)() = _eval_blm(blm.M, blm.s)
@@ -306,9 +319,10 @@ star_prior(om::OrderModel) = model_prior(om.star.lm, om.reg_star)
 spectra_interp(og_vals::AbstractMatrix, lih) =
     (og_vals[lih.li] .* (1 .- lih.ratios)) + (og_vals[lih.li .+ 1] .* (lih.ratios))
 
-tel_model(om) = spectra_interp(om.tel(), om.lih_t2o)
-star_model(om) = spectra_interp(om.star(), om.lih_b2o)
-rv_model(om) = spectra_interp(om.rv(), om.lih_b2o)
+interped_model(lm::LinearModel, lih::LinearInterpolationHelper) = spectra_interp(lm(), lih)
+tel_model(om::OrderModel) = interped_model(om.tel.lm, om.lih_t2o)
+star_model(om::OrderModel) = interped_model(om.star.lm, om.lih_b2o)
+rv_model(om::OrderModel) = interped_model(om.rv.lm, om.lih_b2o)
 
 
 function fix_FullLinearModel_s!(flm, min::Number, max::Number)
