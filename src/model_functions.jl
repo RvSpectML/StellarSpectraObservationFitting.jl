@@ -25,6 +25,7 @@ Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.log_λ
 
 _EXPRES_lsf_FWHM = 4.5  # roughly. See http://exoplanets.astro.yale.edu/science/activity.php
 _EXPRES_lsf_σ = _EXPRES_lsf_FWHM / (2 * sqrt(2 * log(2)))
+_EXPRES_span = Int(round(2 * _EXPRES_lsf_σ))
 
 struct EXPRESData{T<:Real} <: Data
     flux::AbstractMatrix{T}
@@ -32,17 +33,20 @@ struct EXPRESData{T<:Real} <: Data
     log_λ_obs::AbstractMatrix{T}
     log_λ_star::AbstractMatrix{T}
 	Σ_lsf::AbstractMatrix{T}
-	function EXPRESData(flux::AbstractMatrix{T}, var, log_λ_obs, log_λ_star; span::Int=4) where {T<:Real}
+	function EXPRESData(flux::AbstractMatrix{T}, var, log_λ_obs, log_λ_star; span::Int=_EXPRES_span) where {T<:Real}
 		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
-		lsf_pm_4 = [erf((i+0.5)/_EXPRES_lsf_σ) - erf((i-0.5)/_EXPRES_lsf_σ) for i in -span:span]
-		x = zeros(20, 20)
-		xl = size(x, 2)
-		for i in 1:xl
-		    low = max(i - span, 1); high = min(i + span, xl);
-		    x[low:high, i] = view(lsf_pm_4, (low + span + 1 - i):(high + span + 1 - i))
-		    x[low:high, i] ./= sum(x[low:high, i])
+		lsf_pm_span = [erf((i+0.5)/_EXPRES_lsf_σ) - erf((i-0.5)/_EXPRES_lsf_σ) for i in -span:span]
+		n_pix = size(flux, 1)
+		Σ_lsf = zeros(n_pix, n_pix)
+		for i in 1:n_pix
+			low, high = banded_inds(i, span, n_pix)
+			lsf_view = view(lsf_pm_span, (low + span + 1 - i):(high + span + 1 - i))
+			norm = sum(lsf_view)
+		    Σ_lsf[low:high, i] += lsf_view / norm
+			Σ_lsf[i, low:high] += lsf_view / norm
+			Σ_lsf[i, i] -= lsf_pm_span[span + 1] / norm
 		end
-		Σ_lsf = BandedMatrix(x, (span, span))
+		Σ_lsf = BandedMatrix(Σ_lsf, (span, span))
 		return new{T}(flux, var, log_λ_obs, log_λ_star, Σ_lsf)
 	end
 end
@@ -171,8 +175,6 @@ LinearModel(lm::FullLinearModel, s::AbstractMatrix) = FullLinearModel(lm.M, s, l
 LinearModel(lm::BaseLinearModel, s::AbstractMatrix) = BaseLinearModel(lm.M, s)
 LinearModel(lm::TemplateModel, s::AbstractMatrix) = lm
 
-LinearModel(blm::BaseLinearModel, inds::AbstractVecOrMat) =
-	BaseLinearModel(blm.M, view(blm.s, :, inds))
 _eval_blm(M::AbstractVecOrMat, s::AbstractVecOrMat) = M * s
 _eval_flm(M::AbstractVecOrMat, s::AbstractVecOrMat, μ::AbstractVector) =
 	_eval_blm(M, s) .+ μ

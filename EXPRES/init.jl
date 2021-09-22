@@ -97,7 +97,7 @@ for order in 1:n_orders
 		    log_λ_obs[:, i] = log.(all_spectra[i].λ_obs[mask_inds, order])
 		    log_λ_star[:, i] = log.(all_spectra[i].λ[mask_inds, order])
 		end
-		data = SSOF.Data(flux_obs, var_obs, log_λ_obs, log_λ_star)
+		data = SSOF.EXPRESData(flux_obs, var_obs, log_λ_obs, log_λ_star)
 		SSOF.process!(data; order=6)
 		# x = copy(data.flux)
 		# x[data.var .> 1] .= 0
