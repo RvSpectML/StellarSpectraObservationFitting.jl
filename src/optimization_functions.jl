@@ -1,15 +1,20 @@
 # using LineSearches
 using ParameterHandling
 using Optim
+using Zygote
 
 function _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::EXPRESData)
     y = (tel .* (star + rv)) - d.flux
     ans = 0
     Σ_thing = copy(d.Σ_lsf)
-    for i in 1:size(y, 1)  # for each time
+    n_pix = size(Σ_thing, 1)
+    @assert Σ_thing.l == Σ_thing.u
+    span = Σ_thing.l
+    for i in 1:size(y, 2)  # for each time
         yview = view(y, :, i)
-        for j in 1:size(y, 2)  # for each pixel
-            Σ_thing[:, j] = view(d.Σ_lsf, :, j) .* d.var[i, j]
+        for j in 1:size(y, 1)  # for each pixel
+            low, high = banded_inds(j, span, n_pix)
+            Σ_thing[low:high, j] .*= d.var[j, i]
         end
         ans += yview' * (Σ_thing \ yview)
     end
@@ -20,7 +25,7 @@ _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericD
 
 
 function loss(o::Output, om::OrderModel, d::Data;
-    tel::LinearModel=om.tel, star::LinearModel=om.star, rv::LinearModel=om.rv)
+    tel::LinearModel=om.tel.lm, star::LinearModel=om.star.lm, rv::LinearModel=om.rv.lm)
 
     tel !== om.tel ? tel_o = interped_model(tel, om.lih_t2o) : tel_o = o.tel
     star !== om.star ? star_o = interped_model(star, om.lih_b2o) : star_o = o.star
@@ -28,21 +33,21 @@ function loss(o::Output, om::OrderModel, d::Data;
     return _loss(tel_o, star_o, rv_o, d)
 end
 
-possible_θ = Union{LinearModel, AbstractVector, NamedTuple}
+possible_θ = Union{LinearModel, AbstractMatrix, NamedTuple}
 
 function loss_funcs(o::Output, om::OrderModel, d::Data)
     l() = loss(o, om, d)
 
     l_tel(tel::LinearModel) = loss(o, om, d; tel=tel) +
         model_prior(tel, om.reg_tel)
-    function l_tel_s(tel::AbstractVector)
+    function l_tel_s(tel::AbstractMatrix)
         lm = LinearModel(om.tel, tel)
         return loss(o, om, d; tel = lm) + model_prior(lm, om.reg_tel)
     end
 
     l_star(star::LinearModel) = loss(o, om, d; star = star) +
         model_prior(star, om.reg_star)
-    function l_star_s(star::AbstractVector)
+    function l_star_s(star::AbstractMatrix)
         lm = LinearModel(om.star, star)
         return loss(o, om, d; star = lm) + model_prior(lm, om.star_tel)
     end
@@ -50,20 +55,20 @@ function loss_funcs(o::Output, om::OrderModel, d::Data)
     l_telstar(nt::NamedTuple{(:tel, :star,),<:Tuple{LinearModel, LinearModel}}) =
         loss(o, om, d; tel = nt.tel, star = nt.star) +
         model_prior(nt.tel, om.reg_tel) + model_prior(nt.star, om.reg_star)
-    function l_telstar_s(nt::NamedTuple{(:tel, :star,),<:Tuple{AbstractVector, AbstractVector}})
+    function l_telstar_s(nt::NamedTuple{(:tel, :star,),<:Tuple{AbstractMatrix, AbstractMatrix}})
         tel = LinearModel(om.tel, nt.tel)
         star = LinearModel(om.star, nt.star)
         return loss(o, om, d; tel=tel, star=star) +
             model_prior(tel, om.reg_tel) + model_prior(star, om.reg_star)
     end
 
-    l_rv(rv::AbstractVector) = loss(o, om, d; rv=BaseLinearModel(om.rv.M, rv))
+    l_rv(rv::AbstractMatrix) = loss(o, om, d; rv=BaseLinearModel(om.rv.M, rv))
 
-    function l_total(nt::NamedTuple{(:tel, :star, :rv,),<:Tuple{LinearModel, LinearModel, AbstractVector}})
+    function l_total(nt::NamedTuple{(:tel, :star, :rv,),<:Tuple{LinearModel, LinearModel, AbstractMatrix}})
         rv = BaseLinearModel(calc_doppler_component_RVSKL_Flux(om.star.λ, nt.star.μ), nt.rv)
         return loss(o, om, d; tel=nt.tel, star=nt.star, rv=rv) + model_prior(nt.tel, om.reg_tel) + model_prior(nt.star, om.reg_star)
     end
-    function l_total_s(nt::NamedTuple{(:tel, :star, :rv,),<:Tuple{AbstractVector, AbstractVector, AbstractVector}})
+    function l_total_s(nt::NamedTuple{(:tel, :star, :rv,),<:Tuple{AbstractMatrix, AbstractMatrix, AbstractMatrix}})
         tel = LinearModel(om.tel, nt.tel)
         star = LinearModel(om.star, nt.star)
         rv = BaseLinearModel(calc_doppler_component_RVSKL_Flux(om.star.λ, om.star.μ), nt.rv)
@@ -79,14 +84,14 @@ function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
     l_telstar(nt::NamedTuple{(:tel, :star,),<:Tuple{LinearModel, LinearModel}}) =
         loss(o, om, d; tel = nt.tel, star = nt.star) +
         model_prior(nt.tel, om.reg_tel) + model_prior(nt.star, om.reg_star)
-    function l_telstar_s(star::AbstractVector)
+    function l_telstar_s(star::AbstractMatrix)
         tel = LinearModel(om.tel, nt.tel)
         star = LinearModel(om.star, nt.star)
         return loss(o, om, d; tel=tel, star=star) +
             model_prior(tel, om.reg_tel) + model_prior(star, om.reg_star)
     end
 
-    l_rv(rv::AbstractVector) = loss(o, om, d; rv=BaseLinearModel(om.rv.M, rv))
+    l_rv(rv::AbstractMatrix) = loss(o, om, d; rv=BaseLinearModel(om.rv.M, rv))
 
     return l, l_telstar, l_telstar_s, l_rv
 end
@@ -94,11 +99,11 @@ end
 function loss_funcs_total(o::Output, om::OrderModel, d::Data)
     l() = loss(o, om, d)
 
-    function l_total(nt::NamedTuple{(:tel, :star, :rv,),<:Tuple{LinearModel, LinearModel, AbstractVector}})
+    function l_total(nt::NamedTuple{(:tel, :star, :rv,),<:Tuple{LinearModel, LinearModel, AbstractMatrix}})
         rv = BaseLinearModel(calc_doppler_component_RVSKL_Flux(om.star.λ, nt.star.μ), nt.rv)
         return loss(o, om, d; tel=nt.tel, star=nt.star, rv=rv) + model_prior(nt.tel, om.reg_tel) + model_prior(nt.star, om.reg_star)
     end
-    function l_total_s(nt::NamedTuple{(:tel, :star, :rv,),<:Tuple{AbstractVector, AbstractVector, AbstractVector}})
+    function l_total_s(nt::NamedTuple{(:tel, :star, :rv,),<:Tuple{AbstractMatrix, AbstractMatrix, AbstractMatrix}})
         tel = LinearModel(om.tel, nt.tel)
         star = LinearModel(om.star, nt.star)
         rv = BaseLinearModel(calc_doppler_component_RVSKL_Flux(om.star.λ, om.star.μ), nt.rv)
@@ -108,7 +113,7 @@ function loss_funcs_total(o::Output, om::OrderModel, d::Data)
     return l, l_total, l_total_s
 end
 
-function opt_funcs(loss::Function, pars::NamedTuple)
+function opt_funcs(loss::Function, pars::possible_θ)
     flat_initial_params, unflatten = flatten(pars)  # unflatten returns NamedTuple of untransformed params
     f = loss ∘ unflatten
     function g!(G, θ)
@@ -133,7 +138,7 @@ struct OptimSubWorkspace
         # opt = LBFGS(alphaguess = LineSearches.InitialHagerZhang(α0=NaN))
         use_cg ? opt = ConjugateGradient() : opt = LBFGS()
         # initial_state(method::LBFGS, ...) doesn't use the options for anything
-        return OptimSubWorkspace(θ, obj, opt, p0, unflatten)
+        return new(θ, obj, opt, p0, unflatten)
     end
 end
 
@@ -157,7 +162,7 @@ struct Workspace <: OptimWorkspace
             tel = OptimSubWorkspace(om.tel.lm, loss_tel; use_cg=!only_s)
             star = OptimSubWorkspace(om.star.lm, loss_star; use_cg=!only_s)
         end
-        ow = Workspace(tel, star, rv, om, o, d, only_s)
+        ow = new(tel, star, rv, om, o, d, only_s)
         if return_loss_f
             return ow, loss
         else
@@ -183,7 +188,7 @@ struct WorkspaceTelStar <: OptimWorkspace
         only_s ?
             telstar = OptimSubWorkspace((tel = om.tel.lm.s, star = om.star.lm.s,), loss_telstar_s; use_cg=!only_s) :
             telstar = OptimSubWorkspace((tel = om.tel.lm, star = om.star.lm,), loss_telstar; use_cg=!only_s)
-        ow = WorkspaceTelStar(telstar, rv, om, o, d, only_s)
+        ow = new(telstar, rv, om, o, d, only_s)
         if return_loss_f
             return ow, loss
         else
@@ -215,7 +220,7 @@ struct WorkspaceTotal <: OptimWorkspace
         only_s ?
             total = OptimSubWorkspace((tel = om.tel.lm.s, star = om.star.lm.s, rv = om.rv.lm.s), loss_total_s; use_cg=!only_s) :
             total = OptimSubWorkspace((tel = om.tel.lm, star = om.star.lm, rv=om.rv.lm.s), loss_total; use_cg=!only_s)
-        ow = WorkspaceTotal(total, om, o, d, only_s)
+        ow = new(total, om, o, d, only_s)
         if return_loss_f
             return ow, loss
         else
@@ -227,7 +232,6 @@ struct WorkspaceTotal <: OptimWorkspace
     WorkspaceTotal(om::OrderModel, d::Data; kwargs...) =
         WorkspaceTotal(om, Output(om), d; kwargs...)
 end
-
 
 
 function _OSW_optimize!(osw::OptimSubWorkspace, options::Optim.Options; return_result::Bool=true)

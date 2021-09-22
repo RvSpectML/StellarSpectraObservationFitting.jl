@@ -84,3 +84,9 @@ function parse_args(ind::Int, type::DataType, default)
         return default
     end
 end
+
+
+function banded_inds(row::Int, span::Int, row_len::Int)
+	low = max(row - span, 1); high = min(row + span, row_len);
+	return low, high
+end
