@@ -1,5 +1,7 @@
-# using Pkg
-# Pkg.activate("EXPRES")
+using Pkg
+Pkg.activate("EXPRES")
+import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
+Pkg.update()
 
 using Distributions
 using LinearAlgebra
@@ -113,49 +115,70 @@ histogram(vec(sum(ev;dims=1)))
 
 using CSV, DataFrames
 SSOF_path = dirname(dirname(pathof(SSOF)))
-if interactive
-    include(SSOF_path * "/src/_plot_functions.jl")
-end
+include(SSOF_path * "/src/_plot_functions.jl")
 
-eo = CSV.read("D:/Christian/Downloads/expres_psf.txt", DataFrame)
+# eo = CSV.read("D:/Christian/Downloads/expres_psf.txt", DataFrame)
+eo = CSV.read("C:/Users/chris/Downloads/expres_psf.txt", DataFrame)
 filter!(:line => ==("LFC"), eo)
 sort!(eo, ["wavenumber [1/cm]"])
 
-λs = 1e8 ./ eo."wavenumber [1/cm]"
-FWHM = λs .* (eo."fwhm [1/cm]" ./ eo."wavenumber [1/cm]")
-plt = my_scatter(λs, FWHM; label="", xlabel="Wavelength (Å)", ylabel="LSF FWHM (Å?)")
-png(plt, "expres_lsf")
-
-λs = eo."wavenumber [1/cm]"[:]
-FWHM = eo."fwhm [1/cm]"[:]
-inds1 = eo.order .== 38
-inds2 = eo.order .== 39
-plt = my_scatter(λs[inds1], FWHM[inds1]; label="", xlabel="Wavelength (1/cm)", ylabel="LSF FWHM (1/cm)")
-scatter!(λs[inds2], FWHM[inds2]; label="")
-png(plt, "expres_lsf_zoom")
-
-poly_order = 2
-dm = ones(size(eo, 1), 2 + poly_order)
-orders = [i for i in 1:100 if i in eo.order]
-for order in orders
-    inds_temp = eo.order .== order
-    df = filter(:order => ==(order), eo)
-    dm[inds_temp, 2] = df."wavenumber [1/cm]"
-    dm[inds_temp, 3] = dm[inds_temp, 2] .- mean(dm[inds_temp, 2])
-    for i in 2:poly_order
-        dm[inds_temp, i+2] = dm[inds_temp, 3] .^ i
+begin
+    use_wavenumber = false; use_log = true
+    if use_wavenumber
+        λs_func(wn) = wn[:]
+        dλs_func(wn) = ones(length(wn))
+        unit_str = "1/cm"
+        xlab = "Wavenumber ($unit_str)"
+    else
+        use_log ? λs_func(wn) = log.(1e8 ./ wn) : λs_func(wn) = 1e8 ./ wn
+        use_log ? dλs_func(wn) = -1 ./ wn : dλs_func(wn) = -1e8 ./ (wn .^ 2)
+        unit_str = "Å?"
+        xlab = "Wavelength ($unit_str)"
     end
+    λs = λs_func(eo."wavenumber [1/cm]")
+    FWHM = λs .* (eo."fwhm [1/cm]" ./ eo."wavenumber [1/cm]")
+    # plt = my_scatter(λs, FWHM; label="", xlabel=xlab, ylabel="LSF FWHM ($unit_str)")
+    # png(plt, "expres_lsf")
+    #
+    # inds1 = eo.order .== 38
+    # inds2 = eo.order .== 39
+    # plt = my_scatter(λs[inds1], FWHM[inds1]; label="", xlabel=xlab, ylabel="LSF FWHM ($unit_str)")
+    # scatter!(λs[inds2], FWHM[inds2]; label="")
+    # png(plt, "expres_lsf_zoom")
+
+
+    poly_order = 2
+    dm = ones(size(eo, 1), 3 + poly_order)
+    # dm = ones(size(eo, 1), 5)
+    orders = [i for i in 1:100 if i in eo.order]
+    for order in orders
+        inds_temp = eo.order .== order
+        df = filter(:order => ==(order), eo)
+        dm[inds_temp, 2] = λs_func(df."wavenumber [1/cm]")
+        dm[inds_temp, 3] = dm[inds_temp, 2] .^ 2
+        dm[inds_temp, 4] = dm[inds_temp, 2] .- mean(dm[inds_temp, 2])
+        # dm[inds_temp, 5] = 1 ./ dm[inds_temp, 4]
+        for i in 2:poly_order
+            dm[inds_temp, i+3] = dm[inds_temp, 4] .^ i
+        end
+    end
+    w = SSOF.general_lst_sq(dm, FWHM, (dλs_func(eo."wavenumber [1/cm]") .* eo."fwhm error [1/cm]") .^ 2)
+    model = dm * w
+
+    lsf_width_log_λ(logλ, logλ_m_order_mean) = [1, logλ, logλ*logλ, logλ_m_order_mean, logλ_m_order_mean*logλ_m_order_mean]' * w
+    lsf_width_log_λ(8.7, 0)
+
+    plt = my_scatter(λs, FWHM; label="", xlabel=xlab, ylabel="LSF FWHM ($unit_str)")
+    for order in orders
+        inds_temp = eo.order .== order
+        plot!(λs[inds_temp], model[inds_temp]; label="", lw=4)
+    end
+
 end
-w = SSOF.general_lst_sq(dm, FWHM, (eo."fwhm error [1/cm]") .^ 2)
-model = dm * w
-plt = my_scatter(λs, FWHM; label="", xlabel="Wavelength (1/cm)", ylabel="LSF FWHM (1/cm)")
-for order in orders
-    inds_temp = eo.order .== order
-    plot!(λs[inds_temp], model[inds_temp]; label="", lw=4)
-end
+plt
 png(plt, "expres_lsf_model")
 
-plt = my_scatter(λs[inds1], FWHM[inds1]; label="", xlabel="Wavelength (1/cm)", ylabel="LSF FWHM (1/cm)")
+plt = my_scatter(λs[inds1], FWHM[inds1]; label="", xlabel=xlab, ylabel="LSF FWHM ($unit_str)")
 scatter!(λs[inds2], FWHM[inds2]; label="")
 plot!(λs[inds1], model[inds1]; label="model", lw=6, c=plt_colors[6])
 plot!(λs[inds2], model[inds2]; label="model", lw=6)
@@ -163,8 +186,8 @@ png(plt, "expres_lsf_model_zoom")
 
 resids = FWHM ./ model
 std(resids)
-plt = my_scatter(λs, resids; label="data / model", xlabel="Wavelength (1/cm)", ylabel="LSF FWHM (1/cm)")
+plt = my_scatter(λs, resids; label="data / model", xlabel=xlab, ylabel="LSF FWHM ($unit_str)")
 png(plt, "expres_lsf_resids")
-plt = scatter(λs[inds1], resids[inds1]; label="data / model", xlabel="Wavelength (1/cm)", ylabel="LSF FWHM (1/cm)")
+plt = scatter(λs[inds1], resids[inds1]; label="data / model", xlabel=xlab, ylabel="LSF FWHM ($unit_str)")
 scatter!(λs[inds2], resids[inds2]; label="data / model")
 png(plt, "expres_lsf_resids_zoom")

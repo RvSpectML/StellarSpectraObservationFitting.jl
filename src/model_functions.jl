@@ -62,7 +62,60 @@ function create_λ_template(log_λ_obs, resolution)
     return len, log_λ_template, λ_template
 end
 
-struct LinearInterpolationHelper{T<:Number}
+abstract type InterpolationHelper end
+
+[i /_EXPRES_lsf_σ for i in 1:2:20]
+Int(ceil((_EXPRES_lsf_σ * 6 - 1) / 2) * 2 + 1)
+
+
+BandedMatrix()
+
+
+struct LSFInterpolationHelper <: InterpolationHelper
+    ratios::Vector{BandedMatrix}
+end
+function LSFInterpolationHelper(to_λs::AbstractVecOrMat, from_λs::AbstractMatrix, to_σs::AbstractVecOrMat, from_σs::AbstractMatrix)
+	len_from, n_obs = size(from_λs)
+	len_to = size(to_λs, 1)
+
+
+	lower_inds_t2f = zeros(Int, (len_from, n_obs))
+	lower_inds_f2t = zeros(Int, (len_to, n_obs))
+	ratios_t2f = zeros((len_from, n_obs))
+	ratios_f2t = zeros((len_to, n_obs))
+
+	function helper!(λs1, λs2)
+
+		lower_inds[:, j] = searchsortednearest(λs1, λs2; lower=true)
+		for i in 1:size(lower_inds, 1)
+			# if point is after the end, just say the point is at the end
+			if lower_inds[i, j] >= len
+				lower_inds[i, j] = len - 1
+				ratios[i, j] = 1
+			# if point is before the start, keep ratios to be 0
+			elseif λs2[i] >= λs1[lower_inds[i, j]]
+				x0 = λs1[lower_inds[i, j]]
+				x1 = λs1[lower_inds[i, j]+1]
+				ratios[i, j] = (λs2[i] - x0) / (x1 - x0)
+			end
+			@assert 0 <= ratios[i,j] <= 1 "something is off with ratios[$i,$j] = $(ratios[i,j])"
+		end
+	end
+
+	for j in 1:n_obs
+    	current_from_λs = view(from_λs, :, j)
+
+		helper!(j, len_to, lower_inds_t2f, ratios_t2f, to_λs, current_from_λs)
+		helper!(j, len_from, lower_inds_f2t, ratios_f2t, current_from_λs, to_λs)
+		lower_inds_t2f[:, j] .+= (j - 1) * len_to
+		lower_inds_f2t[:, j] .+= (j - 1) * len_from
+	end
+
+	return LinearInterpolationHelper(lower_inds_t2f, ratios_t2f), LinearInterpolationHelper(lower_inds_f2t, ratios_f2t)
+end
+
+
+struct LinearInterpolationHelper{T<:Number} <: InterpolationHelper
     li::AbstractMatrix{Int}  # lower indices
     ratios::AbstractMatrix{T}
 	function LinearInterpolationHelper(
@@ -325,7 +378,7 @@ downsize(m::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
 tel_prior(om::OrderModel) = model_prior(om.tel.lm, om.reg_tel)
 star_prior(om::OrderModel) = model_prior(om.star.lm, om.reg_star)
 
-spectra_interp(og_vals::AbstractMatrix, lih) =
+spectra_interp(og_vals::AbstractMatrix, lih::LinearInterpolationHelper) =
     (og_vals[lih.li] .* (1 .- lih.ratios)) + (og_vals[lih.li .+ 1] .* (lih.ratios))
 
 interped_model(lm::LinearModel, lih::LinearInterpolationHelper) = spectra_interp(lm(), lih)
