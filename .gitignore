@@ -14,4 +14,5 @@ test.jl
 *.pbs
 outputs/
 *.jld2
+*.txt
 alex_stuff/
