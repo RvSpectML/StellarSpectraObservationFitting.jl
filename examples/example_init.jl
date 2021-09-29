@@ -37,10 +37,7 @@ data = SSOF.Data(flux_obs, var_obs, log_λ_obs, log_λ_star)
 
 ## Initializing models
 
-star_model_res = 2 * sqrt(2) * obs_resolution
-tel_model_res = sqrt(2) * obs_resolution
-
-@time model = SSOF.OrderModel(data, star_model_res, tel_model_res, "SOAP", 0)
+@time model = SSOF.OrderModel(data, "SOAP", 0)
 
 @time rvs_notel, rvs_naive = SSOF.initialize!(model, data; use_gp=true)
 

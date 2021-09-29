@@ -25,8 +25,7 @@ if !use_reg
     save_path *= "noreg_"
 end
 
-model_res = 2 * sqrt(2) * 150000
-@time test_model = SSOF.OrderModel(data, model_res, model_res, "EXPRES", desired_order, star; n_comp_tel=2, n_comp_star=2)
+@time test_model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=2, n_comp_star=2)
 @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(test_model, data; use_gp=true)
 if !use_reg
     SSOF.zero_regularization(test_model)

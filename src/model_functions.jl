@@ -52,14 +52,12 @@ struct EXPRESData{T<:Real} <: Data
 end
 EXPRESData(d::GenericData; kwargs...) = EXPRESData(d.flux, d.var, d.log_λ_obs, d.log_λ_star; kwargs...)
 
-function create_λ_template(log_λ_obs, resolution)
+function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=2*sqrt(2))
     log_min_wav, log_max_wav = [minimum(log_λ_obs), maximum(log_λ_obs)]
-    len = Int(ceil((exp(log_max_wav) - exp(log_min_wav)) * resolution / exp((log_max_wav + log_min_wav)/2)))
-    log_Δλ = (log_max_wav - log_min_wav) / len
-    len += 2
-    log_λ_template = range(log_min_wav - log_Δλ; length = len,  stop = log_max_wav + log_Δλ)
+    Δ_logλ = minimum(log_λ_obs[end, :] - log_λ_obs[1, :]) / upscale / size(log_λ_obs, 1)
+    log_λ_template = (log_min_wav - Δ_logλ):Δ_logλ:(log_max_wav + Δ_logλ)
     λ_template = exp.(log_λ_template)
-    return len, log_λ_template, λ_template
+    return log_λ_template, λ_template
 end
 
 abstract type InterpolationHelper end

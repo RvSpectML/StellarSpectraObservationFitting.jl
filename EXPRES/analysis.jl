@@ -35,8 +35,8 @@ if isfile(save_path*"results.jld2")
         @load save_path*"model_decision.jld2" comp_ls ℓ aic bic ks test_n_comp_tel test_n_comp_star
     end
 else
-    model_res = 2 * sqrt(2) * 150000
-    @time model = SSOF.OrderModel(data, model_res, model_res, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8)
+    model_upscale = 2 * sqrt(2)
+    @time model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8, upscale=model_upscale)
     @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
     if !use_reg
         SSOF.zero_regularization(model)
