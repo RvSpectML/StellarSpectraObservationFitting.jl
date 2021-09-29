@@ -1,5 +1,6 @@
 using UnitfulAstro, Unitful
 using Statistics
+using LinearAlgebra
 
 light_speed = uconvert(u"m/s", 1u"c")
 light_speed_nu = ustrip(light_speed)
@@ -17,13 +18,13 @@ function searchsortednearest(a::AbstractVector{T} where T<:Real, x::Real; lower:
 end
 
 
-function searchsortednearest(a::AbstractVector{T} where T<:Real, x::AbstractVector{T} where T<:Real; lower::Bool=false)
+function searchsortednearest(a::AbstractVector{T} where T<:Real, x::AbstractVector{T} where T<:Real; kwargs...)
    	len_x = length(x)
    	len_a = length(a)
    	idxs = zeros(Int64, len_x)
    	idxs[1] = searchsortednearest(a, x[1]; lower=lower)
 	for i in 2:len_x
-	   	idxs[i] = idxs[i-1] + searchsortednearest(view(a, idxs[i-1]:len_a), x[i]; lower=lower) - 1
+	   	idxs[i] = idxs[i-1] + searchsortednearest(view(a, idxs[i-1]:len_a), x[i]; kwargs...) - 1
    	end
    	return idxs
 end
@@ -90,3 +91,46 @@ function banded_inds(row::Int, span::Int, row_len::Int)
 	low = max(row - span, 1); high = min(row + span, row_len);
 	return low, high
 end
+
+function vander(x::AbstractVector, n::Int)
+    m = ones(length(x), n + 1)
+    for i in 1:n
+        m[:, i + 1] = m[:, i] .* x
+    end
+    return m
+end
+
+"""
+Solve a linear system of equations (optionally with variance values at each point or covariance array)
+see (https://en.wikipedia.org/wiki/Generalized_least_squares#Method_outline)
+"""
+function general_lst_sq(
+    dm::AbstractMatrix{T},
+    data::AbstractVector,
+    Σ::Union{Cholesky,Diagonal}) where {T<:Real}
+    return (dm' * (Σ \ dm)) \ (dm' * (Σ \ data))
+end
+general_lst_sq(dm, data, σ²::AbstractVector) =
+	general_lst_sq(dm, data, Diagonal(σ²))
+
+"""
+Solve a linear system of equations (optionally with variance values at each point or covariance array)
+see (https://en.wikipedia.org/wiki/Generalized_least_squares#Method_outline)
+"""
+function ordinary_lst_sq(
+    dm::AbstractMatrix{T},
+    data::AbstractVector) where {T<:Real}
+    return (dm' * dm) \ (dm' * data)
+end
+general_lst_sq(dm, data) = ordinary_lst_sq(dm, data)
+
+"a generalized version of the built in append!() function"
+function multiple_append!(a::Vector{T}, b...) where {T<:Real}
+    for i in 1:length(b)
+        append!(a, b[i])
+    end
+    return a
+end
+
+const _fwhm_2_σ_factor = 1 / (2 * sqrt(2 * log(2)))
+fwhm_2_σ(fwhm) = _fwhm_2_σ_factor .* fwhm

@@ -2,27 +2,6 @@
 # https://github.com/megbedell/wobble/blob/master/wobble/data.py
 using LinearAlgebra
 
-function vander(x::Vector{T}, n::Int) where {T <: Number}
-    m = ones(T, length(x), n + 1)
-    for i in 1:n
-        m[:, i + 1] = m[:, i] .* x
-    end
-    return m
-end
-
-"""
-Solve a linear system of equations (optionally with variance values at each point or covariance array)
-see (https://en.wikipedia.org/wiki/Generalized_least_squares#Method_outline)
-"""
-function general_lst_sq(
-    dm::AbstractMatrix{T},
-    data::AbstractVector,
-    Σ::Union{Cholesky,Diagonal}) where {T<:Real}
-    return (dm' * (Σ \ dm)) \ (dm' * (Σ \ data))
-end
-general_lst_sq(dm, data, σ²::AbstractVector) =
-	general_lst_sq(dm, data, Diagonal(σ²))
-
 # using Plots
 # These were initially defined to act on all of the orders of the spectra at a
 # given time, but I have defined them to act on all of the times of the spectra
