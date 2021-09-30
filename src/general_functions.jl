@@ -22,7 +22,7 @@ function searchsortednearest(a::AbstractVector{T} where T<:Real, x::AbstractVect
    	len_x = length(x)
    	len_a = length(a)
    	idxs = zeros(Int64, len_x)
-   	idxs[1] = searchsortednearest(a, x[1]; lower=lower)
+   	idxs[1] = searchsortednearest(a, x[1]; kwargs...)
 	for i in 2:len_x
 	   	idxs[i] = idxs[i-1] + searchsortednearest(view(a, idxs[i-1]:len_a), x[i]; kwargs...) - 1
    	end
@@ -134,3 +134,50 @@ end
 
 const _fwhm_2_σ_factor = 1 / (2 * sqrt(2 * log(2)))
 fwhm_2_σ(fwhm) = _fwhm_2_σ_factor .* fwhm
+
+ordinary_lst_sq(
+    data::AbstractVector,
+    order::Int;
+	x::AbstractVector=1:length(data)) = ordinary_lst_sq(vander(x, order), data)
+
+function ordinary_lst_sq_f(data::AbstractVector, order::Int; kwargs...)
+	w = ordinary_lst_sq(data, order; kwargs...)
+	return x -> ([x ^ i for i in 0:order]' * w)
+end
+
+
+"""
+trapezoidal integration, shamelessly modified from
+https://github.com/dextorious/NumericalIntegration.jl/blob/master/src/NumericalIntegration.jl
+"""
+function trapz(x::AbstractVector{T}, y::AbstractVector{T}) where {T<:Real}
+    @assert length(x) == length(y) "x and y vectors must be of the same length!"
+    integral = zero(T)
+    # @fastmath @simd for i in 1:(length(y) - 1)
+    @simd for i in 1:(length(y) - 1)
+        @inbounds integral += (x[i+1] - x[i]) * (y[i] + y[i+1])
+    end
+    return integral / 2
+end
+
+function trapz(lo_x::T, hi_x::T, x::Vector{T}, y::Vector{T}) where {T<:Real}
+    lo_ind, hi_ind = searchsortednearest(x, [lo_x, hi_x])
+    # make sure that the inds are inside lo_x and hi_x
+    if x[lo_ind] < lo_x; lo_ind += 1 end
+    if x[hi_ind] > hi_x; hi_ind -= 1 end
+    # integrate over main section + edges
+    integral = trapz(view(x, lo_ind:hi_ind), view(y, lo_ind:hi_ind))
+    integral += trapz([lo_x, x[lo_ind]], [y[lo_ind-1] + ((lo_x - x[lo_ind-1]) / (x[lo_ind]-x[lo_ind-1]) * (y[lo_ind] - y[lo_ind-1])), y[lo_ind]])
+    integral += trapz([x[hi_ind], hi_x], [y[hi_ind], y[hi_ind] + ((hi_x - x[hi_ind]) / (x[hi_ind+1]-x[hi_ind]) * (y[hi_ind+1] - y[hi_ind]))])
+    return integral
+end
+# using Test
+# @testset "trapz tests" begin
+#     xs = ys = collect(1.:20)
+#     integral(x1, x2) = (x2^2 - x1^2) / 2
+#     for x1 in [1.9, 2., 2.1]
+#         for x2 in [10.9, 11., 11.1]
+#             @test isapprox(trapz(x1, x2, xs, ys), integral(x1, x2))
+#         end
+#     end
+# end
