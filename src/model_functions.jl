@@ -401,7 +401,7 @@ end
 #     return findfirst(s_var ./ sum(s_var) .< threshold)[1] - 1
 # end
 
-function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2, use_gp::Bool=false, kwargs...)
+function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2, kwargs...)
 
 	μ_min = min + 0.05
 	μ_max = max - 0.05
@@ -410,56 +410,39 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2, us
 	n_comp_star = size(om.star.lm.M, 2) + 1
 	n_comp_tel = size(om.tel.lm.M, 2)
 
-	if use_gp
-		star_log_λ_tel = _shift_log_λ_model(d.log_λ_obs, d.log_λ_star, om.star.log_λ)
-		tel_log_λ_star = _shift_log_λ_model(d.log_λ_star, d.log_λ_obs, om.tel.log_λ)
-		flux_star = ones(length(om.star.log_λ), n_obs)
-		vars_star = ones(length(om.star.log_λ), n_obs)
-		flux_tel = ones(length(om.tel.log_λ), n_obs)
-		vars_tel = ones(length(om.tel.log_λ), n_obs)
-		_spectra_interp_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star)
-	else
-		flux_star = spectra_interp(d.flux, om.lih_o2b)
-	end
+	star_log_λ_tel = _shift_log_λ_model(d.log_λ_obs, d.log_λ_star, om.star.log_λ)
+	tel_log_λ_star = _shift_log_λ_model(d.log_λ_star, d.log_λ_obs, om.tel.log_λ)
+	flux_star = ones(length(om.star.log_λ), n_obs)
+	vars_star = ones(length(om.star.log_λ), n_obs)
+	flux_tel = ones(length(om.tel.log_λ), n_obs)
+	vars_tel = ones(length(om.tel.log_λ), n_obs)
+	_spectra_interp_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star)
+
 	om.star.lm.μ[:] = make_template(flux_star; min=μ_min, max=μ_max)
 	_, _, _, rvs_naive =
 	    DPCA(flux_star, om.star.λ; template=om.star.lm.μ, num_components=1)
 
 	# telluric model with stellar template
-	if use_gp
-		flux_star .= om.star.lm.μ
-		_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
-	else
-		flux_tel = spectra_interp(d.flux, om.lih_o2t) ./
-			spectra_interp(repeat(om.star.lm.μ, 1, n_obs), om.lih_b2t)
-	end
+	flux_star .= om.star.lm.μ
+	_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
+
 	om.tel.lm.μ[:] = make_template(flux_tel; min=μ_min, max=μ_max)
 	# _, om.tel.lm.M[:, :], om.tel.lm.s[:, :], _ =
 	#     fit_gen_pca(flux_tel; num_components=n_comp_tel, mu=om.tel.lm.μ)
 
 	# stellar model with telluric template
-	if use_gp
-		flux_tel .= om.tel.lm.μ
-		_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
-	else
-		_tel_μ = spectra_interp(repeat(om.tel.lm.μ, 1, n_obs), om.lih_t2b)
-		flux_star = spectra_interp(d.flux, om.lih_o2b) ./ _tel_μ
-		vars_star = spectra_interp(d.var, om.lih_o2b) ./ (_tel_μ .^2)  # TODO:should be adding in quadtrature, but fix later
-	end
+	flux_tel .= om.tel.lm.μ
+	_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
+
 	om.star.lm.μ[:] = make_template(flux_star; min=μ_min, max=μ_max)
 	_, M_star, s_star, rvs_notel =
 	    DEMPCA(flux_star, om.star.λ, 1 ./ vars_star; template=om.star.lm.μ, num_components=n_comp_star, kwargs...)
 	fracvar_star = fracvar(flux_star .- om.star.lm.μ, M_star, s_star, 1 ./ vars_star)
 
 	# telluric model with updated stellar template
-	if use_gp
-		flux_star .= om.star.lm.μ
-		_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
-	else
-		_star_μ = spectra_interp(repeat(om.star.lm.μ, 1, n_obs), om.lih_b2t)
-		flux_tel = spectra_interp(d.flux, om.lih_o2t) ./ _star_μ
-		vars_tel = spectra_interp(d.var, om.lih_o2t) ./ (_star_μ .^ 2) # TODO:should be adding in quadtrature, but fix later
-	end
+	flux_star .= om.star.lm.μ
+	_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
+
 	om.tel.lm.μ[:] = make_template(flux_tel; min=μ_min, max=μ_max)
 	Xtmp = flux_tel .- om.tel.lm.μ
 	EMPCA!(om.tel.lm.M, Xtmp, om.tel.lm.s, 1 ./ vars_tel; kwargs...)
