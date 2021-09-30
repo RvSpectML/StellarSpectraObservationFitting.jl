@@ -60,60 +60,7 @@ function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=2*sqrt(2))
     return log_λ_template, λ_template
 end
 
-abstract type InterpolationHelper end
-
-[i /_EXPRES_lsf_σ for i in 1:2:20]
-Int(ceil((_EXPRES_lsf_σ * 6 - 1) / 2) * 2 + 1)
-
-
-BandedMatrix()
-
-
-struct LSFInterpolationHelper <: InterpolationHelper
-    ratios::Vector{BandedMatrix}
-end
-function LSFInterpolationHelper(to_λs::AbstractVecOrMat, from_λs::AbstractMatrix, to_σs::AbstractVecOrMat, from_σs::AbstractMatrix)
-	len_from, n_obs = size(from_λs)
-	len_to = size(to_λs, 1)
-
-
-	lower_inds_t2f = zeros(Int, (len_from, n_obs))
-	lower_inds_f2t = zeros(Int, (len_to, n_obs))
-	ratios_t2f = zeros((len_from, n_obs))
-	ratios_f2t = zeros((len_to, n_obs))
-
-	function helper!(λs1, λs2)
-
-		lower_inds[:, j] = searchsortednearest(λs1, λs2; lower=true)
-		for i in 1:size(lower_inds, 1)
-			# if point is after the end, just say the point is at the end
-			if lower_inds[i, j] >= len
-				lower_inds[i, j] = len - 1
-				ratios[i, j] = 1
-			# if point is before the start, keep ratios to be 0
-			elseif λs2[i] >= λs1[lower_inds[i, j]]
-				x0 = λs1[lower_inds[i, j]]
-				x1 = λs1[lower_inds[i, j]+1]
-				ratios[i, j] = (λs2[i] - x0) / (x1 - x0)
-			end
-			@assert 0 <= ratios[i,j] <= 1 "something is off with ratios[$i,$j] = $(ratios[i,j])"
-		end
-	end
-
-	for j in 1:n_obs
-    	current_from_λs = view(from_λs, :, j)
-
-		helper!(j, len_to, lower_inds_t2f, ratios_t2f, to_λs, current_from_λs)
-		helper!(j, len_from, lower_inds_f2t, ratios_f2t, current_from_λs, to_λs)
-		lower_inds_t2f[:, j] .+= (j - 1) * len_to
-		lower_inds_f2t[:, j] .+= (j - 1) * len_from
-	end
-
-	return LinearInterpolationHelper(lower_inds_t2f, ratios_t2f), LinearInterpolationHelper(lower_inds_f2t, ratios_f2t)
-end
-
-
-struct LinearInterpolationHelper{T<:Number} <: InterpolationHelper
+struct LinearInterpolationHelper{T<:Number}
     li::AbstractMatrix{Int}  # lower indices
     ratios::AbstractMatrix{T}
 	function LinearInterpolationHelper(
@@ -250,9 +197,10 @@ struct Submodel{T<:Number}
     log_λ::AbstractVector{T}
     λ::AbstractVector{T}
 	lm::LinearModel
-    function Submodel(log_λ_obs::AbstractVecOrMat, model_res::Real, n_comp::Int; include_mean::Bool=true)
+    function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=true, kwargs...)
         n_obs = size(log_λ_obs, 2)
-		len, log_λ, λ = create_λ_template(log_λ_obs, model_res)
+		log_λ, λ = create_λ_template(log_λ_obs; kwargs...)
+		len = length(log_λ)
 		if include_mean
 			lm = FullLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs), ones(len))
 		else
@@ -304,17 +252,16 @@ struct OrderModel{T<:Number}
 	metadata::Dict{Symbol, Any}
     function OrderModel(
 		d::Data,
-		star_model_res::Number,
-		tel_model_res::Number,
 		instrument::String,
 		order::Int,
 		star::String;
 		n_comp_tel::Int=2,
-		n_comp_star::Int=2)
+		n_comp_star::Int=2,
+		kwargs...)
 
-        tel = Submodel(d.log_λ_obs, tel_model_res, n_comp_tel)
-        star = Submodel(d.log_λ_star, star_model_res, n_comp_star)
-		rv = Submodel(d.log_λ_star, star_model_res, 1; include_mean=false)
+        tel = Submodel(d.log_λ_obs, n_comp_tel; kwargs...)
+        star = Submodel(d.log_λ_star, n_comp_star; kwargs...)
+		rv = Submodel(d.log_λ_star, 1; include_mean=false, kwargs...)
 
         n_obs = size(d.log_λ_obs, 2)
         lih_t2o, lih_o2t = LinearInterpolationHelper_maker(tel.log_λ, d.log_λ_obs)
