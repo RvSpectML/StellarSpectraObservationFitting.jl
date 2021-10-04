@@ -133,7 +133,7 @@ function multiple_append!(a::Vector{T}, b...) where {T<:Real}
 end
 
 const _fwhm_2_σ_factor = 1 / (2 * sqrt(2 * log(2)))
-fwhm_2_σ(fwhm) = _fwhm_2_σ_factor .* fwhm
+fwhm_2_σ(fwhm::Real) = _fwhm_2_σ_factor .* fwhm
 
 ordinary_lst_sq(
     data::AbstractVector,
@@ -181,3 +181,31 @@ end
 #         end
 #     end
 # end
+
+
+oversamp_interp(lo_x::T, hi_x::T, x::Vector{T}, y::Vector{T}) where {T<:Real} =
+	trapz(lo_x, hi_x, x, y) / (hi_x - lo_x)
+
+pixel_separation(xs::AbstractVector) = multiple_append!([xs[1] - xs[2]], (xs[1:end-2] - xs[3:end]) ./ 2, [xs[end-1] - xs[end]])
+function bounds_generator!(bounds::AbstractVector, xs::AbstractVector)
+	bounds[2:end-1] = (xs[1:end-1] + xs[2:end]) ./ 2
+	bounds[1] = (3*xs[1] - xs[2]) / 2
+	bounds[end] = (3*xs[end] - xs[end-1]) / 2
+	return bounds
+end
+function bounds_generator(xs::AbstractVector)
+	bounds = zeros(length(xs)+1)
+	bounds_generator!(bounds, xs)
+	return bounds
+end
+function bounds_generator(xs::AbstractMatrix)
+	bounds = zeros(size(xs, 1)+1, size(xs, 2))
+	for i in 1:size(xs, 2)
+		bounds_generator!(view(bounds, :, i), view(xs, :, i))
+	end
+	return bounds
+end
+
+# converts wavelength (Å) to wavenumber (1/cm) (and vice versa)
+Å_to_wavenumber(λ::Real) = 1e8 / λ
+wavenumber_to_Å(wn::Real) = Å_to_wavenumber(wn)
