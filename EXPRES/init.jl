@@ -107,4 +107,5 @@ for order in 1:n_orders
 	else
 		println("order $order skipped for being only $(length(mask_inds)) useful pixels wide")
 	end
+	println("finished order $order")
 end
