@@ -8,49 +8,41 @@ using SpecialFunctions
 
 abstract type Data end
 
+struct LSFData{T<:Real} <: Data
+    flux::AbstractMatrix{T}
+    var::AbstractMatrix{T}
+    log_λ_obs::AbstractMatrix{T}
+	log_λ_obs_bounds::AbstractMatrix{T}
+    log_λ_star::AbstractMatrix{T}
+	log_λ_star_bounds::AbstractMatrix{T}
+	lsf_broadener::AbstractVector{BandedMatrix}
+	function LSFData(flux::AbstractMatrix{T}, var, log_λ_obs, log_λ_star, lsf_broadener) where {T<:Real}
+		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
+		@assert length(lsf_broadener) == size(flux, 2)
+		return new{T}(flux, var, log_λ_obs, bounds_generator(log_λ_obs), log_λ_star, bounds_generator(log_λ_star), lsf_broadener)
+	end
+end
+(d::LSFData)(inds::AbstractVecOrMat) =
+	LSFData(view(d.flux, :, inds), view(d.var, :, inds),
+	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds), view(lsf_broadener, inds))
+Base.copy(d::LSFData) = LSFData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star), copy(lsf_broadener))
+
 struct GenericData{T<:Real} <: Data
     flux::AbstractMatrix{T}
     var::AbstractMatrix{T}
     log_λ_obs::AbstractMatrix{T}
+	log_λ_obs_bounds::AbstractMatrix{T}
     log_λ_star::AbstractMatrix{T}
+	log_λ_star_bounds::AbstractMatrix{T}
 	function GenericData(flux::AbstractMatrix{T}, var, log_λ_obs, log_λ_star) where {T<:Real}
 		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
-		return new{T}(flux, var, log_λ_obs, log_λ_star)
+		return new{T}(flux, var, log_λ_obs, bounds_generator(log_λ_obs), log_λ_star, bounds_generator(log_λ_star))
 	end
 end
 (d::GenericData)(inds::AbstractVecOrMat) =
 	GenericData(view(d.flux, :, inds), view(d.var, :, inds),
 	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds))
 Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star))
-
-_EXPRES_lsf_FWHM = 4.5  # roughly. See http://exoplanets.astro.yale.edu/science/activity.php
-_EXPRES_lsf_σ = _EXPRES_lsf_FWHM / (2 * sqrt(2 * log(2)))
-_EXPRES_span = Int(round(2 * _EXPRES_lsf_σ))
-
-struct EXPRESData{T<:Real} <: Data
-    flux::AbstractMatrix{T}
-    var::AbstractMatrix{T}
-    log_λ_obs::AbstractMatrix{T}
-    log_λ_star::AbstractMatrix{T}
-	Σ_lsf::AbstractMatrix{T}
-	function EXPRESData(flux::AbstractMatrix{T}, var, log_λ_obs, log_λ_star; span::Int=_EXPRES_span) where {T<:Real}
-		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
-		lsf_pm_span = [erf((i+0.5)/_EXPRES_lsf_σ) - erf((i-0.5)/_EXPRES_lsf_σ) for i in -span:span]
-		n_pix = size(flux, 1)
-		Σ_lsf = zeros(n_pix, n_pix)
-		for i in 1:n_pix
-			low, high = banded_inds(i, span, n_pix)
-			lsf_view = view(lsf_pm_span, (low + span + 1 - i):(high + span + 1 - i))
-			norm = sum(lsf_view)
-		    Σ_lsf[low:high, i] += lsf_view / norm
-			Σ_lsf[i, low:high] += lsf_view / norm
-			Σ_lsf[i, i] -= lsf_pm_span[span + 1] / norm
-		end
-		Σ_lsf = BandedMatrix(Σ_lsf, (span, span))
-		return new{T}(flux, var, log_λ_obs, log_λ_star, Σ_lsf)
-	end
-end
-EXPRESData(d::GenericData; kwargs...) = EXPRESData(d.flux, d.var, d.log_λ_obs, d.log_λ_star; kwargs...)
 
 function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=2*sqrt(2))
     log_min_wav, log_max_wav = [minimum(log_λ_obs), maximum(log_λ_obs)]
@@ -59,72 +51,6 @@ function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=2*sqrt(2))
     λ_template = exp.(log_λ_template)
     return log_λ_template, λ_template
 end
-
-struct LinearInterpolationHelper{T<:Number}
-    li::AbstractMatrix{Int}  # lower indices
-    ratios::AbstractMatrix{T}
-	function LinearInterpolationHelper(
-		li::AbstractMatrix{Int},  # lower indices
-	    ratios::AbstractMatrix{T}) where {T<:Number}
-		@assert size(li) == size(ratios)
-		@assert all(0 .<= ratios .<= 1)
-		# @assert some issorted thing?
-		return new{T}(li, ratios)
-	end
-end
-function (lih::LinearInterpolationHelper)(inds::AbstractVecOrMat, n_in::Int)
-	n_out, n_obs = size(lih.li)
-	@assert all(0 .< inds .<= n_obs)
-	@assert allunique(inds)
-	difference = 0
-	j = inds[1]-1
-	new_li = ones(Int, n_out, length(inds))
-	new_li[:, 1] = lih.li[:, inds[1]] .- (j * n_in)
-	for i in 2:length(inds)
-		j += (inds[i] - inds[i - 1]) - 1
-		new_li[:, i] = lih.li[:, inds[i]] .- (j * n_in)
-	end
-	return LinearInterpolationHelper(new_li, view(lih.ratios, :, inds))
-end
-
-
-function LinearInterpolationHelper_maker(to_λs::AbstractVecOrMat, from_λs::AbstractMatrix)
-	len_from, n_obs = size(from_λs)
-	len_to = size(to_λs, 1)
-
-	lower_inds_t2f = zeros(Int, (len_from, n_obs))
-	lower_inds_f2t = zeros(Int, (len_to, n_obs))
-	ratios_t2f = zeros((len_from, n_obs))
-	ratios_f2t = zeros((len_to, n_obs))
-
-	function helper!(j, len, lower_inds, ratios, λs1, λs2)
-		lower_inds[:, j] = searchsortednearest(λs1, λs2; lower=true)
-		for i in 1:size(lower_inds, 1)
-			# if point is after the end, just say the point is at the end
-			if lower_inds[i, j] >= len
-				lower_inds[i, j] = len - 1
-				ratios[i, j] = 1
-			# if point is before the start, keep ratios to be 0
-			elseif λs2[i] >= λs1[lower_inds[i, j]]
-				x0 = λs1[lower_inds[i, j]]
-				x1 = λs1[lower_inds[i, j]+1]
-				ratios[i, j] = (λs2[i] - x0) / (x1 - x0)
-			end
-			@assert 0 <= ratios[i,j] <= 1 "something is off with ratios[$i,$j] = $(ratios[i,j])"
-		end
-	end
-
-	for j in 1:n_obs
-    	current_from_λs = view(from_λs, :, j)
-		helper!(j, len_to, lower_inds_t2f, ratios_t2f, to_λs, current_from_λs)
-		helper!(j, len_from, lower_inds_f2t, ratios_f2t, current_from_λs, to_λs)
-		lower_inds_t2f[:, j] .+= (j - 1) * len_to
-		lower_inds_f2t[:, j] .+= (j - 1) * len_from
-	end
-
-	return LinearInterpolationHelper(lower_inds_t2f, ratios_t2f), LinearInterpolationHelper(lower_inds_f2t, ratios_f2t)
-end
-
 
 abstract type LinearModel end
 
@@ -243,12 +169,6 @@ struct OrderModel{T<:Number}
 	rv::Submodel{T}
 	reg_tel::Dict{Symbol, T}
 	reg_star::Dict{Symbol, T}
-    lih_t2b::LinearInterpolationHelper
-    lih_b2t::LinearInterpolationHelper
-    lih_o2b::LinearInterpolationHelper
-    lih_b2o::LinearInterpolationHelper
-    lih_t2o::LinearInterpolationHelper
-    lih_o2t::LinearInterpolationHelper
 	metadata::Dict{Symbol, Any}
     function OrderModel(
 		d::Data,
@@ -264,32 +184,23 @@ struct OrderModel{T<:Number}
 		rv = Submodel(d.log_λ_star, 1; include_mean=false, kwargs...)
 
         n_obs = size(d.log_λ_obs, 2)
-        lih_t2o, lih_o2t = LinearInterpolationHelper_maker(tel.log_λ, d.log_λ_obs)
-        lih_b2o, lih_o2b = LinearInterpolationHelper_maker(star.log_λ, d.log_λ_star)
         star_dop = [d.log_λ_star[1, i] - d.log_λ_obs[1, i] for i in 1:n_obs]
         star_log_λ_tel = ones(length(star.log_λ), n_obs)
         for i in 1:n_obs
             star_log_λ_tel[:, i] = star.log_λ .+ star_dop[i]
         end
-        lih_t2b, lih_b2t = LinearInterpolationHelper_maker(tel.log_λ, star_log_λ_tel)
 		todo = Dict([(:reg_improved, false), (:downsized, false), (:optimized, false), (:err_estimated, false)])
 		metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
-        return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), lih_t2b, lih_b2t,
-			lih_o2b, lih_b2o, lih_t2o, lih_o2t, metadata)
+        return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), metadata)
     end
-    function OrderModel(tel::Submodel{T}, star, rv, reg_tel, reg_star, lih_t2b,
-		lih_b2t, lih_o2b, lih_b2o, lih_t2o, lih_o2t, metadata) where {T<:Number}
-		return new{T}(tel, star, rv, reg_tel, reg_star, lih_t2b, lih_b2t, lih_o2b, lih_b2o, lih_t2o, lih_o2t, metadata)
+    function OrderModel(tel::Submodel{T}, star, rv, reg_tel, reg_star, metadata) where {T<:Number}
+		return new{T}(tel, star, rv, reg_tel, reg_star, metadata)
 	end
 end
-Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.lih_t2b,
-	om.lih_b2t, om.lih_o2b, om.lih_b2o, om.lih_t2o, om.lih_o2t, copy(om.metadata))
+Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), copy(om.metadata))
 (om::OrderModel)(inds::AbstractVecOrMat) =
-	OrderModel(om.tel(inds), om.star(inds), om.rv(inds), om.reg_tel, om.reg_star,
-	om.lih_t2b(inds, size(om.lih_o2t.li, 1)), om.lih_b2t(inds, size(om.lih_o2b.li, 1)),
-	om.lih_o2b(inds, size(om.lih_b2o.li, 1)), om.lih_b2o(inds, size(om.lih_o2b.li, 1)),
-	om.lih_t2o(inds, size(om.lih_o2t.li, 1)), om.lih_o2t(inds, size(om.lih_b2o.li, 1)),
-	copy(om.metadata))
+	OrderModel(om.tel(inds), om.star(inds), om.rv(inds), om.reg_tel,
+	om.reg_star, copy(om.metadata))
 function zero_regularization(om::OrderModel)
 	for (key, value) in om.reg_tel
 		om.reg_tel[key] = 0
@@ -317,19 +228,24 @@ downsize(m::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
 	OrderModel(
 		downsize(m.tel, n_comp_tel),
 		downsize(m.star, n_comp_star),
-		m.rv, m.reg_tel, m.reg_star, m.lih_t2b, m.lih_b2t,
-		m.lih_o2b, m.lih_b2o, m.lih_t2o, m.lih_o2t, m.metadata)
+		m.rv, m.reg_tel, m.reg_star, m.metadata)
 
 tel_prior(om::OrderModel) = model_prior(om.tel.lm, om.reg_tel)
 star_prior(om::OrderModel) = model_prior(om.star.lm, om.reg_star)
 
-spectra_interp(og_vals::AbstractMatrix, lih::LinearInterpolationHelper) =
-    (og_vals[lih.li] .* (1 .- lih.ratios)) + (og_vals[lih.li .+ 1] .* (lih.ratios))
+spectra_interp(vals::AbstractVector, basis::AbstractVector, bounds::AbstractVector) =
+	[oversamp_interp(bounds[i], bounds[i+1], basis, vals) for i in 1:(length(bounds)-1)]
+function spectra_interp(vals::AbstractMatrix, basis::AbstractVector, bounds::AbstractMatrix)
+	interped_vals = zeros(size(vals))
+	for i in 1:size(interped_vals, 2)
+		interped_vals[i, :] = spectra_interp(view(vals, :, i), basis, view(bounds, :, i))
+	end
+	return interped_vals
+end
 
-interped_model(lm::LinearModel, lih::LinearInterpolationHelper) = spectra_interp(lm(), lih)
-tel_model(om::OrderModel) = interped_model(om.tel.lm, om.lih_t2o)
-star_model(om::OrderModel) = interped_model(om.star.lm, om.lih_b2o)
-rv_model(om::OrderModel) = interped_model(om.rv.lm, om.lih_b2o)
+tel_model(om::OrderModel) = spectra_interp(om.tel.lm(), om.tel.log_λ, om.log_λ_obs_bounds)
+star_model(om::OrderModel) = spectra_interp(om.star.lm(), om.star.log_λ, om.log_λ_star_bounds)
+rv_model(om::OrderModel) = spectra_interp(om.rv.lm(), om.rv.log_λ, om.log_λ_star_bounds)
 
 
 function fix_FullLinearModel_s!(flm, min::Number, max::Number)
