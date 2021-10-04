@@ -17,6 +17,7 @@ target_subdir = star * "/"   # USER: Replace with directory of your choice
 fits_target_str = star
 paths_to_search_for_param = ["EXPRES"]
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
+include("lsf.jl")  # defines lsf_broadener()
 
 # NOTE: make_manifest does not update its paths_to_search when default_paths_to_search is defined here, so if you change the line above, you must also include "paths_to_search=default_paths_to_search" in the make_manifest() function call below
 pipeline_plan = PipelinePlan()
@@ -97,7 +98,7 @@ for order in 1:n_orders
 		    log_λ_obs[:, i] = log.(all_spectra[i].λ_obs[mask_inds, order])
 		    log_λ_star[:, i] = log.(all_spectra[i].λ[mask_inds, order])
 		end
-		data = SSOF.EXPRESData(flux_obs, var_obs, log_λ_obs, log_λ_star)
+		data = SSOF.LSFData(flux_obs, var_obs, log_λ_obs, log_λ_star, lsf_broadener(exp.(log_λ_obs)))
 		SSOF.process!(data; order=6)
 		# x = copy(data.flux)
 		# x[data.var .> 1] .= 0
