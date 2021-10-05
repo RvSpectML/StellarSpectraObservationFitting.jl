@@ -29,7 +29,7 @@ begin
     if model.metadata[:todo][:downsized]
         @load save_path*"model_decision.jld2" comp_ls ℓ aic bic ks test_n_comp_tel test_n_comp_star
     end
-    o = SSOF.Output(model)
+    o = SSOF.Output(model, data)
     v = copy(data.var)
     v[v .== Inf] .= 3 * maximum(v[v .!= Inf])
     plot_epoch = argmin(mean(v; dims = 1))[2]

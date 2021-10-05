@@ -19,9 +19,9 @@ end
 function loss(o::Output, om::OrderModel, d::Data;
     tel::LinearModel=om.tel.lm, star::LinearModel=om.star.lm, rv::LinearModel=om.rv.lm)
 
-    tel !== om.tel ? tel_o = interped_model(tel, om.lih_t2o) : tel_o = o.tel
-    star !== om.star ? star_o = interped_model(star, om.lih_b2o) : star_o = o.star
-    rv !== om.rv ? rv_o = interped_model(rv, om.lih_b2o) : rv_o = o.tel
+    tel !== om.tel ? tel_o = tel_model(om, d) : tel_o = o.tel
+    star !== om.star ? star_o = star_model(om, d) : star_o = o.star
+    rv !== om.rv ? rv_o = rv_model(om, d) : rv_o = o.tel
     return _loss(tel_o, star_o, rv_o, d)
 end
 
@@ -212,12 +212,12 @@ function train_OrderModel!(ow::Workspace; print_stuff::Bool=_print_stuff_def, it
     else
         copy_LinearModel!(_OSW_optimize!(ow.star, options; return_result=false), ow.om.star.lm)
     end
-    ow.o.star[:, :] = star_model(ow.om)
+    ow.o.star[:, :] = star_model(ow.om, d)
 
     # optimize RVs
     ow.om.rv.lm.M[:] = calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
     ow.om.rv.lm.s[:] = _OSW_optimize!(ow.rv, options; return_result=false)
-    ow.o.rv[:, :] = rv_model(ow.om)
+    ow.o.rv[:, :] = rv_model(ow.om, d)
 
     # optimize tellurics
     if ow.only_s
@@ -225,7 +225,7 @@ function train_OrderModel!(ow::Workspace; print_stuff::Bool=_print_stuff_def, it
     else
         copy_LinearModel!(_OSW_optimize!(ow.tel, options; return_result=false), ow.om.tel.lm)
     end
-    ow.o.tel[:, :] = tel_model(ow.om)
+    ow.o.tel[:, :] = tel_model(ow.om, d)
 end
 
 
@@ -247,15 +247,15 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
         else
             _custom_copy!(nt, ow.om.tel.lm, ow.om.star.lm)
         end
-        ow.o.star[:, :] = star_model(ow.om)
-        ow.o.tel[:, :] = tel_model(ow.om)
+        ow.o.star[:, :] = star_model(ow.om, d)
+        ow.o.tel[:, :] = tel_model(ow.om, d)
     end
 
     # optimize RVs
     options = Optim.Options(;callback=optim_cb_local, g_tol=g_tol*sqrt(length(ow.rv.p0) / length(ow.telstar.p0)), kwargs...)
     ow.om.rv.lm.M[:] = calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
     result_rv, ow.om.rv.lm.s[:] = _OSW_optimize!(ow.rv, options)
-    ow.o.rv[:, :] = rv_model(ow.om)
+    ow.o.rv[:, :] = rv_model(ow.om, d)
 
     if ignore_regularization
         copy_dict!(reg_tel_holder, ow.om.reg_tel)

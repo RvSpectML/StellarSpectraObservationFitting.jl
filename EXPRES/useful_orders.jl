@@ -31,7 +31,7 @@ sendto(workers(), datapath=datapath, star=star)
     @load datapath * "/$(desired_order)/data.jld2" n_obs data times_nu airmasses
     model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8)
     SSOF.initialize!(model, data; use_gp=true)
-    o = SSOF.Output(model)
+    o = SSOF.Output(model, data)
     return stdm(data.flux - (o.tel .* (o.star + o.rv)), 0)
 end
 ords = 1:85

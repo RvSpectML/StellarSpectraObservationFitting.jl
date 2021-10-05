@@ -243,9 +243,9 @@ function spectra_interp(vals::AbstractMatrix, basis::AbstractVector, bounds::Abs
 	return interped_vals
 end
 
-tel_model(om::OrderModel) = spectra_interp(om.tel.lm(), om.tel.log_λ, om.log_λ_obs_bounds)
-star_model(om::OrderModel) = spectra_interp(om.star.lm(), om.star.log_λ, om.log_λ_star_bounds)
-rv_model(om::OrderModel) = spectra_interp(om.rv.lm(), om.rv.log_λ, om.log_λ_star_bounds)
+tel_model(om::OrderModel, d::Data) = spectra_interp(om.tel.lm(), om.tel.log_λ, d.log_λ_obs_bounds)
+star_model(om::OrderModel, d::Data) = spectra_interp(om.star.lm(), om.star.log_λ, d.log_λ_star_bounds)
+rv_model(om::OrderModel, d::Data) = spectra_interp(om.rv.lm(), om.rv.log_λ, d.log_λ_star_bounds)
 
 
 function fix_FullLinearModel_s!(flm, min::Number, max::Number)
@@ -412,13 +412,33 @@ struct Output{T<:Real}
 	tel::AbstractMatrix{T}
 	star::AbstractMatrix{T}
 	rv::AbstractMatrix{T}
-	Output(om::OrderModel) = Output(tel_model(om), star_model(om), rv_model(om))
-	function Output(tel::AbstractMatrix{T}, star, rv) where {T<:Real}
-		@assert size(tel) == size(star) == size(rv)
-		new{T}(tel, star, rv)
+	total::AbstractMatrix{T}
+	Output(om::OrderModel, d::Data) =
+		Output(tel_model(om, d), star_model(om, d), rv_model(om, d), d)
+	Output(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericData) =
+		Output(tel, star, rv, tel .* (star + rv))
+	function Output(tel::AbstractMatrix{T}, star::AbstractMatrix{T}, rv::AbstractMatrix{T}, d::LSFData) where {T<:Real}
+		total = tel .* (star + rv)
+		for i in 1:size(total, 2)
+			total[:, i] = d.lsf_broadener[i] * total[:, i]
+		end
+		return Output(tel, star, rv, total)
+	end
+	function Output(tel::AbstractMatrix{T}, star::AbstractMatrix{T}, rv::AbstractMatrix{T}, total::AbstractMatrix{T}) where {T<:Real}
+		@assert size(tel) == size(star) == size(rv) == size(total)
+		new{T}(tel, star, rv, total)
 	end
 end
 Base.copy(o::Output) = Output(copy(tel), copy(star), copy(rv))
+function recalc_total!(o::Output, d::GenericData)
+	o.total[:] = o.tel .* (o.star + o.rv)
+end
+function recalc_total!(o::Output, d::LSFData)
+	o.total[:] = o.tel .* (o.star + o.rv)
+	for i in 1:size(model, 2)
+		o.total[i, :] = d.lsf_broadener[i] * o.total[i, :]
+	end
+end
 
 function copy_reg!(from::OrderModel, to::OrderModel)
 	copy_dict!(from.reg_tel, to.reg_tel)
