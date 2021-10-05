@@ -11,7 +11,7 @@ _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericD
 function _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::LSFData)
     model = tel .* (star + rv)
     for i in 1:size(model, 2)
-        model[i, :] = d.lsf_broadener[i] * model[i, :]
+        model[:, i] = d.lsf_broadener[i] * model[:, i]
     end
     return _χ2_loss(model, d)
 end
@@ -164,9 +164,9 @@ function _OSW_optimize!(osw::OptimSubWorkspace, options::Optim.Options; return_r
     result = Optim.optimize(osw.obj, osw.p0, osw.opt, options)
     osw.p0[:] = result.minimizer
     if return_result
-        return result, unflatten(osw.p0)
+        return result, osw.unflatten(osw.p0)
     else
-        return unflatten(osw.p0)
+        return osw.unflatten(osw.p0)
     end
 end
 
@@ -201,31 +201,6 @@ function _custom_copy!(from::NamedTuple, to...)
             @error "didn't expect an object of type $(typeof(to[i]))"
         end
 	end
-end
-
-function train_OrderModel!(ow::Workspace; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def, kwargs...)
-    optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
-    options = Optim.Options(;iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
-    # optimize star
-    if ow.only_s
-        ow.om.star.lm.s[:] = _OSW_optimize!(ow.star, options; return_result=false)
-    else
-        copy_LinearModel!(_OSW_optimize!(ow.star, options; return_result=false), ow.om.star.lm)
-    end
-    ow.o.star[:, :] = star_model(ow.om, d)
-
-    # optimize RVs
-    ow.om.rv.lm.M[:] = calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
-    ow.om.rv.lm.s[:] = _OSW_optimize!(ow.rv, options; return_result=false)
-    ow.o.rv[:, :] = rv_model(ow.om, d)
-
-    # optimize tellurics
-    if ow.only_s
-        ow.om.tel.lm.s[:] = _OSW_optimize!(ow.tel, options; return_result=false)
-    else
-        copy_LinearModel!(_OSW_optimize!(ow.tel, options; return_result=false), ow.om.tel.lm)
-    end
-    ow.o.tel[:, :] = tel_model(ow.om, d)
 end
 
 
