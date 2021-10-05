@@ -46,8 +46,9 @@ Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.log_λ
 
 function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=2*sqrt(2))
     log_min_wav, log_max_wav = [minimum(log_λ_obs), maximum(log_λ_obs)]
-    Δ_logλ = minimum(log_λ_obs[end, :] - log_λ_obs[1, :]) / upscale / size(log_λ_obs, 1)
-    log_λ_template = (log_min_wav - Δ_logλ):Δ_logλ:(log_max_wav + Δ_logλ)
+    Δ_logλ_og = minimum(log_λ_obs[end, :] - log_λ_obs[1, :]) / size(log_λ_obs, 1)
+	Δ_logλ = Δ_logλ_og / upscale
+    log_λ_template = (log_min_wav - 2 * Δ_logλ_og):Δ_logλ:(log_max_wav + 2 * Δ_logλ_og)
     λ_template = exp.(log_λ_template)
     return log_λ_template, λ_template
 end
@@ -236,9 +237,9 @@ star_prior(om::OrderModel) = model_prior(om.star.lm, om.reg_star)
 spectra_interp(vals::AbstractVector, basis::AbstractVector, bounds::AbstractVector) =
 	[oversamp_interp(bounds[i], bounds[i+1], basis, vals) for i in 1:(length(bounds)-1)]
 function spectra_interp(vals::AbstractMatrix, basis::AbstractVector, bounds::AbstractMatrix)
-	interped_vals = zeros(size(vals))
+	interped_vals = zeros(size(bounds, 1)-1, size(bounds, 2))
 	for i in 1:size(interped_vals, 2)
-		interped_vals[i, :] = spectra_interp(view(vals, :, i), basis, view(bounds, :, i))
+		interped_vals[:, i] = spectra_interp(view(vals, :, i), basis, view(bounds, :, i))
 	end
 	return interped_vals
 end
