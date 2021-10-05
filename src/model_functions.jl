@@ -352,8 +352,10 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2, kw
 	_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
 
 	om.star.lm.μ[:] = make_template(flux_star; min=μ_min, max=μ_max)
+	# _, M_star, s_star, rvs_notel =
+	#     DEMPCA(flux_star, om.star.λ, 1 ./ vars_star; template=om.star.lm.μ, num_components=n_comp_star, kwargs...)
 	_, M_star, s_star, rvs_notel =
-	    DEMPCA(flux_star, om.star.λ, 1 ./ vars_star; template=om.star.lm.μ, num_components=n_comp_star, kwargs...)
+		DEMPCA(flux_star, om.star.λ, 1 ./ vars_star; template=om.star.lm.μ, num_components=n_comp_star)
 	fracvar_star = fracvar(flux_star .- om.star.lm.μ, M_star, s_star, 1 ./ vars_star)
 
 	# telluric model with updated stellar template
@@ -362,7 +364,8 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2, kw
 
 	om.tel.lm.μ[:] = make_template(flux_tel; min=μ_min, max=μ_max)
 	Xtmp = flux_tel .- om.tel.lm.μ
-	EMPCA!(om.tel.lm.M, Xtmp, om.tel.lm.s, 1 ./ vars_tel; kwargs...)
+	# EMPCA!(om.tel.lm.M, Xtmp, om.tel.lm.s, 1 ./ vars_tel; kwargs...)
+	EMPCA!(om.tel.lm.M, Xtmp, om.tel.lm.s, 1 ./ vars_tel)
 	fracvar_tel = fracvar(Xtmp, om.tel.lm.M, om.tel.lm.s, 1 ./ vars_tel)
 
 	om.star.lm.M[:, :], om.star.lm.s[:] = M_star[:, 2:end], s_star[2:end, :]
