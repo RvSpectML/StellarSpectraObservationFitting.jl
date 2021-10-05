@@ -150,9 +150,9 @@ end
 trapezoidal integration, shamelessly modified from
 https://github.com/dextorious/NumericalIntegration.jl/blob/master/src/NumericalIntegration.jl
 """
-function trapz(x::AbstractVector{T}, y::AbstractVector{T}) where {T<:Real}
+function trapz(x::AbstractVector, y::AbstractVector)
     @assert length(x) == length(y) "x and y vectors must be of the same length!"
-    integral = zero(T)
+    integral = 0
     # @fastmath @simd for i in 1:(length(y) - 1)
     @simd for i in 1:(length(y) - 1)
         @inbounds integral += (x[i+1] - x[i]) * (y[i] + y[i+1])
@@ -160,7 +160,7 @@ function trapz(x::AbstractVector{T}, y::AbstractVector{T}) where {T<:Real}
     return integral / 2
 end
 
-function trapz(lo_x::T, hi_x::T, x::Vector{T}, y::Vector{T}) where {T<:Real}
+function trapz(lo_x::Real, hi_x::Real, x::AbstractVector, y::AbstractVector)
     lo_ind, hi_ind = searchsortednearest(x, [lo_x, hi_x])
     # make sure that the inds are inside lo_x and hi_x
     if x[lo_ind] < lo_x; lo_ind += 1 end
@@ -183,7 +183,7 @@ end
 # end
 
 
-oversamp_interp(lo_x::T, hi_x::T, x::Vector{T}, y::Vector{T}) where {T<:Real} =
+oversamp_interp(lo_x::Real, hi_x::Real, x::AbstractVector, y::AbstractVector) =
 	trapz(lo_x, hi_x, x, y) / (hi_x - lo_x)
 
 pixel_separation(xs::AbstractVector) = multiple_append!([xs[1] - xs[2]], (xs[1:end-2] - xs[3:end]) ./ 2, [xs[end-1] - xs[end]])
