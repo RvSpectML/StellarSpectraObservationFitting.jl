@@ -41,6 +41,7 @@ else
         SSOF.zero_regularization(model)
         model.metadata[:todo][:reg_improved] = true
     end
+    @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
 
 ## Creating optimization workspace
@@ -81,6 +82,7 @@ if !model.metadata[:todo][:optimized]
     model.metadata[:todo][:optimized] = true
     @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
+status_plot(workspace.o, workspace.d)
 
 ## Downsizing model
 
