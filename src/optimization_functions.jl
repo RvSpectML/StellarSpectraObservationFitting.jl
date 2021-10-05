@@ -134,47 +134,14 @@ struct OptimSubWorkspace
     end
 end
 
-abstract type OptimWorkspace end
-
-struct Workspace <: OptimWorkspace
-    tel::OptimSubWorkspace
-    star::OptimSubWorkspace
-    rv::OptimSubWorkspace
-    om::OrderModel
-    o::Output
-    d::Data
-    only_s::Bool
-    function Workspace(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=false, only_s::Bool=false)
-        loss, loss_tel, loss_tel_s, loss_star, loss_star_s, loss_rv = loss_funcs(o, om, d)
-        rv = OptimSubWorkspace(om.rv.lm.s, loss_rv; use_cg=true)
-        if only_s
-            tel = OptimSubWorkspace(om.tel.lm.s, loss_tel_s; use_cg=!only_s)
-            star = OptimSubWorkspace(om.star.lm.s, loss_star_s; use_cg=!only_s)
-        else
-            tel = OptimSubWorkspace(om.tel.lm, loss_tel; use_cg=!only_s)
-            star = OptimSubWorkspace(om.star.lm, loss_star; use_cg=!only_s)
-        end
-        ow = new(tel, star, rv, om, o, d, only_s)
-        if return_loss_f
-            return ow, loss
-        else
-            return ow
-        end
-    end
-    Workspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
-        Workspace(om(inds), d(inds); kwargs...)
-    Workspace(om::OrderModel, d::Data; kwargs...) =
-        Workspace(om, Output(om), d; kwargs...)
-end
-
-struct WorkspaceTelStar <: OptimWorkspace
+struct OptimWorkspace
     telstar::OptimSubWorkspace
     rv::OptimSubWorkspace
     om::OrderModel
     o::Output
     d::Data
     only_s::Bool
-    function WorkspaceTelStar(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=false, only_s::Bool=false)
+    function OptimWorkspace(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=false, only_s::Bool=false)
         loss, loss_telstar, loss_telstar_s, loss_rv = loss_funcs_telstar(o, om, d)
         rv = OptimSubWorkspace(om.rv.lm.s, loss_rv; use_cg=true)
         only_s ?
@@ -187,44 +154,11 @@ struct WorkspaceTelStar <: OptimWorkspace
             return ow
         end
     end
-    WorkspaceTelStar(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
-        WorkspaceTelStar(om(inds), d(inds); kwargs...)
-    WorkspaceTelStar(om::OrderModel, d::Data; kwargs...) =
-        WorkspaceTelStar(om, Output(om), d; kwargs...)
+    OptimWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
+        OptimWorkspace(om(inds), d(inds); kwargs...)
+    OptimWorkspace(om::OrderModel, d::Data; kwargs...) =
+        OptimWorkspace(om, Output(om, d), d; kwargs...)
 end
-
-struct WorkspaceTotal <: OptimWorkspace
-    total::OptimSubWorkspace
-    om::OrderModel
-    o::Output
-    d::Data
-    only_s::Bool
-    function WorkspaceTotal(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=false, only_s::Bool=false)
-        loss, _, _, _, _, loss_opt = loss_funcs(o, om, d)
-        total = OptimSubWorkspace(om.tel, om.star, om.rv, loss_opt, only_s)
-        ow = WorkspaceTotal(total, om, o, d)
-        if return_loss_f
-            return ow, loss
-        else
-            return ow
-        end
-        loss, loss_total, loss_total_s = loss_funcs_total(o, om, d)
-        only_s ?
-            total = OptimSubWorkspace((tel = om.tel.lm.s, star = om.star.lm.s, rv = om.rv.lm.s), loss_total_s; use_cg=!only_s) :
-            total = OptimSubWorkspace((tel = om.tel.lm, star = om.star.lm, rv=om.rv.lm.s), loss_total; use_cg=!only_s)
-        ow = new(total, om, o, d, only_s)
-        if return_loss_f
-            return ow, loss
-        else
-            return ow
-        end
-    end
-    WorkspaceTotal(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
-        WorkspaceTotal(om(inds), d(inds); kwargs...)
-    WorkspaceTotal(om::OrderModel, d::Data; kwargs...) =
-        WorkspaceTotal(om, Output(om), d; kwargs...)
-end
-
 
 function _OSW_optimize!(osw::OptimSubWorkspace, options::Optim.Options; return_result::Bool=true)
     result = Optim.optimize(osw.obj, osw.p0, osw.opt, options)
@@ -295,7 +229,7 @@ function train_OrderModel!(ow::Workspace; print_stuff::Bool=_print_stuff_def, it
 end
 
 
-function train_OrderModel!(ow::WorkspaceTelStar; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def*sqrt(length(ow.telstar.p0)), train_telstar::Bool=true, ignore_regularization::Bool=false, kwargs...)
+function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def*sqrt(length(ow.telstar.p0)), train_telstar::Bool=true, ignore_regularization::Bool=false, kwargs...)
     optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
 
     if ignore_regularization
@@ -330,31 +264,11 @@ function train_OrderModel!(ow::WorkspaceTelStar; print_stuff::Bool=_print_stuff_
     return result_telstar, result_rv
 end
 
-function train_OrderModel!(ow::WorkspaceTotal; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def*sqrt(length(ow.total.p0)), kwargs...)
-    optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
-    options = Optim.Options(;iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
-    # optimize tellurics and star
-    result, nt = _OSW_optimize!(ow.total, options)
-    if ow.only_s
-        _custom_copy!(nt, ow.om.tel.lm.s, ow.om.star.lm.s, ow.om.rv.lm.s)
-    else
-        _custom_copy!(nt, ow.om.tel.lm, ow.om.star.lm, ow.om.rv.lm.s)
-    end
-    ow.om.rv.lm.M[:] = calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
-    ow.o.star[:, :] = star_model(ow.om)
-    ow.o.tel[:, :] = tel_model(ow.om)
-    ow.o.rv[:, :] = rv_model(ow.om)
-    return result
-end
-
 function train_OrderModel!(ow::OptimWorkspace, n::Int; kwargs...)
     for i in 1:n
         train_OrderModel!(ow; kwargs...)
     end
 end
-
-train_OrderModel!(ow::WorkspaceTotal, iterations::Int; kwargs...) =
-    train_OrderModel!(ow; iterations=iterations, kwargs...)
 
 function fine_train_OrderModel!(ow::OptimWorkspace; g_tol::Real=_g_tol_def*sqrt(length(ow.telstar.p0)), kwargs...)
     train_OrderModel!(ow; kwargs...)  # 16s

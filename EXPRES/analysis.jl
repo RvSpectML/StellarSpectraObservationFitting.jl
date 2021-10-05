@@ -11,13 +11,12 @@ import StatsBase
 ## Setting up necessary variables
 
 stars = ["10700", "26965", "34411"]
-star = stars[SSOF.parse_args(1, Int, 3)]
+star = stars[SSOF.parse_args(1, Int, 2)]
 interactive = length(ARGS) == 0
 save_plots = true
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
-use_telstar = SSOF.parse_args(2, Bool, true)
-desired_order = SSOF.parse_args(3, Int, 68)  # 68 has a bunch of tels, 47 has very few
-use_reg = SSOF.parse_args(4, Bool, true)
+desired_order = SSOF.parse_args(2, Int, 68)  # 68 has a bunch of tels, 47 has very few
+use_reg = SSOF.parse_args(3, Bool, true)
 
 ## Loading in data and initializing model
 save_path = expres_save_path * star * "/$(desired_order)/"
@@ -45,11 +44,7 @@ else
 end
 
 ## Creating optimization workspace
-if use_telstar
-    workspace, loss = SSOF.WorkspaceTelStar(model, data; return_loss_f=true)
-else
-    workspace, loss = SSOF.WorkspaceTotal(model, data; return_loss_f=true)
-end
+workspace, loss = SSOF.OptimWorkspace(model, data; return_loss_f=true)
 
 ## Plotting
 
@@ -67,14 +62,18 @@ if !model.metadata[:todo][:reg_improved]
     @time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true, ignore_regularization=true)  # 16s
     n_obs_train = Int(round(0.75 * n_obs))
     training_inds = sort(StatsBase.sample(1:n_obs, n_obs_train; replace=false))
-    @time SSOF.fit_regularization!(model, data, training_inds; use_telstar=use_telstar)
+    @time SSOF.fit_regularization!(model, data, training_inds)
     model.metadata[:todo][:reg_improved] = true
     model.metadata[:todo][:optimized] = false
     @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
 
 ## Optimizing model
-
+@time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
+rvs_notel_opt = SSOF.rvs(model)
+if interactive; status_plot(workspace.o, workspace.d) end
+model.metadata[:todo][:optimized] = true
+@save save_path*"results.jld2" model rvs_naive rvs_notel
 if !model.metadata[:todo][:optimized]
     @time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
     rvs_notel_opt = SSOF.rvs(model)
@@ -102,7 +101,7 @@ if !model.metadata[:todo][:downsized]
     model = SSOF.downsize(model, n_comps_best[1], n_comps_best[2])
     model.metadata[:todo][:downsized] = true
     model.metadata[:todo][:reg_improved] = true
-    workspace, loss = SSOF.WorkspaceTelStar(model, data; return_loss_f=true)
+    workspace, loss = SSOF.OptimWorkspace(model, data; return_loss_f=true)
     SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
     model.metadata[:todo][:optimized] = true
     @save save_path*"results.jld2" model rvs_naive rvs_notel # model_large
@@ -122,7 +121,7 @@ if !model.metadata[:todo][:err_estimated]
     rv_holder = zeros(n, length(model.rv.lm.s))
     @time for i in 1:n
         data_holder.flux[:, :] = data.flux + (data_noise .* randn(size(data_holder.var)))
-        SSOF.train_OrderModel!(SSOF.WorkspaceTelStar(model_holder, data_holder), f_tol=1e-8)
+        SSOF.train_OrderModel!(SSOF.OptimWorkspace(model_holder, data_holder), f_tol=1e-8)
         rv_holder[i, :] = SSOF.rvs(model_holder)
     end
     rv_errors = vec(std(rv_holder; dims=1))

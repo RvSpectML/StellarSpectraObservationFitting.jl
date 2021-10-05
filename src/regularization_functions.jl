@@ -1,13 +1,8 @@
-function eval_regularization(reg_field::Symbol, reg_key::Symbol, reg_val::Real, start_om::OrderModel, d::Data, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat; use_telstar::Bool=true)
+function eval_regularization(reg_field::Symbol, reg_key::Symbol, reg_val::Real, start_om::OrderModel, d::Data, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat)
     om = copy(start_om)
     getfield(om, reg_field)[reg_key] = reg_val
-    if use_telstar
-        train = WorkspaceTelStar(om, d, training_inds)
-        test, loss_test = WorkspaceTelStar(om, d, testing_inds; return_loss_f=true, only_s=true)
-    else
-        train = WorkspaceTotal(om, d, training_inds)
-        test, loss_test = WorkspaceTotal(om, d, testing_inds; return_loss_f=true, only_s=true)
-    end
+    train = OptimWorkspace(om, d, training_inds)
+    test, loss_test = OptimWorkspace(om, d, testing_inds; return_loss_f=true, only_s=true)
     train_OrderModel!(train)
     train_OrderModel!(test)
     return loss_test()

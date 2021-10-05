@@ -8,7 +8,6 @@ using Statistics
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 
 plot_stuff = true
-use_telstar = true
 improve_regularization = false
 
 ## Setting up necessary variables and functions
@@ -19,7 +18,7 @@ if improve_regularization
     using StatsBase
     n_obs_train = Int(round(0.75 * n_obs))
     training_inds = sort(sample(1:n_obs, n_obs_train; replace=false))
-    SSOF.fit_regularization!(model, data, training_inds; use_telstar=use_telstar)
+    SSOF.fit_regularization!(model, data, training_inds)
 else
     model.reg_tel[:L2_μ] = 1e7
     model.reg_tel[:L1_μ] = 1e3
@@ -38,11 +37,7 @@ end
 
 output = SSOF.Output(model)
 
-if use_telstar
-    workspace, loss = SSOF.WorkspaceTelStar(model, output, data; return_loss_f=true)
-else
-    workspace, loss = SSOF.Workspace(model, output, data; return_loss_f=true)
-end
+workspace, loss = SSOF.OptimWorkspace(model, output, data; return_loss_f=true)
 
 using Plots
 if plot_stuff

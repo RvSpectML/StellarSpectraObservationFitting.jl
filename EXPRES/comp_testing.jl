@@ -39,7 +39,7 @@ if isfile(save_path*"results.jld2")
 end
 
 ## Creating optimization workspace
-workspace, loss = SSOF.WorkspaceTelStar(test_model, data; return_loss_f=true)
+workspace, loss = SSOF.OptimWorkspace(test_model, data; return_loss_f=true)
 
 ## Plotting
 
@@ -74,13 +74,13 @@ rvs = zeros(length(test_n_comp_tel), length(test_n_comp_star), n_obs)
 rvs_σ = zeros(length(test_n_comp_tel), length(test_n_comp_star), n_obs)
 for (i, n_tel) in enumerate(test_n_comp_tel)
     for (j, n_star) in enumerate(test_n_comp_star)
-        ws = SSOF.WorkspaceTelStar(SSOF.downsize(test_model, n_tel, n_star), data)
+        ws = SSOF.OptimWorkspace(SSOF.downsize(test_model, n_tel, n_star), data)
         SSOF.fine_train_OrderModel!(ws)
         rvs[i, j, :] = SSOF.rvs(ws.om)
         model_holder = copy(ws.om)
         @time for i in 1:n_err
             data_holder.flux[:, :] = data.flux + (data_noise .* randn(size(data_holder.var)))
-            SSOF.train_OrderModel!(SSOF.WorkspaceTelStar(model_holder, data_holder), f_tol=1e-8)
+            SSOF.train_OrderModel!(SSOF.OptimWorkspace(model_holder, data_holder), f_tol=1e-8)
             rv_holder[i, :] = SSOF.rvs(model_holder)
         end
         rvs_σ[i, j, :] = vec(std(rv_holder; dims=1))
