@@ -381,10 +381,12 @@ L1(a::AbstractArray) = sum(abs.(a))
 L2(a::AbstractArray) = sum(a .* a)
 shared_attention(v1::AbstractVector, v2::AbstractVector) = dot(abs.(v1), abs.(v2))
 
+
 function model_prior(lm::LinearModel, reg::Dict{Symbol, <:Real})
 	val = 0
 	if haskey(reg, :shared_M)
 		shared_att = 0
+		# number of basis vectors too small for mapreduce to help
 		for i in size(lm.M, 2)
 			for j in size(lm.M, 2)
 				if i != j

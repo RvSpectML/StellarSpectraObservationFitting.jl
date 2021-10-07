@@ -146,29 +146,37 @@ function ordinary_lst_sq_f(data::AbstractVector, order::Int; kwargs...)
 end
 
 
+# _trapz_large(x::AbstractVector, y::AbstractVector) =
+# 	mapreduce(i -> (x[i+1] - x[i]) * (y[i] + y[i+1]), +, 1:(length(y) - 1)) / 2
+# function trapz_large(x::AbstractVector, y::AbstractVector)
+#     @assert length(x) == length(y) > 0 "x and y vectors must be of the same (non-zero) length!"
+# 	return _trapz_large(x, y)
+# end
+# trapz(x::AbstractVector, y::AbstractVector) = trapz_large(x, y)
+
 """
-trapezoidal integration, shamelessly modified from
+trapezoidal integration, shamelessly modified from. Faster for small ranges
 https://github.com/dextorious/NumericalIntegration.jl/blob/master/src/NumericalIntegration.jl
 """
-function trapz(x::AbstractVector, y::AbstractVector)
+function trapz_small(x::AbstractVector, y::AbstractVector)
     @assert length(x) == length(y) "x and y vectors must be of the same length!"
-    integral = 0
-    # @fastmath @simd for i in 1:(length(y) - 1)
-    @simd for i in 1:(length(y) - 1)
+    integral =  0
+    @fastmath @simd for i in 1:(length(y) - 1)
+    # @simd for i in 1:(length(y) - 1)
         @inbounds integral += (x[i+1] - x[i]) * (y[i] + y[i+1])
     end
     return integral / 2
 end
 
-function trapz(lo_x::Real, hi_x::Real, x::AbstractVector, y::AbstractVector)
+function trapz_small(lo_x::Real, hi_x::Real, x::AbstractVector, y::AbstractVector)
     lo_ind, hi_ind = searchsortednearest(x, [lo_x, hi_x])
     # make sure that the inds are inside lo_x and hi_x
     if x[lo_ind] < lo_x; lo_ind += 1 end
     if x[hi_ind] > hi_x; hi_ind -= 1 end
     # integrate over main section + edges
-    integral = trapz(view(x, lo_ind:hi_ind), view(y, lo_ind:hi_ind))
-    integral += trapz([lo_x, x[lo_ind]], [y[lo_ind-1] + ((lo_x - x[lo_ind-1]) / (x[lo_ind]-x[lo_ind-1]) * (y[lo_ind] - y[lo_ind-1])), y[lo_ind]])
-    integral += trapz([x[hi_ind], hi_x], [y[hi_ind], y[hi_ind] + ((hi_x - x[hi_ind]) / (x[hi_ind+1]-x[hi_ind]) * (y[hi_ind+1] - y[hi_ind]))])
+	integral = trapz_small(view(x, lo_ind:hi_ind), view(y, lo_ind:hi_ind))
+    integral += trapz_small([lo_x, x[lo_ind]], [y[lo_ind-1] + ((lo_x - x[lo_ind-1]) / (x[lo_ind]-x[lo_ind-1]) * (y[lo_ind] - y[lo_ind-1])), y[lo_ind]])
+    integral += trapz_small([x[hi_ind], hi_x], [y[hi_ind], y[hi_ind] + ((hi_x - x[hi_ind]) / (x[hi_ind+1]-x[hi_ind]) * (y[hi_ind+1] - y[hi_ind]))])
     return integral
 end
 # using Test
@@ -184,7 +192,7 @@ end
 
 
 oversamp_interp(lo_x::Real, hi_x::Real, x::AbstractVector, y::AbstractVector) =
-	trapz(lo_x, hi_x, x, y) / (hi_x - lo_x)
+	trapz_small(lo_x, hi_x, x, y) / (hi_x - lo_x)
 
 pixel_separation(xs::AbstractVector) = multiple_append!([xs[1] - xs[2]], (xs[1:end-2] - xs[3:end]) ./ 2, [xs[end-1] - xs[end]])
 function bounds_generator!(bounds::AbstractVector, xs::AbstractVector)
