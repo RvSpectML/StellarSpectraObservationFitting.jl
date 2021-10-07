@@ -3,18 +3,13 @@ using ParameterHandling
 using Optim
 using Zygote
 
-
-_χ2_loss(model::AbstractMatrix, d::Data) =
-    sum(((model - d.flux) .^ 2) ./ d.var)
+# χ² loss function
 _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericData) =
-    _χ2_loss(tel .* (star + rv), d)
-function _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::LSFData)
-    model = tel .* (star + rv)
-    for i in 1:size(model, 2)
-        model[:, i] = d.lsf_broadener[i] * model[:, i]
-    end
-    return _χ2_loss(model, d)
-end
+    sum((((tel .* (star + rv)) - d.flux) .^ 2) ./ d.var)
+# χ² loss function broadened by an lsf at each time
+_loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::LSFData) =
+    mapreduce(i -> sum((((d.lsf_broadener[i] * (view(tel, :, i) .* (view(star, :, i) + view(rv, :, i)))) - view(d.flux, :, i)) .^ 2) ./ view(d.var, :, i)), +, 1:size(tel, 2))
+
 
 function loss(o::Output, om::OrderModel, d::Data;
     tel::LinearModel=om.tel.lm, star::LinearModel=om.star.lm, rv::LinearModel=om.rv.lm)
