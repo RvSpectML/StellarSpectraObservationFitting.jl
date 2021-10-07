@@ -5,7 +5,7 @@ using Zygote
 
 # χ² loss function
 _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericData) =
-    sum((((tel .* (star + rv)) - d.flux) .^ 2) ./ d.var)
+    sum(((total_model(tel, star, rv) - d.flux) .^ 2) ./ d.var)
 # χ² loss function broadened by an lsf at each time
 _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::LSFData) =
     mapreduce(i -> sum((((d.lsf_broadener[i] * (view(tel, :, i) .* (view(star, :, i) + view(rv, :, i)))) - view(d.flux, :, i)) .^ 2) ./ view(d.var, :, i)), +, 1:size(tel, 2))

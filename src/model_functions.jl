@@ -414,6 +414,8 @@ function model_prior(lm::LinearModel, reg::Dict{Symbol, <:Real})
 	return val
 end
 
+total_model(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix) = tel .* (star .+ rv)
+
 struct Output{T<:Real}
 	tel::AbstractMatrix{T}
 	star::AbstractMatrix{T}
@@ -422,9 +424,9 @@ struct Output{T<:Real}
 	Output(om::OrderModel, d::Data) =
 		Output(tel_model(om, d), star_model(om, d), rv_model(om, d), d)
 	Output(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericData) =
-		Output(tel, star, rv, tel .* (star + rv))
+		Output(tel, star, rv, total_model(tel, star, rv))
 	function Output(tel::AbstractMatrix{T}, star::AbstractMatrix{T}, rv::AbstractMatrix{T}, d::LSFData) where {T<:Real}
-		total = tel .* (star + rv)
+		total = total_model(tel, star, rv)
 		for i in 1:size(total, 2)
 			total[:, i] = d.lsf_broadener[i] * total[:, i]
 		end
@@ -437,10 +439,10 @@ struct Output{T<:Real}
 end
 Base.copy(o::Output) = Output(copy(tel), copy(star), copy(rv))
 function recalc_total!(o::Output, d::GenericData)
-	o.total[:] = o.tel .* (o.star + o.rv)
+	o.total[:] = total_model(o.tel, o.star, o.rv)
 end
 function recalc_total!(o::Output, d::LSFData)
-	o.total[:] = o.tel .* (o.star + o.rv)
+	o.total .= total_model(o.tel, o.star, o.rv)
 	for i in 1:size(model, 2)
 		o.total[i, :] = d.lsf_broadener[i] * o.total[i, :]
 	end

@@ -32,7 +32,7 @@ sendto(workers(), datapath=datapath, star=star)
     model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8)
     SSOF.initialize!(model, data; use_gp=true)
     o = SSOF.Output(model, data)
-    return stdm(data.flux - (o.tel .* (o.star + o.rv)), 0)
+    return stdm(data.flux - SSOF.total_model(o.tel, o.star, o.rv), 0)
 end
 ords = 1:85
 res = pmap(x->f(x), ords, batch_size=Int(floor(length(ords) / (nworkers() + 1)) + 1))
