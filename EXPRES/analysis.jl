@@ -173,3 +173,4 @@ if save_plots
     plt = component_test_plot(bic, test_n_comp_tel, test_n_comp_star; ylabel="BIC");
     png(plt, save_path * "bic_plot.png")
 end
+# comment
