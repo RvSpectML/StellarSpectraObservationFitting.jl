@@ -103,11 +103,11 @@ function opt_funcs(loss::Function, pars::possible_θ)
     flat_initial_params, unflatten = flatten(pars)  # unflatten returns NamedTuple of untransformed params
     f = loss ∘ unflatten
     function g!(G, θ)
-        G[:] = only(Zygote.gradient(f, θ))
+        G .= only(Zygote.gradient(f, θ))
     end
     function fg_obj!(G, θ)
         l, back = Zygote.pullback(f, θ)
-        G[:] = only(back(1))
+        G .= only(back(1))
         return l
     end
     return flat_initial_params, OnceDifferentiable(f, g!, fg_obj!, flat_initial_params), unflatten
@@ -156,7 +156,7 @@ end
 
 function _OSW_optimize!(osw::OptimSubWorkspace, options::Optim.Options; return_result::Bool=true)
     result = Optim.optimize(osw.obj, osw.p0, osw.opt, options)
-    osw.p0[:] = result.minimizer
+    osw.p0 .= result.minimizer
     if return_result
         return result, osw.unflatten(osw.p0)
     else
@@ -187,10 +187,11 @@ _g_tol_def = 400
 
 function _custom_copy!(from::NamedTuple, to...)
 	for (i, k) in enumerate(keys(from))
-        if typeof(to)<:LinearModel
+        @assert typeof(from[k])==typeof(to[i])
+        if typeof(to[i])<:LinearModel
             copy_LinearModel!(from[k], to[i])
-        elseif typeof(to)<:AbstractVector
-            to[:] = from[k]
+        elseif typeof(to[i])<:AbstractVector
+            to[i] .= from[k]
         else
             @error "didn't expect an object of type $(typeof(to[i]))"
         end
@@ -216,15 +217,15 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
         else
             _custom_copy!(nt, ow.om.tel.lm, ow.om.star.lm)
         end
-        ow.o.star[:, :] = star_model(ow.om, d)
-        ow.o.tel[:, :] = tel_model(ow.om, d)
+        ow.o.star .= star_model(ow.om, d)
+        ow.o.tel .= tel_model(ow.om, d)
     end
 
     # optimize RVs
     options = Optim.Options(;callback=optim_cb_local, g_tol=g_tol*sqrt(length(ow.rv.p0) / length(ow.telstar.p0)), kwargs...)
-    ow.om.rv.lm.M[:] = calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
-    result_rv, ow.om.rv.lm.s[:] = _OSW_optimize!(ow.rv, options)
-    ow.o.rv[:, :] = rv_model(ow.om, d)
+    ow.om.rv.lm.M .= calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
+    result_rv, ow.om.rv.lm.s = _OSW_optimize!(ow.rv, options)
+    ow.o.rv .= rv_model(ow.om, d)
 
     if ignore_regularization
         copy_dict!(reg_tel_holder, ow.om.reg_tel)

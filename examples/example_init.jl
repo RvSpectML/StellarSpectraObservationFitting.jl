@@ -28,10 +28,10 @@ var_obs = zeros(len_obs, n_obs)
 log_λ_obs = zeros(len_obs, n_obs)
 log_λ_star = zeros(len_obs, n_obs)
 for i in 1:n_obs # 13s
-    flux_obs[:, i] = Spectra[i].flux_obs
-    var_obs[:, i] = Spectra[i].var_obs
-    log_λ_obs[:, i] = Spectra[i].log_λ_obs
-    log_λ_star[:, i] = Spectra[i].log_λ_bary
+    flux_obs[:, i] .= Spectra[i].flux_obs
+    var_obs[:, i] .= Spectra[i].var_obs
+    log_λ_obs[:, i] .= Spectra[i].log_λ_obs
+    log_λ_star[:, i] .= Spectra[i].log_λ_bary
 end
 data = SSOF.Data(flux_obs, var_obs, log_λ_obs, log_λ_star)
 

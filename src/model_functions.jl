@@ -46,7 +46,7 @@ Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.log_λ
 
 function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=2*sqrt(2))
     log_min_wav, log_max_wav = [minimum(log_λ_obs), maximum(log_λ_obs)]
-    Δ_logλ_og = minimum(log_λ_obs[end, :] - log_λ_obs[1, :]) / size(log_λ_obs, 1)
+    Δ_logλ_og = minimum(view(log_λ_obs, length(log_λ_obs), :) .- view(log_λ_obs, 1, :)) / size(log_λ_obs, 1)
 	Δ_logλ = Δ_logλ_og / upscale
     log_λ_template = (log_min_wav - 2 * Δ_logλ_og):Δ_logλ:(log_max_wav + 2 * Δ_logλ_og)
     λ_template = exp.(log_λ_template)
@@ -116,7 +116,7 @@ _eval_lm(M::AbstractVecOrMat, s::AbstractVecOrMat, μ::AbstractVector) = _eval_f
 function copy_LinearModel!(from::LinearModel, to::LinearModel)
 	@assert typeof(to)==typeof(from)
 	for i in fieldnames(typeof(from))
-		getfield(to, i)[:] = getfield(from, i)
+		getfield(to, i) .= getfield(from, i)
 	end
 end
 
@@ -154,7 +154,7 @@ function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 	dop = [log_λ_obs_from[1, i] - log_λ_obs_to[1, i] for i in 1:n_obs]
 	log_λ_model_to = ones(length(log_λ_model_from), n_obs)
 	for i in 1:n_obs
-		log_λ_model_to[:, i] = log_λ_model_from .+ dop[i]
+		log_λ_model_to[:, i] .= log_λ_model_from .+ dop[i]
 	end
 	return log_λ_model_to
 end
@@ -188,7 +188,7 @@ struct OrderModel{T<:Number}
         star_dop = [d.log_λ_star[1, i] - d.log_λ_obs[1, i] for i in 1:n_obs]
         star_log_λ_tel = ones(length(star.log_λ), n_obs)
         for i in 1:n_obs
-            star_log_λ_tel[:, i] = star.log_λ .+ star_dop[i]
+            star_log_λ_tel[:, i] .= star.log_λ .+ star_dop[i]
         end
 		todo = Dict([(:reg_improved, false), (:downsized, false), (:optimized, false), (:err_estimated, false)])
 		metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
@@ -239,7 +239,7 @@ spectra_interp(vals::AbstractVector, basis::AbstractVector, bounds::AbstractVect
 function spectra_interp(vals::AbstractMatrix, basis::AbstractVector, bounds::AbstractMatrix)
 	interped_vals = zeros(size(bounds, 1)-1, size(bounds, 2))
 	for i in 1:size(interped_vals, 2)
-		interped_vals[:, i] = spectra_interp(view(vals, :, i), basis, view(bounds, :, i))
+		interped_vals[:, i] .= spectra_interp(view(vals, :, i), basis, view(bounds, :, i))
 	end
 	return interped_vals
 end
@@ -257,7 +257,7 @@ function fix_FullLinearModel_s!(flm, min::Number, max::Number)
 		while any(result .> max) || any(result .< min)
 			# println("$i, old s: $(lm.s[:, i]), min: $(minimum(result)), max:  $(maximum(result))")
 			flm.s[:, i] ./= 2
-			result[:] = _eval_flm(flm.M, flm.s[:, i], flm.μ)
+			result[:] = _eval_flm(flm.M, view(flm.s, :, i), flm.μ)
 			# println("$i, new s: $(lm.s[:, i]), min: $(minimum(result)), max:  $(maximum(result))")
 		end
 	end
@@ -295,20 +295,20 @@ SOAP_gp = build_gp(SOAP_gp_params)
 
 function _spectra_interp_gp!(fluxes, vars, log_λ, flux_obs, var_obs, log_λ_obs; gp_mean::Number=1.)
 	for i in 1:size(flux_obs, 2)
-		gp = get_marginal_GP(SOAP_gp(log_λ_obs[:, i], var_obs[:, i]), flux_obs[:, i] .- gp_mean, log_λ)
-		fluxes[:, i] = mean.(gp) .+ gp_mean
-        vars[:, i] = var.(gp)
+		gp = get_marginal_GP(SOAP_gp(view(log_λ_obs, :, i), view(var_obs, :, i)), view(flux_obs, :, i) .- gp_mean, log_λ)
+		fluxes[:, i] .= mean.(gp) .+ gp_mean
+        vars[:, i] .= var.(gp)
 	end
 end
 
 function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix, log_λ::AbstractVector, flux_obs::AbstractMatrix, var_obs::AbstractMatrix, log_λ_obs::AbstractMatrix, flux_other::AbstractMatrix, var_other::AbstractMatrix, log_λ_other::AbstractMatrix; gp_mean::Number=1.)
 	for i in 1:size(flux_obs, 2)
-		gpn = get_marginal_GP(SOAP_gp(log_λ_obs[:, i], var_obs[:, i]), flux_obs[:, i] .- gp_mean, log_λ)
-		gpd = get_marginal_GP(SOAP_gp(log_λ_other[:, i], var_other[:, i]), flux_other[:, i] .- gp_mean, log_λ)
+		gpn = get_marginal_GP(SOAP_gp(view(log_λ_obs, :, i), view(var_obs, :, i)), view(flux_obs, :, i) .- gp_mean, log_λ)
+		gpd = get_marginal_GP(SOAP_gp(view(log_λ_other, :, i), view(var_other, :, i)), view(flux_other, :, i) .- gp_mean, log_λ)
 		gpn_μ = mean.(gpn) .+ gp_mean
 		gpd_μ = mean.(gpd) .+ gp_mean
-		fluxes[:, i] = gpn_μ ./ gpd_μ
-        vars[:, i] = (var.(gpn) .+ ((gpn_μ .^ 2 .* var.(gpd)) ./ (gpd_μ .^2))) ./ (gpd_μ .^2)
+		fluxes[:, i] .= gpn_μ ./ gpd_μ
+        vars[:, i] .= (var.(gpn) .+ ((gpn_μ .^ 2 .* var.(gpd)) ./ (gpd_μ .^2))) ./ (gpd_μ .^2)
 	end
 end
 
@@ -368,8 +368,10 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2, kw
 	EMPCA!(om.tel.lm.M, Xtmp, om.tel.lm.s, 1 ./ vars_tel)
 	fracvar_tel = fracvar(Xtmp, om.tel.lm.M, om.tel.lm.s, 1 ./ vars_tel)
 
-	om.star.lm.M[:, :], om.star.lm.s[:] = M_star[:, 2:end], s_star[2:end, :]
-	om.rv.lm.M[:, :], om.rv.lm.s[:] = M_star[:, 1], s_star[1, :]'
+	om.star.lm.M .= view(M_star, :, 2:size(M_star, 2))
+	om.star.lm.s[:] = view(s_star, 2:size(s_star, 1), :)
+	om.rv.lm.M .= view(M_star, :, 1)
+	om.rv.lm.s[:] = view(s_star, 1, :)
 
 	fix_FullLinearModel_s!(om.star.lm, min, max)
 	fix_FullLinearModel_s!(om.tel.lm, min, max)
@@ -416,6 +418,11 @@ end
 
 total_model(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix) = tel .* (star .+ rv)
 
+function broaden!(model::AbstractMatrix, broadener::Vector{BandedMatrix})
+	for i in 1:size(model, 2)
+		model[:, i] .= broadener[i] * view(model, :, i)
+	end
+end
 struct Output{T<:Real}
 	tel::AbstractMatrix{T}
 	star::AbstractMatrix{T}
@@ -427,9 +434,7 @@ struct Output{T<:Real}
 		Output(tel, star, rv, total_model(tel, star, rv))
 	function Output(tel::AbstractMatrix{T}, star::AbstractMatrix{T}, rv::AbstractMatrix{T}, d::LSFData) where {T<:Real}
 		total = total_model(tel, star, rv)
-		for i in 1:size(total, 2)
-			total[:, i] = d.lsf_broadener[i] * total[:, i]
-		end
+		broaden!(total, d.lsf_broadener)
 		return Output(tel, star, rv, total)
 	end
 	function Output(tel::AbstractMatrix{T}, star::AbstractMatrix{T}, rv::AbstractMatrix{T}, total::AbstractMatrix{T}) where {T<:Real}
@@ -439,13 +444,11 @@ struct Output{T<:Real}
 end
 Base.copy(o::Output) = Output(copy(tel), copy(star), copy(rv))
 function recalc_total!(o::Output, d::GenericData)
-	o.total[:] = total_model(o.tel, o.star, o.rv)
+	o.total .= total_model(o.tel, o.star, o.rv)
 end
 function recalc_total!(o::Output, d::LSFData)
 	o.total .= total_model(o.tel, o.star, o.rv)
-	for i in 1:size(model, 2)
-		o.total[i, :] = d.lsf_broadener[i] * o.total[i, :]
-	end
+	broaden!(o.total, d.lsf_broadener)
 end
 
 function copy_reg!(from::OrderModel, to::OrderModel)

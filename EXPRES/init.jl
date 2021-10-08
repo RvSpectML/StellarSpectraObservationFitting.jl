@@ -57,8 +57,8 @@ if need_to(pipeline_plan,:read_spectra)
     for i in 1:n_obs # at every time
         spectra, excal_mask = EXPRES.read_data(eachrow(df_files_use)[i]; store_min_data=true, store_tellurics=true, normalization=:blaze, return_λ_obs=true, return_excalibur_mask=true)
 		append!(all_spectra, [spectra])
-		excal_masks[i, :] = mask2range(excal_mask)
-		flux_masks[i, :] = mask2range(.!(isnan.(spectra.flux)))
+		excal_masks[i, :] .= mask2range(excal_mask)
+		flux_masks[i, :] .= mask2range(.!(isnan.(spectra.flux)))
     end
     GC.gc()
     dont_need_to!(pipeline_plan,:read_spectra)
@@ -93,10 +93,10 @@ for order in 1:n_orders
 		log_λ_obs = zeros(len_obs, n_obs)
 		log_λ_star = zeros(len_obs, n_obs)
 		for i in 1:n_obs # 13s
-		    flux_obs[:, i] = all_spectra[i].flux[mask_inds, order]
-		    var_obs[:, i] = all_spectra[i].var[mask_inds, order]
-		    log_λ_obs[:, i] = log.(all_spectra[i].λ_obs[mask_inds, order])
-		    log_λ_star[:, i] = log.(all_spectra[i].λ[mask_inds, order])
+		    flux_obs[:, i] .= all_spectra[i].flux[mask_inds, order]
+		    var_obs[:, i] .= all_spectra[i].var[mask_inds, order]
+		    log_λ_obs[:, i] .= log.(all_spectra[i].λ_obs[mask_inds, order])
+		    log_λ_star[:, i] .= log.(all_spectra[i].λ[mask_inds, order])
 		end
 		data = SSOF.LSFData(flux_obs, var_obs, log_λ_obs, log_λ_star, lsf_broadener(exp.(log_λ_obs)))
 		SSOF.process!(data; order=6)

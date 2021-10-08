@@ -76,14 +76,14 @@ for (i, n_tel) in enumerate(test_n_comp_tel)
     for (j, n_star) in enumerate(test_n_comp_star)
         ws = SSOF.OptimWorkspace(SSOF.downsize(test_model, n_tel, n_star), data)
         SSOF.fine_train_OrderModel!(ws)
-        rvs[i, j, :] = SSOF.rvs(ws.om)
+        rvs[i, j, :] .= SSOF.rvs(ws.om)
         model_holder = copy(ws.om)
         @time for i in 1:n_err
-            data_holder.flux[:, :] = data.flux + (data_noise .* randn(size(data_holder.var)))
+            data_holder.flux .= data.flux + (data_noise .* randn(size(data_holder.var)))
             SSOF.train_OrderModel!(SSOF.OptimWorkspace(model_holder, data_holder), f_tol=1e-8)
-            rv_holder[i, :] = SSOF.rvs(model_holder)
+            rv_holder[i, :] .= SSOF.rvs(model_holder)
         end
-        rvs_σ[i, j, :] = vec(std(rv_holder; dims=1))
+        rvs_σ[i, j, :] .= vec(std(rv_holder; dims=1))
         @save save_path*"low_comp_rvs.jld2" rvs rvs_σ test_n_comp_tel test_n_comp_star
     end
 end

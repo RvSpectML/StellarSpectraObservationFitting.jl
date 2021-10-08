@@ -133,7 +133,7 @@ function multiple_append!(a::Vector{T}, b...) where {T<:Real}
 end
 
 const _fwhm_2_σ_factor = 1 / (2 * sqrt(2 * log(2)))
-fwhm_2_σ(fwhm::Real) = _fwhm_2_σ_factor .* fwhm
+fwhm_2_σ(fwhm::Real) = _fwhm_2_σ_factor * fwhm
 
 ordinary_lst_sq(
     data::AbstractVector,
@@ -143,6 +143,9 @@ ordinary_lst_sq(
 function ordinary_lst_sq_f(data::AbstractVector, order::Int; kwargs...)
 	w = ordinary_lst_sq(data, order; kwargs...)
 	return x -> ([x ^ i for i in 0:order]' * w)
+	# faster than the following
+	# return x -> mapreduce(i -> w[i+1] * x ^ i , +, 0:5)
+	# return x -> sum([x ^ i for i in 0:5] .* w)
 end
 
 
@@ -194,9 +197,9 @@ end
 oversamp_interp(lo_x::Real, hi_x::Real, x::AbstractVector, y::AbstractVector) =
 	trapz_small(lo_x, hi_x, x, y) / (hi_x - lo_x)
 
-pixel_separation(xs::AbstractVector) = multiple_append!([xs[1] - xs[2]], (xs[1:end-2] - xs[3:end]) ./ 2, [xs[end-1] - xs[end]])
+# pixel_separation(xs::AbstractVector) = multiple_append!([xs[1] - xs[2]], (xs[1:end-2] - xs[3:end]) ./ 2, [xs[end-1] - xs[end]])
 function bounds_generator!(bounds::AbstractVector, xs::AbstractVector)
-	bounds[2:end-1] = (xs[1:end-1] + xs[2:end]) ./ 2
+	bounds[2:end-1] = (view(xs, 1:length(xs)-1) .+ view(xs, 2:length(xs))) ./ 2
 	bounds[1] = (3*xs[1] - xs[2]) / 2
 	bounds[end] = (3*xs[end] - xs[end-1]) / 2
 	return bounds

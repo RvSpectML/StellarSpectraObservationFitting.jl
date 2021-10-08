@@ -71,11 +71,7 @@ if !model.metadata[:todo][:reg_improved]
 end
 
 ## Optimizing model
-@time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
-rvs_notel_opt = SSOF.rvs(model)
-if interactive; status_plot(workspace.o, workspace.d) end
-model.metadata[:todo][:optimized] = true
-@save save_path*"results.jld2" model rvs_naive rvs_notel
+
 if !model.metadata[:todo][:optimized]
     @time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
     rvs_notel_opt = SSOF.rvs(model)
@@ -123,7 +119,7 @@ if !model.metadata[:todo][:err_estimated]
     n = 50
     rv_holder = zeros(n, length(model.rv.lm.s))
     @time for i in 1:n
-        data_holder.flux[:, :] = data.flux + (data_noise .* randn(size(data_holder.var)))
+        data_holder.flux .= data.flux .+ (data_noise .* randn(size(data_holder.var)))
         SSOF.train_OrderModel!(SSOF.OptimWorkspace(model_holder, data_holder), f_tol=1e-8)
         rv_holder[i, :] = SSOF.rvs(model_holder)
     end

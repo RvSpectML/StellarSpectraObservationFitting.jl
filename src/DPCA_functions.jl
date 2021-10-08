@@ -164,8 +164,8 @@ end
 function EMPCA!(M::AbstractMatrix, Xtmp::AbstractMatrix, scores::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(M, 2), kwargs...)
 	@assert inds[1] > 0
 	m = empca.empca(Xtmp', weights', nvec=length(inds), silent=true, kwargs...)
-	M[:, inds] = m.eigvec'
-	scores[inds, :] = m.coeff'
+	M[:, inds] .= m.eigvec'
+	scores[inds, :] .= m.coeff'
 end
 
 
