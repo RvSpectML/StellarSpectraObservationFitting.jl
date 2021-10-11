@@ -15,7 +15,7 @@ function loss(o::Output, om::OrderModel, d::Data;
 
     tel !== om.tel ? tel_o = tel_model(om, d) : tel_o = o.tel
     star !== om.star ? star_o = star_model(om, d) : star_o = o.star
-    rv !== om.rv ? rv_o = rv_model(om, d) : rv_o = o.tel
+    rv !== om.rv ? rv_o = rv_model(om, d) : rv_o = o.rv
     return _loss(tel_o, star_o, rv_o, d)
 end
 
