@@ -171,23 +171,23 @@ function oversamp_interp_helper!(to_bounds::AbstractVector, from_x::AbstractVect
 	for i in 1:size(holder, 2)
 		x_lo, x_hi = to_bounds[i], to_bounds[i+1]
 		lo_ind, hi_ind = bounds_inds[i], bounds_inds[i+1]
-		if from_x[lo_ind] < from_x[i]; lo_ind += 1 end
-		if from_x[hi_ind] > from_x[i+1]; hi_ind -= 1 end
+		if from_x[lo_ind] < x_lo; lo_ind += 1 end
+		if from_x[hi_ind] > x_hi; hi_ind -= 1 end
 
-		cross_term_lo = (from_x[lo_ind] - x_lo) * (x_lo - from_x[lo_ind-1]) / (from_x[lo_ind] - from_x[lo_ind-1])
-		cross_term_hi = (from_x[hi_ind+1] - x_hi) * (x_hi - from_x[hi_ind]) / (from_x[hi_ind+1] - from_x[hi_ind])
+		edge_term_lo = (from_x[lo_ind] - x_lo) ^ 2 / (from_x[lo_ind] - from_x[lo_ind-1])
+		edge_term_hi = (x_hi - from_x[hi_ind]) ^ 2 / (from_x[hi_ind+1] - from_x[hi_ind])
 
-		holder[lo_ind-1, i] = from_x[lo_ind] - x_lo - cross_term_lo
-		holder[lo_ind, i] = from_x[lo_ind+1] - from_x[lo_ind-1] + cross_term_lo
+		holder[lo_ind-1, i] = edge_term_lo
+		holder[lo_ind, i] = from_x[lo_ind+1] + from_x[lo_ind] - 2 * x_lo - edge_term_lo
 
 		holder[lo_ind+1:hi_ind-1, i] .= view(from_x, lo_ind+2:hi_ind) .- view(from_x, lo_ind:hi_ind-2)
 
-		holder[hi_ind, i] = from_x[hi_ind+1] - from_x[hi_ind-1] + cross_term_hi
-		holder[hi_ind+1, i] = x_hi - from_x[hi_ind] - cross_term_hi
+		holder[hi_ind, i] = 2 * x_hi - from_x[hi_ind] - from_x[hi_ind-1] - edge_term_hi
+		holder[hi_ind+1, i] = edge_term_hi
 
 		holder[lo_ind-1:hi_ind+1, i] ./= 2 * (x_hi - x_lo)
 	end
-	ans = sparse(holder)
+	ans = sparse(holder')
 	dropzeros!(ans)
 	return ans
 end
