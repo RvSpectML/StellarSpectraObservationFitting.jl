@@ -6,98 +6,40 @@ using Zygote
 # χ² loss function
 _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericData) =
     sum(((total_model(tel, star, rv) .- d.flux) .^ 2) ./ d.var)
-# χ² loss function broadened by an lsf at each time
+# χ² loss function broadened by an lsf at each time (about 2x slower)
 _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::LSFData) =
     mapreduce(i -> sum((((d.lsf_broadener[i] * (view(tel, :, i) .* (view(star, :, i) .+ view(rv, :, i)))) .- view(d.flux, :, i)) .^ 2) ./ view(d.var, :, i)), +, 1:size(tel, 2))
 
 function loss(o::Output, om::OrderModel, d::Data;
-    tel::LinearModel=om.tel.lm, star::LinearModel=om.star.lm, rv::LinearModel=om.rv.lm)
+	tel::LinearModel=om.tel.lm, star::LinearModel=om.star.lm, rv::LinearModel=om.rv.lm,
+	recalc_tel::Bool=true, recalc_star::Bool=true, recalc_rv::Bool=true)
 
-    tel !== om.tel ? tel_o = tel_model(om, d) : tel_o = o.tel
-    star !== om.star ? star_o = star_model(om, d) : star_o = o.star
-    rv !== om.rv ? rv_o = rv_model(om, d) : rv_o = o.rv
+    recalc_tel ? tel_o = tel_model(om, d; lm=tel) : tel_o = o.tel
+    recalc_star ? star_o = star_model(om, d; lm=star) : star_o = o.star
+    recalc_rv ? rv_o = rv_model(om, d; lm=rv) : rv_o = o.rv
     return _loss(tel_o, star_o, rv_o, d)
 end
 
 possible_θ = Union{LinearModel, AbstractMatrix, NamedTuple}
 
-function loss_funcs(o::Output, om::OrderModel, d::Data)
-    l() = loss(o, om, d)
-
-    l_tel(tel::LinearModel) = loss(o, om, d; tel=tel) +
-        model_prior(tel, om.reg_tel)
-    function l_tel_s(tel::AbstractMatrix)
-        lm = LinearModel(om.tel, tel)
-        return loss(o, om, d; tel = lm) + model_prior(lm, om.reg_tel)
-    end
-
-    l_star(star::LinearModel) = loss(o, om, d; star = star) +
-        model_prior(star, om.reg_star)
-    function l_star_s(star::AbstractMatrix)
-        lm = LinearModel(om.star, star)
-        return loss(o, om, d; star = lm) + model_prior(lm, om.star_tel)
-    end
-
-    l_telstar(nt::NamedTuple{(:tel, :star,),<:Tuple{LinearModel, LinearModel}}) =
-        loss(o, om, d; tel = nt.tel, star = nt.star) +
-        model_prior(nt.tel, om.reg_tel) + model_prior(nt.star, om.reg_star)
-    function l_telstar_s(nt::NamedTuple{(:tel, :star,),<:Tuple{AbstractMatrix, AbstractMatrix}})
-        tel = LinearModel(om.tel, nt.tel)
-        star = LinearModel(om.star, nt.star)
-        return loss(o, om, d; tel=tel, star=star) +
-            model_prior(tel, om.reg_tel) + model_prior(star, om.reg_star)
-    end
-
-    l_rv(rv::AbstractMatrix) = loss(o, om, d; rv=BaseLinearModel(om.rv.M, rv))
-
-    function l_total(nt::NamedTuple{(:tel, :star, :rv,),<:Tuple{LinearModel, LinearModel, AbstractMatrix}})
-        rv = BaseLinearModel(calc_doppler_component_RVSKL_Flux(om.star.λ, nt.star.μ), nt.rv)
-        return loss(o, om, d; tel=nt.tel, star=nt.star, rv=rv) + model_prior(nt.tel, om.reg_tel) + model_prior(nt.star, om.reg_star)
-    end
-    function l_total_s(nt::NamedTuple{(:tel, :star, :rv,),<:Tuple{AbstractMatrix, AbstractMatrix, AbstractMatrix}})
-        tel = LinearModel(om.tel, nt.tel)
-        star = LinearModel(om.star, nt.star)
-        rv = BaseLinearModel(calc_doppler_component_RVSKL_Flux(om.star.λ, om.star.μ), nt.rv)
-        return loss(o, om, d; tel=tel, star=star, rv=rv) + model_prior(tel, om.reg_tel) + model_prior(star, om.reg_star)
-    end
-
-    return l, l_tel, l_tel_s, l_star, l_star_s, l_rv
-end
-
 function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
     l() = loss(o, om, d)
 
     l_telstar(nt::NamedTuple{(:tel, :star,),<:Tuple{LinearModel, LinearModel}}) =
-        loss(o, om, d; tel = nt.tel, star = nt.star) +
+        loss(o, om, d; tel=nt.tel, star=nt.star, recalc_rv=false) +
         model_prior(nt.tel, om.reg_tel) + model_prior(nt.star, om.reg_star)
-    function l_telstar_s(star::AbstractMatrix)
+    function l_telstar_s(nt::NamedTuple{(:tel, :star,),<:Tuple{AbstractVector, AbstractVector}})
         tel = LinearModel(om.tel, nt.tel)
         star = LinearModel(om.star, nt.star)
-        return loss(o, om, d; tel=tel, star=star) +
+        return loss(o, om, d; tel=tel, star=star, recalc_rv=false) +
             model_prior(tel, om.reg_tel) + model_prior(star, om.reg_star)
     end
 
-    l_rv(rv::AbstractMatrix) = loss(o, om, d; rv=BaseLinearModel(om.rv.M, rv))
+    l_rv(rv::AbstractMatrix) = loss(o, om, d; rv=BaseLinearModel(om.rv.M, rv), recalc_tel=false, recalc_star=false)
 
     return l, l_telstar, l_telstar_s, l_rv
 end
 
-function loss_funcs_total(o::Output, om::OrderModel, d::Data)
-    l() = loss(o, om, d)
-
-    function l_total(nt::NamedTuple{(:tel, :star, :rv,),<:Tuple{LinearModel, LinearModel, AbstractMatrix}})
-        rv = BaseLinearModel(calc_doppler_component_RVSKL_Flux(om.star.λ, nt.star.μ), nt.rv)
-        return loss(o, om, d; tel=nt.tel, star=nt.star, rv=rv) + model_prior(nt.tel, om.reg_tel) + model_prior(nt.star, om.reg_star)
-    end
-    function l_total_s(nt::NamedTuple{(:tel, :star, :rv,),<:Tuple{AbstractMatrix, AbstractMatrix, AbstractMatrix}})
-        tel = LinearModel(om.tel, nt.tel)
-        star = LinearModel(om.star, nt.star)
-        rv = BaseLinearModel(calc_doppler_component_RVSKL_Flux(om.star.λ, om.star.μ), nt.rv)
-        return loss(o, om, d; tel=tel, star=star, rv=rv) + model_prior(tel, om.reg_tel) + model_prior(star, om.reg_star)
-    end
-
-    return l, l_total, l_total_s
-end
 
 function opt_funcs(loss::Function, pars::possible_θ)
     flat_initial_params, unflatten = flatten(pars)  # unflatten returns NamedTuple of untransformed params
@@ -224,8 +166,9 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
     # optimize RVs
     options = Optim.Options(;callback=optim_cb_local, g_tol=g_tol*sqrt(length(ow.rv.p0) / length(ow.telstar.p0)), kwargs...)
     ow.om.rv.lm.M .= calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
-    result_rv, ow.om.rv.lm.s = _OSW_optimize!(ow.rv, options)
+    result_rv, ow.om.rv.lm.s[:] = _OSW_optimize!(ow.rv, options)
     ow.o.rv .= rv_model(ow.om, d)
+	recalc_total!(ow.o, d)
 
     if ignore_regularization
         copy_dict!(reg_tel_holder, ow.om.reg_tel)
