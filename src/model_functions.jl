@@ -46,8 +46,8 @@ end
 Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star))
 
 function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=2*sqrt(2))
-    log_min_wav, log_max_wav = [minimum(log_λ_obs), maximum(log_λ_obs)]
-    Δ_logλ_og = minimum(view(log_λ_obs, length(log_λ_obs), :) .- view(log_λ_obs, 1, :)) / size(log_λ_obs, 1)
+    log_min_wav, log_max_wav = extrema(log_λ_obs)
+    Δ_logλ_og = minimum(view(log_λ_obs, size(log_λ_obs, 1), :) .- view(log_λ_obs, 1, :)) / size(log_λ_obs, 1)
 	Δ_logλ = Δ_logλ_og / upscale
     log_λ_template = (log_min_wav - 2 * Δ_logλ_og):Δ_logλ:(log_max_wav + 2 * Δ_logλ_og)
     λ_template = exp.(log_λ_template)
