@@ -5,7 +5,6 @@ Pkg.activate("EXPRES")
 using JLD2
 using Statistics
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
-using Plots
 import StatsBase
 
 ## Setting up necessary variables
@@ -45,8 +44,54 @@ else
     @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
 
+
 ## Creating optimization workspace
 workspace, loss = SSOF.OptimWorkspace(model, data; return_loss_f=true)
+
+ts = workspace.telstar
+using BenchmarkTools
+using Zygote
+using ParameterHandling
+using BandedMatrices
+@btime ts.obj.f(ts.p0)
+Zygote.gradient(ts.obj.f, ts.p0)
+
+x = 0.5:0.5:1000
+xo = 1.25:1:999
+xob = SSOF.bounds_generator(xo)
+θ = ones(2000,3) .+ (0.005 .* x)
+y = randn(3,100)
+
+θ*y
+bm = BandedMatrix(ones(1000,1000),(13,13))
+function f(x)
+    ans = θ*y
+    return mapreduce(i -> sum(bm * view(ans, :, i)), +, 1:size(ans, 2))
+end
+xf, unflatten = flatten(x)
+fz = f ∘ unflatten
+Zygote.gradient(fz, xf)
+Zygote.pullback(fz, xf)
+
+SSOF.oversamp_interp(lo_x::Real, hi_x::Real, x::AbstractVector, y::AbstractVector)
+[SSOF.oversamp_interp(xob[i], xob[i+1], x, θ[:, 1]) for i in 1:(length(xob)-1)]
+
+
+θ
+xobs = repeat(xob, 1, 100)
+vals = θ*y
+@time SSOF.spectra_interp(vals, x, xobs)
+@time SSOF.spectra_interp_old(vals, x, xobs)
+
+function spectra_interp_old(vals::AbstractMatrix, basis::AbstractVector, bounds::AbstractMatrix)
+	interped_vals = zeros(size(bounds, 1)-1, size(bounds, 2))
+	for i in 1:size(interped_vals, 2)
+		interped_vals[:, i] .= spectra_interp(view(vals, :, i), basis, view(bounds, :, i))
+	end
+	return interped_vals
+end
+spectra_interp(vals::AbstractMatrix, basis::AbstractVector, bounds::AbstractMatrix) =
+	hcat([spectra_interp(view(vals, :, i), basis, view(bounds, :, i)) for i in 1:size(bounds, 2)]...)
 
 ## Plotting
 
@@ -60,7 +105,7 @@ end
 
 ## Improving regularization
 
-if !model.metadata[:todo][:reg_improved]
+if false#!model.metadata[:todo][:reg_improved]
     @time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true, ignore_regularization=true)  # 16s
     n_obs_train = Int(round(0.75 * n_obs))
     training_inds = sort(StatsBase.sample(1:n_obs, n_obs_train; replace=false))
@@ -80,6 +125,38 @@ if !model.metadata[:todo][:optimized]
     @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
 status_plot(workspace.o, workspace.d)
+
+# @time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
+ts = workspace.telstar
+@time ts.obj.f(ts.p0)
+Zygote.gradient(ts.obj.f, ts.p0)
+ts.obj.df(g, ts.p0)
+
+using Optim
+ow = workspace; print_stuff=true; iterations=1; f_tol=1e-6; g_tol=2.5e5;
+optim_cb_local(x::OptimizationState) = SSOF.optim_cb(x; print_stuff=print_stuff)
+
+options = Optim.Options(;iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local)
+
+
+# optimize tellurics and star
+result_telstar, nt = SSOF._OSW_optimize!(ow.telstar, options)
+
+if ow.only_s
+    SSOF._custom_copy!(nt, ow.om.tel.lm.s, ow.om.star.lm.s)
+else
+    _custom_copy!(nt, ow.om.tel.lm, ow.om.star.lm)
+end
+ow.o.star .= star_model(ow.om, d)
+ow.o.tel .= tel_model(ow.om, d)
+
+# optimize RVs
+options = Optim.Options(;callback=optim_cb_local, g_tol=g_tol*sqrt(length(ow.rv.p0) / length(ow.telstar.p0)), kwargs...)
+ow.om.rv.lm.M .= calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
+result_rv, ow.om.rv.lm.s[:] = _OSW_optimize!(ow.rv, options)
+ow.o.rv .= rv_model(ow.om, d)
+recalc_total!(ow.o, d)
+
 
 ## Downsizing model
 
@@ -173,4 +250,94 @@ if save_plots
     plt = component_test_plot(bic, test_n_comp_tel, test_n_comp_star; ylabel="BIC");
     png(plt, save_path * "bic_plot.png")
 end
+
+model
+Pkg.add("ParameterHandling")
+using ParameterHandling
+
+x = ones(5000,10)
+s = ones(10,100)
+test = SSOF.BaseLinearModel(x, s)
+# x[1] = 2
+# test.M
+using ParameterHandling
+@time v, unflatten, unflatten! = flatten(test)
+@time v2, unflatten2 = flatten(x)
+
+
+@time unflatten!(v, test)
+@time x[:] = unflatten2(v2)
+
 # comment
+workspace.o
+using BenchmarkTools
+@btime SSOF.loss(workspace.o, workspace.om, workspace.d)
+x = SSOF.tel_model(workspace.om, workspace.d)
+@btime SSOF.loss(workspace.o, workspace.om, workspace.d; tel=workspace.om.tel.lm)
+function loss2(o::SSOF.Output, om::SSOF.OrderModel, d::SSOF.Data;
+    recalc_tel::Bool=true, recalc_star::Bool=true, recalc_rv::Bool=true)
+
+    recalc_tel ? tel_o = SSOF.tel_model(om, d) : tel_o = o.tel
+    recalc_star ? star_o = SSOF.star_model(om, d) : star_o = o.star
+    recalc_rv ? rv_o = SSOF.rv_model(om, d) : rv_o = o.rv
+    return SSOF._loss(tel_o, star_o, rv_o, d)
+end
+
+@btime loss2(workspace.o, workspace.om, workspace.d)
+SSOF.rv_model(workspace.om, workspace.d) == workspace.o.rv
+@btime loss2(workspace.o, workspace.om, workspace.d; recalc_tel=false, recalc_star=false, recalc_rv=false)
+
+loss2(workspace.o, workspace.om, workspace.d)
+loss2(workspace.o, workspace.om, workspace.d; recalc_tel=false, recalc_star=false, recalc_rv=false)
+
+SSOF._loss(SSOF.tel_model(workspace.om, workspace.d), SSOF.star_model(workspace.om, workspace.d), SSOF.rv_model(workspace.om, workspace.d), workspace.d)
+
+workspace.d
+data2 = SSOF.GenericData(data.flux, data.var, data.log_λ_obs, data.log_λ_star)
+
+x = ones(1000, 3)
+y = ones(3, 100)
+z = zeros(3, 100)
+@time lm1 = SSOF.LinearModel(x, y)
+lm2 = SSOF.LinearModel(x, z)
+
+lm1.M[1] = 10
+lm2.M[1]
+
+_loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericData) =
+    sum(((total_model(tel, star, rv) .- d.flux) .^ 2) ./ d.var)
+# χ² loss function broadened by an lsf at each time
+_loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::LSFData) =
+    mapreduce(i -> sum((((d.lsf_broadener[i] * (view(tel, :, i) .* (view(star, :, i) .+ view(rv, :, i)))) .- view(d.flux, :, i)) .^ 2) ./ view(d.var, :, i)), +, 1:size(tel, 2))
+
+@time hcat([rand(1000) for i in 1:200]...)
+
+using SparseArrays
+using BandedMatrices
+xb = BandedMatrix(zeros(10000, 10000), (13,13))
+x = Matrix(xb)
+y = ones(10000,1)
+@time x * y
+@time xs * y
+@time xb * y
+
+
+Pkg.add("JLD2")
+using JLD2
+
+@save "test1.jld2" x
+@save "test2.jld2" xb
+@save "test3.jld2" xs
+
+xs[1] = 1
+xs
+dropzeros!(xs)
+
+xs
+
+typeof(xs) <: SparseMatrixCSC
+
+
+
+SSOF.trapz_small([1, 4], [3, 12])
+(4-1) * (3+12) / 2
