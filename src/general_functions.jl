@@ -19,7 +19,8 @@ end
 
 
 function searchsortednearest(a::AbstractVector{T} where T<:Real, x::AbstractVector{T} where T<:Real; kwargs...)
-   	len_x = length(x)
+	@assert issorted(x)
+	len_x = length(x)
    	len_a = length(a)
    	idxs = zeros(Int64, len_x)
    	idxs[1] = searchsortednearest(a, x[1]; kwargs...)
@@ -95,7 +96,7 @@ end
 function vander(x::AbstractVector, n::Int)
     m = ones(length(x), n + 1)
     for i in 1:n
-        m[:, i + 1] = m[:, i] .* x
+        m[:, i + 1] .= m[:, i] .* x
     end
     return m
 end
@@ -148,7 +149,7 @@ function ordinary_lst_sq_f(data::AbstractVector, order::Int; kwargs...)
 	# return x -> sum([x ^ i for i in 0:5] .* w)
 end
 
-
+_trapzx2(x1::Real, x2::Real, y1::Real, y2::Real) = (x2 - x1) * (y1 + y2)
 # _trapz_large(x::AbstractVector, y::AbstractVector) =
 # 	mapreduce(i -> (x[i+1] - x[i]) * (y[i] + y[i+1]), +, 1:(length(y) - 1)) / 2
 # function trapz_large(x::AbstractVector, y::AbstractVector)
@@ -166,7 +167,7 @@ function trapz_small(x::AbstractVector, y::AbstractVector)
     integral =  0
     @fastmath @simd for i in 1:(length(y) - 1)
     # @simd for i in 1:(length(y) - 1)
-        @inbounds integral += (x[i+1] - x[i]) * (y[i] + y[i+1])
+        @inbounds integral += _trapzx2(x[i], x[i+1], y[i], y[i+1])
     end
     return integral / 2
 end
@@ -177,9 +178,9 @@ function trapz_small(lo_x::Real, hi_x::Real, x::AbstractVector, y::AbstractVecto
     if x[lo_ind] < lo_x; lo_ind += 1 end
     if x[hi_ind] > hi_x; hi_ind -= 1 end
     # integrate over main section + edges
-	integral = trapz_small(view(x, lo_ind:hi_ind), view(y, lo_ind:hi_ind))
-    integral += trapz_small([lo_x, x[lo_ind]], [y[lo_ind-1] + ((lo_x - x[lo_ind-1]) / (x[lo_ind]-x[lo_ind-1]) * (y[lo_ind] - y[lo_ind-1])), y[lo_ind]])
-    integral += trapz_small([x[hi_ind], hi_x], [y[hi_ind], y[hi_ind] + ((hi_x - x[hi_ind]) / (x[hi_ind+1]-x[hi_ind]) * (y[hi_ind+1] - y[hi_ind]))])
+	integral = trapz_small(view(x, lo_ind:hi_ind), view(y, lo_ind:hi_ind)) +
+		+ _trapzx2(lo_x, x[lo_ind], y[lo_ind-1] + ((lo_x - x[lo_ind-1]) / (x[lo_ind]-x[lo_ind-1]) * (y[lo_ind] - y[lo_ind-1])), y[lo_ind])
+		+ _trapzx2(x[hi_ind], hi_x, y[hi_ind], y[hi_ind] + ((hi_x - x[hi_ind]) / (x[hi_ind+1]-x[hi_ind]) * (y[hi_ind+1] - y[hi_ind])))
     return integral
 end
 # using Test
@@ -196,6 +197,11 @@ end
 
 oversamp_interp(lo_x::Real, hi_x::Real, x::AbstractVector, y::AbstractVector) =
 	trapz_small(lo_x, hi_x, x, y) / (hi_x - lo_x)
+# function undersamp_interp(x_new::Real, x::AbstractVector, y::AbstractVector)
+# 	ind = searchsortednearest(x, x_new; lower=true)
+# 	dif = (x_new-x[ind]) / (x[ind+1] - x[ind])
+# 	return y[ind] * (1-dif) + y[ind+1] * dif
+# end
 
 # pixel_separation(xs::AbstractVector) = multiple_append!([xs[1] - xs[2]], (xs[1:end-2] - xs[3:end]) ./ 2, [xs[end-1] - xs[end]])
 function bounds_generator!(bounds::AbstractVector, xs::AbstractVector)
