@@ -250,3 +250,19 @@ Pkg.rm("GLOM_RV_Example")
 Pkg.rm("GPLinearODEMaker")
 Pkg.develop(;path="C:\\Users\\chris\\OneDrive\\Documents\\GitHub\\GPLinearODEMaker.jl")
 Pkg.develop(;path="C:\\Users\\chris\\OneDrive\\Documents\\GitHub\\GLOM_RV_Example")
+
+
+## using sparse arrays is 2x faster (but takes twice the memory) than banded for multiplication
+using SparseArrays
+using BandedMatrices
+xb = BandedMatrix(ones(10000, 10000), (13,13))
+xs = sparse(xb)
+x = Matrix(xb)
+y = ones(10000,1)
+@time x * y
+@time xs * y
+@time xb * y
+
+@save "test1.jld2" x
+@save "test2.jld2" xb
+@save "test3.jld2" xs

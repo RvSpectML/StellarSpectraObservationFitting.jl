@@ -3,7 +3,8 @@ using KernelFunctions
 using TemporalGPs
 using Distributions
 import Base.copy
-using BandedMatrices
+# using BandedMatrices
+using SparseArrays
 using SpecialFunctions
 
 abstract type Data end
@@ -15,7 +16,7 @@ struct LSFData{T<:Real} <: Data
 	log_λ_obs_bounds::AbstractMatrix{T}
     log_λ_star::AbstractMatrix{T}
 	log_λ_star_bounds::AbstractMatrix{T}
-	lsf_broadener::AbstractVector{BandedMatrix}
+	lsf_broadener::AbstractVector{SparseMatrixCSC}
 	function LSFData(flux::AbstractMatrix{T}, var, log_λ_obs, log_λ_star, lsf_broadener) where {T<:Real}
 		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
 		@assert length(lsf_broadener) == size(flux, 2)
@@ -164,12 +165,45 @@ default_reg_tel = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
 default_reg_star = Dict([(:L2_μ, 1e4), (:L1_μ, 1e3),
 	(:L1_μ₊_factor, 7.2), (:L2_M, 1e1), (:L1_M, 1e6)])
 
+
+function oversamp_interp_helper!(to_bounds::AbstractVector, from_x::AbstractVector, holder::AbstractMatrix)
+	bounds_inds = searchsortednearest(from_x, to_bounds)
+	for i in 1:size(holder, 2)
+		x_lo, x_hi = to_bounds[i], to_bounds[i+1]
+		lo_ind, hi_ind = bounds_inds[i], bounds_inds[i+1]
+		if from_x[lo_ind] < from_x[i]; lo_ind += 1 end
+		if from_x[hi_ind] > from_x[i+1]; hi_ind -= 1 end
+
+		cross_term_lo = (from_x[lo_ind] - x_lo) * (x_lo - from_x[lo_ind-1]) / (from_x[lo_ind] - from_x[lo_ind-1])
+		cross_term_hi = (from_x[hi_ind+1] - x_hi) * (x_hi - from_x[hi_ind]) / (from_x[hi_ind+1] - from_x[hi_ind])
+
+		holder[lo_ind-1, i] = from_x[lo_ind] - x_lo - cross_term_lo
+		holder[lo_ind, i] = from_x[lo_ind+1] - from_x[lo_ind-1] + cross_term_lo
+
+		holder[lo_ind+1:hi_ind-1, i] .= view(from_x, lo_ind+2:hi_ind) .- view(from_x, lo_ind:hi_ind-2)
+
+		holder[hi_ind, i] = from_x[hi_ind+1] - from_x[hi_ind-1] + cross_term_hi
+		holder[hi_ind+1, i] = x_hi - from_x[hi_ind] - cross_term_hi
+
+		holder[lo_ind-1:hi_ind+1, i] ./= 2 * (x_hi - x_lo)
+	end
+	ans = sparse(holder)
+	dropzeros!(ans)
+	return ans
+end
+function oversamp_interp_helper(to_bounds::AbstractMatrix, from_x::AbstractVector)
+	holder = zeros(length(from_x), length(to_bounds)-1)
+	return [oversamp_interp_helper!(view(to_bounds, :, i), from_x, holder) for i in 1:size(to_bounds, 2)]
+end
+
 struct OrderModel{T<:Number}
     tel::Submodel{T}
     star::Submodel{T}
 	rv::Submodel{T}
 	reg_tel::Dict{Symbol, T}
 	reg_star::Dict{Symbol, T}
+	b2o::Vector{SparseMatrixCSC}
+	t2o::Vector{SparseMatrixCSC}
 	metadata::Dict{Symbol, Any}
     function OrderModel(
 		d::Data,
@@ -192,10 +226,12 @@ struct OrderModel{T<:Number}
         end
 		todo = Dict([(:reg_improved, false), (:downsized, false), (:optimized, false), (:err_estimated, false)])
 		metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
-        return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), metadata)
+		b2o = oversamp_interp_helper(d.log_λ_star_bounds, star.log_λ)
+		t2o = oversamp_interp_helper(d.log_λ_obs_bounds, tel.log_λ)
+        return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), b2o, t2o, metadata)
     end
-    function OrderModel(tel::Submodel{T}, star, rv, reg_tel, reg_star, metadata) where {T<:Number}
-		return new{T}(tel, star, rv, reg_tel, reg_star, metadata)
+    function OrderModel(tel::Submodel{T}, star, rv, reg_tel, reg_star, b2o, t2o, metadata) where {T<:Number}
+		return new{T}(tel, star, rv, reg_tel, reg_star, b2o, t2o, metadata)
 	end
 end
 Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), copy(om.metadata))
@@ -236,17 +272,21 @@ star_prior(om::OrderModel) = model_prior(om.star.lm, om.reg_star)
 
 spectra_interp(vals::AbstractVector, basis::AbstractVector, bounds::AbstractVector) =
 	[oversamp_interp(bounds[i], bounds[i+1], basis, vals) for i in 1:(length(bounds)-1)]
-function spectra_interp(vals::AbstractMatrix, basis::AbstractVector, bounds::AbstractMatrix)
-	interped_vals = zeros(size(bounds, 1)-1, size(bounds, 2))
-	for i in 1:size(interped_vals, 2)
-		interped_vals[:, i] .= spectra_interp(view(vals, :, i), basis, view(bounds, :, i))
-	end
-	return interped_vals
-end
+# spectra_interp(vals::AbstractVector, basis::AbstractVector, bounds::AbstractVector) =
+# 	[undersamp_interp((bounds[i+1] + bounds[i]) / 2, basis, vals) for i in 1:(length(bounds)-1)]
+# function spectra_interp(vals::AbstractMatrix, basis::AbstractVector, bounds::AbstractMatrix)
+# 	interped_vals = zeros(size(bounds, 1)-1, size(bounds, 2))
+# 	for i in 1:size(interped_vals, 2)
+# 		interped_vals[:, i] .= spectra_interp(view(vals, :, i), basis, view(bounds, :, i))
+# 	end
+# 	return interped_vals
+# end
+spectra_interp(vals::AbstractMatrix, basis::AbstractVector, bounds::AbstractMatrix) =
+	hcat([spectra_interp(view(vals, :, i), basis, view(bounds, :, i)) for i in 1:size(bounds, 2)]...)
 
-tel_model(om::OrderModel, d::Data) = spectra_interp(om.tel.lm(), om.tel.log_λ, d.log_λ_obs_bounds)
-star_model(om::OrderModel, d::Data) = spectra_interp(om.star.lm(), om.star.log_λ, d.log_λ_star_bounds)
-rv_model(om::OrderModel, d::Data) = spectra_interp(om.rv.lm(), om.rv.log_λ, d.log_λ_star_bounds)
+tel_model(om::OrderModel, d::Data; lm=om.tel.lm::LinearModel) = spectra_interp(lm(), om.tel.log_λ, d.log_λ_obs_bounds)
+star_model(om::OrderModel, d::Data; lm=om.star.lm::LinearModel) = spectra_interp(lm(), om.star.log_λ, d.log_λ_star_bounds)
+rv_model(om::OrderModel, d::Data; lm=om.rv.lm::LinearModel) = spectra_interp(lm(), om.rv.log_λ, d.log_λ_star_bounds)
 
 
 function fix_FullLinearModel_s!(flm, min::Number, max::Number)
@@ -418,7 +458,7 @@ end
 
 total_model(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix) = tel .* (star .+ rv)
 
-function broaden!(model::AbstractMatrix, broadener::Vector{BandedMatrix})
+function broaden!(model::AbstractMatrix, broadener::Vector{SparseMatrixCSC})
 	for i in 1:size(model, 2)
 		model[:, i] .= broadener[i] * view(model, :, i)
 	end

@@ -4,7 +4,8 @@ import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 
 ## Finding LSF width as a function of λ
 using Distributions
-using BandedMatrices
+# using BandedMatrices
+using SparseArrays
 using LinearAlgebra
 _recalc = true
 _inter_poly_order = 2
@@ -131,15 +132,15 @@ function lsf_broadener(λ::AbstractVector; safe::Bool=true)
     σs = lsf_σ_safe(wn, wn .- mean(wn))
     nwn = -wn
     holder = zeros(length(nwn), length(nwn))
-    maxb = 0
     for i in 1:length(nwn)
         lo, hi = SSOF.searchsortednearest(nwn, [nwn[i] - 3 * σs[i], nwn[i] + 3 * σs[i]])
         lsf = Normal(wn[i], σs[i])
         holder[i, lo:hi] = pdf.(lsf, wn[lo:hi])
         holder[i, lo:hi] ./= sum(view(holder, i, lo:hi))
-        maxb = max(max(maxb, hi-i), i-lo)
     end
-    return BandedMatrix(holder,(maxb,maxb))
+    ans = sparse(holder)
+    dropzeros!(ans)
+    return ans
 end
 lsf_broadener(λ::AbstractMatrix; kwargs...) =
     [lsf_broadener(view(λ, :, i); kwargs...) for i in 1:size(λ, 2)]
