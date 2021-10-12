@@ -14,9 +14,9 @@ function loss(o::Output, om::OrderModel, d::Data;
 	tel::LinearModel=om.tel.lm, star::LinearModel=om.star.lm, rv::LinearModel=om.rv.lm,
 	recalc_tel::Bool=true, recalc_star::Bool=true, recalc_rv::Bool=true)
 
-    recalc_tel ? tel_o = tel_model(om, d; lm=tel) : tel_o = o.tel
-    recalc_star ? star_o = star_model(om, d; lm=star) : star_o = o.star
-    recalc_rv ? rv_o = rv_model(om, d; lm=rv) : rv_o = o.rv
+    recalc_tel ? tel_o = tel_model(om; lm=tel) : tel_o = o.tel
+    recalc_star ? star_o = star_model(om; lm=star) : star_o = o.star
+    recalc_rv ? rv_o = rv_model(om; lm=rv) : rv_o = o.rv
     return _loss(tel_o, star_o, rv_o, d)
 end
 
@@ -159,15 +159,15 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
         else
             _custom_copy!(nt, ow.om.tel.lm, ow.om.star.lm)
         end
-        ow.o.star .= star_model(ow.om, d)
-        ow.o.tel .= tel_model(ow.om, d)
+        ow.o.star .= star_model(ow.om)
+        ow.o.tel .= tel_model(ow.om)
     end
 
     # optimize RVs
     options = Optim.Options(;callback=optim_cb_local, g_tol=g_tol*sqrt(length(ow.rv.p0) / length(ow.telstar.p0)), kwargs...)
     ow.om.rv.lm.M .= calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
     result_rv, ow.om.rv.lm.s[:] = _OSW_optimize!(ow.rv, options)
-    ow.o.rv .= rv_model(ow.om, d)
+    ow.o.rv .= rv_model(ow.om)
 	recalc_total!(ow.o, d)
 
     if ignore_regularization

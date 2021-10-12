@@ -147,8 +147,8 @@ if ow.only_s
 else
     _custom_copy!(nt, ow.om.tel.lm, ow.om.star.lm)
 end
-ow.o.star .= star_model(ow.om, d)
-ow.o.tel .= tel_model(ow.om, d)
+ow.o.star .= star_model(ow.om)
+ow.o.tel .= tel_model(ow.om)
 
 # optimize RVs
 options = Optim.Options(;callback=optim_cb_local, g_tol=g_tol*sqrt(length(ow.rv.p0) / length(ow.telstar.p0)), kwargs...)
@@ -272,25 +272,25 @@ using ParameterHandling
 workspace.o
 using BenchmarkTools
 @btime SSOF.loss(workspace.o, workspace.om, workspace.d)
-x = SSOF.tel_model(workspace.om, workspace.d)
+x = SSOF.tel_model(workspace.om)
 @btime SSOF.loss(workspace.o, workspace.om, workspace.d; tel=workspace.om.tel.lm)
 function loss2(o::SSOF.Output, om::SSOF.OrderModel, d::SSOF.Data;
     recalc_tel::Bool=true, recalc_star::Bool=true, recalc_rv::Bool=true)
 
-    recalc_tel ? tel_o = SSOF.tel_model(om, d) : tel_o = o.tel
-    recalc_star ? star_o = SSOF.star_model(om, d) : star_o = o.star
-    recalc_rv ? rv_o = SSOF.rv_model(om, d) : rv_o = o.rv
+    recalc_tel ? tel_o = SSOF.tel_model(om) : tel_o = o.tel
+    recalc_star ? star_o = SSOF.star_model(om) : star_o = o.star
+    recalc_rv ? rv_o = SSOF.rv_model(om) : rv_o = o.rv
     return SSOF._loss(tel_o, star_o, rv_o, d)
 end
 
 @btime loss2(workspace.o, workspace.om, workspace.d)
-SSOF.rv_model(workspace.om, workspace.d) == workspace.o.rv
+SSOF.rv_model(workspace.om) == workspace.o.rv
 @btime loss2(workspace.o, workspace.om, workspace.d; recalc_tel=false, recalc_star=false, recalc_rv=false)
 
 loss2(workspace.o, workspace.om, workspace.d)
 loss2(workspace.o, workspace.om, workspace.d; recalc_tel=false, recalc_star=false, recalc_rv=false)
 
-SSOF._loss(SSOF.tel_model(workspace.om, workspace.d), SSOF.star_model(workspace.om, workspace.d), SSOF.rv_model(workspace.om, workspace.d), workspace.d)
+SSOF._loss(SSOF.tel_model(workspace.om, SSOF.star_model(workspace.om), SSOF.rv_model(workspace.om), workspace.d)
 
 workspace.d
 data2 = SSOF.GenericData(data.flux, data.var, data.log_λ_obs, data.log_λ_star)

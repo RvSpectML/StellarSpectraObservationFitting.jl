@@ -270,23 +270,19 @@ downsize(m::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
 tel_prior(om::OrderModel) = model_prior(om.tel.lm, om.reg_tel)
 star_prior(om::OrderModel) = model_prior(om.star.lm, om.reg_star)
 
-spectra_interp(vals::AbstractVector, basis::AbstractVector, bounds::AbstractVector) =
-	[oversamp_interp(bounds[i], bounds[i+1], basis, vals) for i in 1:(length(bounds)-1)]
-# spectra_interp(vals::AbstractVector, basis::AbstractVector, bounds::AbstractVector) =
-# 	[undersamp_interp((bounds[i+1] + bounds[i]) / 2, basis, vals) for i in 1:(length(bounds)-1)]
-# function spectra_interp(vals::AbstractMatrix, basis::AbstractVector, bounds::AbstractMatrix)
-# 	interped_vals = zeros(size(bounds, 1)-1, size(bounds, 2))
-# 	for i in 1:size(interped_vals, 2)
-# 		interped_vals[:, i] .= spectra_interp(view(vals, :, i), basis, view(bounds, :, i))
-# 	end
-# 	return interped_vals
-# end
-spectra_interp(vals::AbstractMatrix, basis::AbstractVector, bounds::AbstractMatrix) =
-	hcat([spectra_interp(view(vals, :, i), basis, view(bounds, :, i)) for i in 1:size(bounds, 2)]...)
+function spectra_interp_old(model::AbstractMatrix, interp_helper::Vector{SparseMatrixCSC})
+	interped_model = zeros(size(interp_helper, 1), size(model, 2))
+	for i in 1:size(model, 2)
+		interped_model[:, i] .= broadener[i] * view(model, :, i)
+	end
+	return interped_model
+end
+spectra_interp(model::AbstractMatrix, interp_helper::Vector{SparseMatrixCSC}) =
+	hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
 
-tel_model(om::OrderModel, d::Data; lm=om.tel.lm::LinearModel) = spectra_interp(lm(), om.tel.log_λ, d.log_λ_obs_bounds)
-star_model(om::OrderModel, d::Data; lm=om.star.lm::LinearModel) = spectra_interp(lm(), om.star.log_λ, d.log_λ_star_bounds)
-rv_model(om::OrderModel, d::Data; lm=om.rv.lm::LinearModel) = spectra_interp(lm(), om.rv.log_λ, d.log_λ_star_bounds)
+tel_model(om::OrderModel; lm=om.tel.lm::LinearModel) = spectra_interp(lm(), om.t2o)
+star_model(om::OrderModel; lm=om.star.lm::LinearModel) = spectra_interp(lm(), om.b2o)
+rv_model(om::OrderModel; lm=om.rv.lm::LinearModel) = spectra_interp(lm(), om.b2o)
 
 
 function fix_FullLinearModel_s!(flm, min::Number, max::Number)
@@ -469,7 +465,7 @@ struct Output{T<:Real}
 	rv::AbstractMatrix{T}
 	total::AbstractMatrix{T}
 	Output(om::OrderModel, d::Data) =
-		Output(tel_model(om, d), star_model(om, d), rv_model(om, d), d)
+		Output(tel_model(om), star_model(om), rv_model(om), d)
 	Output(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericData) =
 		Output(tel, star, rv, total_model(tel, star, rv))
 	function Output(tel::AbstractMatrix{T}, star::AbstractMatrix{T}, rv::AbstractMatrix{T}, d::LSFData) where {T<:Real}
