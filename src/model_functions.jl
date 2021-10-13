@@ -20,6 +20,7 @@ struct LSFData{T<:Real} <: Data
 	function LSFData(flux::AbstractMatrix{T}, var, log_λ_obs, log_λ_star, lsf_broadener) where {T<:Real}
 		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
 		@assert length(lsf_broadener) == size(flux, 2)
+		@assert size(lsf_broadener[1], 1) == size(lsf_broadener[1], 2) == size(flux, 1)
 		return new{T}(flux, var, log_λ_obs, bounds_generator(log_λ_obs), log_λ_star, bounds_generator(log_λ_star), lsf_broadener)
 	end
 end
@@ -216,10 +217,9 @@ function oversamp_interp_helper!_t(to_bounds::AbstractVector, from_x::AbstractVe
 	dropzeros!(ans)
 	return ans'
 end
-function oversamp_interp_helper(to_bounds::AbstractMatrix, from_x::AbstractVector)
-	holder = zeros(length(from_x), length(to_bounds)-1)
-	return [oversamp_interp_helper!(view(to_bounds, :, i), from_x, holder) for i in 1:size(to_bounds, 2)]
-end
+oversamp_interp_helper(to_bounds::AbstractMatrix, from_x::AbstractVector) =
+	[oversamp_interp_helper!(view(to_bounds, :, i), from_x) for i in 1:size(to_bounds, 2)]
+
 
 struct OrderModel{T<:Number}
     tel::Submodel{T}
