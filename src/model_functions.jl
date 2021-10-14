@@ -295,13 +295,6 @@ downsize(m::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
 tel_prior(om::OrderModel) = model_prior(om.tel.lm, om.reg_tel)
 star_prior(om::OrderModel) = model_prior(om.star.lm, om.reg_star)
 
-function spectra_interp_old(model::AbstractMatrix, interp_helper::Vector{SparseMatrixCSC})
-	interped_model = zeros(size(interp_helper, 1), size(model, 2))
-	for i in 1:size(model, 2)
-		interped_model[:, i] .= broadener[i] * view(model, :, i)
-	end
-	return interped_model
-end
 spectra_interp(model::AbstractMatrix, interp_helper::Vector{SparseMatrixCSC}) =
 	hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
 
