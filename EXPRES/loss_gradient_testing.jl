@@ -24,7 +24,11 @@ if !use_reg
     save_path *= "noreg_"
 end
 
-if isfile(save_path*"results.jld2")
+# 7020, 114
+ind_λ = 1:300; ind_t = 1:114
+data_small = SSOF.LSFData(data.flux[ind_λ, ind_t], data.var[ind_λ, ind_t], data.log_λ_obs[ind_λ, ind_t], data.log_λ_star[ind_λ, ind_t], [data.lsf_broadener[i][ind_λ,ind_λ] for i in ind_t])
+
+if false#isfile(save_path*"results.jld2")
     @load save_path*"results.jld2" model rvs_naive rvs_notel
     if model.metadata[:todo][:err_estimated]
         @load save_path*"results.jld2" rv_errors
@@ -35,18 +39,50 @@ if isfile(save_path*"results.jld2")
 else
     model_upscale = sqrt(2)
     # model_upscale = 2 * sqrt(2)
-    @time model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8, upscale=model_upscale)
-    @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
+    @time model = SSOF.OrderModel(data_small, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8, upscale=model_upscale)
+    @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data_small; use_gp=true)
     if !use_reg
         SSOF.zero_regularization(model)
         model.metadata[:todo][:reg_improved] = true
     end
-    @save save_path*"results.jld2" model rvs_naive rvs_notel
+    # @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
 
 
 ## Creating optimization workspace
-workspace, loss = SSOF.OptimWorkspace(model, data; return_loss_f=true)
+workspace, loss = SSOF.OptimWorkspace(model, data_small; return_loss_f=true)
+
+## loss testing
+
+using Zygote
+using ParameterHandling
+using BenchmarkTools
+ts = workspace.telstar
+# @time ts.obj.f(ts.p0)
+# @time Zygote.gradient(ts.obj.f, ts.p0)
+
+# _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix) =
+#     sum(((SSOF.total_model(tel, star, rv) .- workspace.d.flux) .^ 2) ./ workspace.d.var)
+_loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix) =
+    mapreduce(i -> sum((((workspace.d.lsf_broadener[i] * (view(tel, :, i) .* (view(star, :, i) .+ view(rv, :, i)))) .- view(workspace.d.flux, :, i)) .^ 2) ./ view(workspace.d.var, :, i)), +, 1:size(tel, 2))
+loss2(om::SSOF.OrderModel; tel::SSOF.LinearModel=om.tel.lm, star::SSOF.LinearModel=om.star.lm) =
+	_loss(SSOF.tel_model(om; lm=tel), SSOF.star_model(om; lm=star), workspace.o.rv)
+l_telstar(nt::NamedTuple{(:tel, :star,),<:Tuple{SSOF.LinearModel, SSOF.LinearModel}}) =
+	loss2(workspace.om; tel=nt.tel, star=nt.star) +
+	SSOF.model_prior(nt.tel, workspace.om.reg_tel) + SSOF.model_prior(nt.star, workspace.om.reg_star)
+p0, unflatten = flatten(ts.θ)  # unflatten returns NamedTuple of untransformed params
+f = l_telstar ∘ unflatten
+f(p0)
+@btime Zygote.gradient(f, p0)
+
+model = SSOF.total_model(tel, star, rv)
+SSOF.broaden!(model, data.lsf_broadener)
+for i in 1:size(model, 2)
+	model[:, i] .= data.lsf_broadener[i] * view(model, :, i)
+end
+
+data.lsf_broadener
+SSOF.broaden!()
 
 ## Plotting
 

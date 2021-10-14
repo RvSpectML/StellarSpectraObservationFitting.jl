@@ -266,3 +266,21 @@ y = ones(10000,1)
 @save "test1.jld2" x
 @save "test2.jld2" xb
 @save "test3.jld2" xs
+
+## new spectra interp is faster
+
+using SparseArrays
+function spectra_interp_old(model::AbstractMatrix, interp_helper::Vector{SparseMatrixCSC})
+	interped_model = zeros(size(interp_helper[1], 1), size(model, 2))
+	@inbounds @simd for i in 1:size(model, 2)
+		interped_model[:, i] .= interp_helper[i] * view(model, :, i)
+	end
+	return interped_model
+end
+spectra_interp(model::AbstractMatrix, interp_helper::Vector{SparseMatrixCSC}) =
+	hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
+
+x = ts.θ.tel()
+
+@btime spectra_interp(x, workspace.om.t2o)
+@btime spectra_interp_old(x, workspace.om.t2o)
