@@ -145,8 +145,8 @@ function ordinary_lst_sq_f(data::AbstractVector, order::Int; kwargs...)
 	w = ordinary_lst_sq(data, order; kwargs...)
 	return x -> ([x ^ i for i in 0:order]' * w)
 	# faster than the following
-	# return x -> mapreduce(i -> w[i+1] * x ^ i , +, 0:5)
-	# return x -> sum([x ^ i for i in 0:5] .* w)
+	# return x -> mapreduce(i -> w[i+1] * x ^ i , +, 0:order)
+	# return x -> sum([x ^ i for i in 0:order] .* w)
 end
 
 _trapzx2(x1::Real, x2::Real, y1::Real, y2::Real) = (x2 - x1) * (y1 + y2)

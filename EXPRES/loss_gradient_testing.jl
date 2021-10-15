@@ -7,6 +7,8 @@ using Statistics
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 import StatsBase
 
+
+Pkg.resolve()
 ## Setting up necessary variables
 
 stars = ["10700", "26965", "34411"]
@@ -24,8 +26,16 @@ if !use_reg
     save_path *= "noreg_"
 end
 
+inds = 5:24
+heatmap(exp.(data.log_λ_obs[inds,1]),exp.(data.log_λ_obs[inds,1]),data.lsf_broadener[1][inds,inds])
+png("lsf1")
+inds = size(data.log_λ_obs,1)-23:size(data.log_λ_obs,1)-4
+heatmap(exp.(data.log_λ_obs[inds,1]),exp.(data.log_λ_obs[inds,1]),data.lsf_broadener[1][inds,inds])
+png("lsf2")
+
+
 # 7020, 114
-ind_λ = 1:300; ind_t = 1:114
+ind_λ = 1:7020; ind_t = 1:114
 data_small = SSOF.LSFData(data.flux[ind_λ, ind_t], data.var[ind_λ, ind_t], data.log_λ_obs[ind_λ, ind_t], data.log_λ_star[ind_λ, ind_t], [data.lsf_broadener[i][ind_λ,ind_λ] for i in ind_t])
 
 if false#isfile(save_path*"results.jld2")
@@ -39,7 +49,7 @@ if false#isfile(save_path*"results.jld2")
 else
     model_upscale = sqrt(2)
     # model_upscale = 2 * sqrt(2)
-    @time model = SSOF.OrderModel(data_small, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8, upscale=model_upscale)
+    @time model = SSOF.OrderModel(data_small, "EXPRES", desired_order, star; n_comp_tel=3, n_comp_star=3, upscale=model_upscale)
     @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data_small; use_gp=true)
     if !use_reg
         SSOF.zero_regularization(model)
@@ -52,6 +62,8 @@ end
 ## Creating optimization workspace
 workspace, loss = SSOF.OptimWorkspace(model, data_small; return_loss_f=true)
 
+workspace.telstar.p0
+
 ## loss testing
 
 using Zygote
@@ -61,151 +73,150 @@ ts = workspace.telstar
 # @time ts.obj.f(ts.p0)
 # @time Zygote.gradient(ts.obj.f, ts.p0)
 
+nλ = size(data_small.flux, 1)
+
+# No LSF and χ²
 # _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix) =
 #     sum(((SSOF.total_model(tel, star, rv) .- workspace.d.flux) .^ 2) ./ workspace.d.var)
+# LSF and χ²
 _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix) =
     mapreduce(i -> sum((((workspace.d.lsf_broadener[i] * (view(tel, :, i) .* (view(star, :, i) .+ view(rv, :, i)))) .- view(workspace.d.flux, :, i)) .^ 2) ./ view(workspace.d.var, :, i)), +, 1:size(tel, 2))
+
+# Interpolation
+# loss2(om::SSOF.OrderModel; tel::SSOF.LinearModel=om.tel.lm, star::SSOF.LinearModel=om.star.lm) =
+# 	_loss(SSOF.tel_model(om; lm=tel), SSOF.star_model(om; lm=star), workspace.o.rv)
+# no Interpolation
 loss2(om::SSOF.OrderModel; tel::SSOF.LinearModel=om.tel.lm, star::SSOF.LinearModel=om.star.lm) =
-	_loss(SSOF.tel_model(om; lm=tel), SSOF.star_model(om; lm=star), workspace.o.rv)
+	_loss(tel()[1:nλ, :], star()[1:nλ, :], workspace.o.rv)
+
+# Adding priors
 l_telstar(nt::NamedTuple{(:tel, :star,),<:Tuple{SSOF.LinearModel, SSOF.LinearModel}}) =
-	loss2(workspace.om; tel=nt.tel, star=nt.star) +
-	SSOF.model_prior(nt.tel, workspace.om.reg_tel) + SSOF.model_prior(nt.star, workspace.om.reg_star)
+	loss2(workspace.om; tel=nt.tel, star=nt.star) + SSOF.model_prior(nt.tel, workspace.om.reg_tel) + SSOF.model_prior(nt.star, workspace.om.reg_star)
+# No priors
+# l_telstar(nt::NamedTuple{(:tel, :star,),<:Tuple{SSOF.LinearModel, SSOF.LinearModel}}) =
+# 	loss2(workspace.om; tel=nt.tel, star=nt.star)
+
 p0, unflatten = flatten(ts.θ)  # unflatten returns NamedTuple of untransformed params
 f = l_telstar ∘ unflatten
 f(p0)
-@btime Zygote.gradient(f, p0)
+@time Zygote.gradient(f, p0)
 
-model = SSOF.total_model(tel, star, rv)
-SSOF.broaden!(model, data.lsf_broadener)
-for i in 1:size(model, 2)
-	model[:, i] .= data.lsf_broadener[i] * view(model, :, i)
+
+
+########## ONLY USELESS GARBAGE BELOW
+## one parameter
+function g_test(inps, l)
+	p0, unflatten = flatten(inps)  # unflatten returns NamedTuple of untransformed params
+	f = l ∘ unflatten
+	return unflatten(only(Zygote.gradient(f, p0))), f, p0
 end
 
-data.lsf_broadener
-SSOF.broaden!()
+f2(lm) = sum(lm())
+g_test(model.tel.lm, f2)
 
-## Plotting
+x = copy(model.tel.lm)
+x.M .= 0; x.μ .= 0; x.M[1000] = 1;
 
-SSOF_path = dirname(dirname(pathof(SSOF)))
-if interactive
-    include(SSOF_path * "/src/_plot_functions.jl")
-    status_plot(workspace.o, workspace.d)
-else
-    ENV["GKSwstype"] = "100"  # setting the GR workstation type to 100/nul
+f2(lm) = sum(lm())
+g_test(model.tel.lm, f2).M[1000]
+sum(x.M * x.s)
+
+f2(lm) = sum(model.t2o[1] * lm())
+g_test(model.tel.lm, f2).M[1000]
+sum(model.t2o[1] * (x.M * x.s))
+
+sm = SSOF.star_model(model) + SSOF.rv_model(model)
+f2(lm) = sum((model.t2o[1] * lm() .* sm))
+g_test(model.tel.lm, f2).M[1000]
+sum((model.t2o[1] * (x.M * x.s)) .* sm)
+
+f2(lm) = sum(data_small.lsf_broadener[1] * (model.t2o[1] * lm() .* sm))
+g_test(model.tel.lm, f2).M[1000]
+sum(data_small.lsf_broadener[1] * ((model.t2o[1] * (x.M * x.s)) .* sm))
+
+f2(lm) = sum(data_small.lsf_broadener[1] * (model.t2o[1] * lm() .* sm) - data_small.flux)
+g_test(model.tel.lm, f2).M[1000]
+sum(data_small.lsf_broadener[1] * ((model.t2o[1] * (x.M * x.s)) .* sm))
+
+f2(lm) = sum((data_small.lsf_broadener[1] * (model.t2o[1] * lm() .* sm) - data_small.flux) .^ 2)
+g_test(model.tel.lm, f2).M[1000]
+β = (data_small.lsf_broadener[1] * (model.t2o[1] * model.tel.lm() .* sm) - data_small.flux)
+dβ = data_small.lsf_broadener[1] * ((model.t2o[1] * (x.M * x.s)) .* sm)
+sum(2 .* β .* dβ)
+
+f2(lm) = sum(((data_small.lsf_broadener[1] * (model.t2o[1] * lm() .* sm) - data_small.flux) .^ 2) ./ data_small.var)
+g_test(model.tel.lm, f2).M[1000]
+sum(2 .* β .* dβ ./ data_small.var)
+
+## all M
+
+x = copy(model.tel.lm)
+x.μ .= 0; x.M .= 0; x.M[116,3] = 1;
+
+(x.M * x.s)
+(x.M * x.s)[116,:]
+x.s[3, :]
+f2(lm) = sum(lm())
+@time g_test(model.tel.lm, f2).M
+@time repeat(sum(x.s, dims=2)', size(x.M, 1))
+
+
+f2(lm) = sum(model.t2o[1] * lm())
+@btime g_test(model.tel.lm, f2).M
+# sum(model.t2o[1] * (x.M * x.s))
+dM = zeros(size(x.M))
+mapreduce((i,j) -> i*j, +, 1:size(dM, 1), 1:size(dM, 2))
+
+repeat(1:size(dM, 1), size(dM, 2))
+
+1:size(dM, 2)
+1:size(dM, 1)
+sum([i^2 for i in 1:8])
+
+hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
+@btime for i in 1:size(dM, 1)
+	for j in 1:size(dM, 2)
+		dM[i,j] = sum(kron(view(model.t2o[1], :, i),view(x.s, j, :)))
+	end
 end
+dM
 
-## Improving regularization
-
-if false#!model.metadata[:todo][:reg_improved]
-    @time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true, ignore_regularization=true)  # 16s
-    n_obs_train = Int(round(0.75 * n_obs))
-    training_inds = sort(StatsBase.sample(1:n_obs, n_obs_train; replace=false))
-    @time SSOF.fit_regularization!(model, data, training_inds)
-    model.metadata[:todo][:reg_improved] = true
-    model.metadata[:todo][:optimized] = false
-    @save save_path*"results.jld2" model rvs_naive rvs_notel
-end
-
-## Optimizing model
-
-if !model.metadata[:todo][:optimized]
-    @time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
-    rvs_notel_opt = SSOF.rvs(model)
-    if interactive; status_plot(workspace.o, workspace.d) end
-    model.metadata[:todo][:optimized] = true
-    @save save_path*"results.jld2" model rvs_naive rvs_notel
-end
-status_plot(workspace.o, workspace.d)
-
-## Downsizing model
-
-if !model.metadata[:todo][:downsized]
-    test_n_comp_tel = 0:8
-    test_n_comp_star = 0:8
-    ks = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
-    comp_ls = zeros(length(test_n_comp_tel), length(test_n_comp_star))
-    for (i, n_tel) in enumerate(test_n_comp_tel)
-        for (j, n_star) in enumerate(test_n_comp_star)
-            comp_ls[i, j], ks[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star], model, data)
-        end
-    end
-    n_comps_best, ℓ, aic, bic = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, data.var; return_inters=true)
-    @save save_path*"model_decision.jld2" comp_ls ℓ aic bic ks test_n_comp_tel test_n_comp_star
-
-    model_large = copy(model)
-    model = SSOF.downsize(model, n_comps_best[1], n_comps_best[2])
-    model.metadata[:todo][:downsized] = true
-    model.metadata[:todo][:reg_improved] = true
-    workspace, loss = SSOF.OptimWorkspace(model, data; return_loss_f=true)
-    SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
-    model.metadata[:todo][:optimized] = true
-    @save save_path*"results.jld2" model rvs_naive rvs_notel # model_large
-end
+i=100;j=3;
+@time sum(view(model.t2o[1], :, i)*transpose(view(x.s, j, :)))
+@time sum(view(model.t2o[1], :, i)*view(x.s, j, :)')
+@time sum(view(model.t2o[1], :, i).*view(x.s, j, :)')
+@time sum(kron(view(model.t2o[1], :, i),view(x.s, j, :)))
 
 
-## Getting RV error bars (only regularization held constant)
+sm = SSOF.star_model(model) + SSOF.rv_model(model)
+f2(lm) = sum((model.t2o[1] * lm() .* sm))
+@time g_test(model.tel.lm, f2).M[1000]
+sum((model.t2o[1] * (x.M * x.s)) .* sm)
 
-if !model.metadata[:todo][:err_estimated]
-    data.var[data.var.==Inf] .= 0
-    data_noise = sqrt.(data.var)
-    data.var[data.var.==0] .= Inf
+f2(lm) = sum(data_small.lsf_broadener[1] * (model.t2o[1] * lm() .* sm))
+@time g_test(model.tel.lm, f2).M[1000]
+sum(data_small.lsf_broadener[1] * ((model.t2o[1] * (x.M * x.s)) .* sm))
 
-    data_holder = copy(data)
-    model_holder = copy(model)
-    n = 50
-    rv_holder = zeros(n, length(model.rv.lm.s))
-    @time for i in 1:n
-        data_holder.flux .= data.flux .+ (data_noise .* randn(size(data_holder.var)))
-        SSOF.train_OrderModel!(SSOF.OptimWorkspace(model_holder, data_holder), f_tol=1e-8)
-        rv_holder[i, :] = SSOF.rvs(model_holder)
-    end
-    rv_errors = vec(std(rv_holder; dims=1))
-    model.metadata[:todo][:err_estimated] = true
-    @save save_path*"results.jld2" model rvs_naive rvs_notel rv_errors
-end
+f2(lm) = sum(data_small.lsf_broadener[1] * (model.t2o[1] * lm() .* sm) - data_small.flux)
+@time g_test(model.tel.lm, f2).M[1000]
+sum(data_small.lsf_broadener[1] * ((model.t2o[1] * (x.M * x.s)) .* sm))
 
-## Plots
+f2(lm) = sum(abs2, data_small.lsf_broadener[1] * (model.t2o[1] * lm() .* sm) - data_small.flux)
+@time g_test(model.tel.lm, f2).M[1000]
+β = (data_small.lsf_broadener[1] * (model.t2o[1] * model.tel.lm() .* sm) - data_small.flux)
+dβ = data_small.lsf_broadener[1] * ((model.t2o[1] * (x.M * x.s)) .* sm)
+sum(2 .* β .* dβ)
 
-if save_plots
+f2(lm) = sum(((data_small.lsf_broadener[1] * (model.t2o[1] * lm() .* sm) - data_small.flux) .^ 2) ./ data_small.var)
+@time _, f3, p0 = g_test(model.tel.lm, f2)
+sum(2 .* β .* dβ ./ data_small.var)
 
-    include(SSOF_path * "/src/_plot_functions.jl")
+@time Zygote.gradient(f3, p0)
 
-    using CSV, DataFrames
-    expres_output = CSV.read(SSOF_path * "/EXPRES/" * star * "_activity.csv", DataFrame)
-    eo_rv = expres_output."CBC RV [m/s]"
-    eo_rv_σ = expres_output."CBC RV Err. [m/s]"
-    eo_time = expres_output."Time [MJD]"
+##
+using Plots
 
-    # Compare RV differences to actual RVs from activity
-    rvs_notel_opt = SSOF.rvs(model)
-    plt = plot_model_rvs_new(times_nu, rvs_notel_opt, vec(rv_errors), eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1);
-    png(plt, save_path * "model_rvs.png")
+y = 3 .+ randn(7)
 
-    if !(typeof(model.star.lm) <: SSOF.TemplateModel)
-        plt = plot_stellar_model_bases(model; display_plt=interactive);
-        png(plt, save_path * "model_star_basis.png")
-
-        plt = plot_stellar_model_scores(model; display_plt=interactive);
-        png(plt, save_path * "model_star_weights.png")
-    end
-
-    if !(typeof(model.tel.lm) <: SSOF.TemplateModel)
-        plt = plot_telluric_model_bases(model; display_plt=interactive);
-        png(plt, save_path * "model_tel_basis.png")
-
-        plt = plot_telluric_model_scores(model; display_plt=interactive);
-        png(plt, save_path * "model_tel_weights.png")
-    end
-
-    plt = status_plot(workspace.o, workspace.d; display_plt=interactive);
-    png(plt, save_path * "status_plot.png")
-
-    plt = component_test_plot(ℓ, test_n_comp_tel, test_n_comp_star);
-    png(plt, save_path * "l_plot.png")
-
-    plt = component_test_plot(aic, test_n_comp_tel, test_n_comp_star; ylabel="AIC");
-    png(plt, save_path * "aic_plot.png")
-
-    plt = component_test_plot(bic, test_n_comp_tel, test_n_comp_star; ylabel="BIC");
-    png(plt, save_path * "bic_plot.png")
-end
+plot(y; ylims=(0,5))
+png("test")
