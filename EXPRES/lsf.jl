@@ -142,5 +142,7 @@ function lsf_broadener(λ::AbstractVector; safe::Bool=true)
     dropzeros!(ans)
     return ans
 end
-lsf_broadener(λ::AbstractMatrix; kwargs...) =
+lsf_broadeners(λ::AbstractMatrix; kwargs...) =
     [lsf_broadener(view(λ, :, i); kwargs...) for i in 1:size(λ, 2)]
+lsf_broadener(λ::AbstractMatrix; kwargs...) =
+    lsf_broadener(vec(median(λ; dims=2)); kwargs...)

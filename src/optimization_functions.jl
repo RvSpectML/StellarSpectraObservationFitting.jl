@@ -7,9 +7,10 @@ using Zygote
 _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericData) =
     sum(((total_model(tel, star, rv) .- d.flux) .^ 2) ./ d.var)
 # χ² loss function broadened by an lsf at each time (about 2x slower)
+# _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::LSFData) =
+#     mapreduce(i -> sum((((d.lsf_broadener[i] * (view(tel, :, i) .* (view(star, :, i) .+ view(rv, :, i)))) .- view(d.flux, :, i)) .^ 2) ./ view(d.var, :, i)), +, 1:size(tel, 2))
 _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::LSFData) =
-    mapreduce(i -> sum((((d.lsf_broadener[i] * (view(tel, :, i) .* (view(star, :, i) .+ view(rv, :, i)))) .- view(d.flux, :, i)) .^ 2) ./ view(d.var, :, i)), +, 1:size(tel, 2))
-
+    sum((((d.lsf_broadener * total_model(tel, star, rv)) .- d.flux) .^ 2) ./ d.var)
 function loss(o::Output, om::OrderModel, d::Data;
 	tel::LinearModel=om.tel.lm, star::LinearModel=om.star.lm, rv::LinearModel=om.rv.lm,
 	recalc_tel::Bool=true, recalc_star::Bool=true, recalc_rv::Bool=true)

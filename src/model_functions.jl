@@ -16,17 +16,16 @@ struct LSFData{T<:Real} <: Data
 	log_λ_obs_bounds::AbstractMatrix{T}
     log_λ_star::AbstractMatrix{T}
 	log_λ_star_bounds::AbstractMatrix{T}
-	lsf_broadener::AbstractVector{SparseMatrixCSC}
+	lsf_broadener::SparseMatrixCSC
 	function LSFData(flux::AbstractMatrix{T}, var, log_λ_obs, log_λ_star, lsf_broadener) where {T<:Real}
 		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
-		@assert length(lsf_broadener) == size(flux, 2)
-		@assert size(lsf_broadener[1], 1) == size(lsf_broadener[1], 2) == size(flux, 1)
+		@assert size(lsf_broadener, 1) == size(lsf_broadener, 2) == size(flux, 1)
 		return new{T}(flux, var, log_λ_obs, bounds_generator(log_λ_obs), log_λ_star, bounds_generator(log_λ_star), lsf_broadener)
 	end
 end
 (d::LSFData)(inds::AbstractVecOrMat) =
 	LSFData(view(d.flux, :, inds), view(d.var, :, inds),
-	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds), view(lsf_broadener, inds))
+	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds), lsf_broadener)
 Base.copy(d::LSFData) = LSFData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star), copy(lsf_broadener))
 
 struct GenericData{T<:Real} <: Data
@@ -472,11 +471,6 @@ end
 
 total_model(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix) = tel .* (star .+ rv)
 
-function broaden!(model::AbstractMatrix, broadener::Vector{SparseMatrixCSC})
-	for i in 1:size(model, 2)
-		model[:, i] .= broadener[i] * view(model, :, i)
-	end
-end
 struct Output{T<:Real}
 	tel::AbstractMatrix{T}
 	star::AbstractMatrix{T}
@@ -486,11 +480,8 @@ struct Output{T<:Real}
 		Output(tel_model(om), star_model(om), rv_model(om), d)
 	Output(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericData) =
 		Output(tel, star, rv, total_model(tel, star, rv))
-	function Output(tel::AbstractMatrix{T}, star::AbstractMatrix{T}, rv::AbstractMatrix{T}, d::LSFData) where {T<:Real}
-		total = total_model(tel, star, rv)
-		broaden!(total, d.lsf_broadener)
-		return Output(tel, star, rv, total)
-	end
+	Output(tel::AbstractMatrix{T}, star::AbstractMatrix{T}, rv::AbstractMatrix{T}, d::LSFData) where {T<:Real} =
+		Output(tel, star, rv, d.lsf_broadener * total_model(tel, star, rv))
 	function Output(tel::AbstractMatrix{T}, star::AbstractMatrix{T}, rv::AbstractMatrix{T}, total::AbstractMatrix{T}) where {T<:Real}
 		@assert size(tel) == size(star) == size(rv) == size(total)
 		new{T}(tel, star, rv, total)
@@ -501,8 +492,7 @@ function recalc_total!(o::Output, d::GenericData)
 	o.total .= total_model(o.tel, o.star, o.rv)
 end
 function recalc_total!(o::Output, d::LSFData)
-	o.total .= total_model(o.tel, o.star, o.rv)
-	broaden!(o.total, d.lsf_broadener)
+	o.total .= d.lsf_broadener * total_model(o.tel, o.star, o.rv)
 end
 
 function copy_reg!(from::OrderModel, to::OrderModel)
