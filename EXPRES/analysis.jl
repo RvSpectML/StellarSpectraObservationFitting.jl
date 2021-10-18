@@ -6,6 +6,7 @@ using JLD2
 using Statistics
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 import StatsBase
+using MKLSparse
 
 ## Setting up necessary variables
 
