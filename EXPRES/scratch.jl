@@ -284,3 +284,26 @@ x = ts.θ.tel()
 
 @btime spectra_interp(x, workspace.om.t2o)
 @btime spectra_interp_old(x, workspace.om.t2o)
+
+
+broadener = randn(100,100)
+model = ones(100,10)
+model2 = copy(model)
+model3 = copy(model)
+
+@time for i in 1:size(model, 2)
+	model[:,i] .= broadener * view(model, :,i)
+end
+@time model .= broadener * model
+all(isapprox.(model2,model3))
+model2 .= broadener * model
+
+@time broadener * model
+
+
+# inds = 5:24
+# heatmap(exp.(data.log_λ_obs[inds,1]),exp.(data.log_λ_obs[inds,1]),data.lsf_broadener[1][inds,inds])
+# png("lsf1")
+# inds = size(data.log_λ_obs,1)-23:size(data.log_λ_obs,1)-4
+# heatmap(exp.(data.log_λ_obs[inds,1]),exp.(data.log_λ_obs[inds,1]),data.lsf_broadener[1][inds,inds])
+# png("lsf2")

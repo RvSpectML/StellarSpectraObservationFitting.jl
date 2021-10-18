@@ -6,9 +6,8 @@ using JLD2
 using Statistics
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 import StatsBase
+using MKLSparse
 
-
-Pkg.resolve()
 ## Setting up necessary variables
 
 stars = ["10700", "26965", "34411"]
@@ -26,17 +25,10 @@ if !use_reg
     save_path *= "noreg_"
 end
 
-inds = 5:24
-heatmap(exp.(data.log_λ_obs[inds,1]),exp.(data.log_λ_obs[inds,1]),data.lsf_broadener[1][inds,inds])
-png("lsf1")
-inds = size(data.log_λ_obs,1)-23:size(data.log_λ_obs,1)-4
-heatmap(exp.(data.log_λ_obs[inds,1]),exp.(data.log_λ_obs[inds,1]),data.lsf_broadener[1][inds,inds])
-png("lsf2")
-
 
 # 7020, 114
-ind_λ = 1:7020; ind_t = 1:114
-data_small = SSOF.LSFData(data.flux[ind_λ, ind_t], data.var[ind_λ, ind_t], data.log_λ_obs[ind_λ, ind_t], data.log_λ_star[ind_λ, ind_t], [data.lsf_broadener[i][ind_λ,ind_λ] for i in ind_t])
+ind_λ = 1:1200; ind_t = 1:114
+data_small = SSOF.LSFData(data.flux[ind_λ, ind_t], data.var[ind_λ, ind_t], data.log_λ_obs[ind_λ, ind_t], data.log_λ_star[ind_λ, ind_t], data.lsf_broadener[ind_λ,ind_λ])
 
 if false#isfile(save_path*"results.jld2")
     @load save_path*"results.jld2" model rvs_naive rvs_notel
@@ -62,16 +54,14 @@ end
 ## Creating optimization workspace
 workspace, loss = SSOF.OptimWorkspace(model, data_small; return_loss_f=true)
 
-workspace.telstar.p0
-
 ## loss testing
 
 using Zygote
 using ParameterHandling
 using BenchmarkTools
 ts = workspace.telstar
-# @time ts.obj.f(ts.p0)
-# @time Zygote.gradient(ts.obj.f, ts.p0)
+@btime ts.obj.f(ts.p0)
+@btime Zygote.gradient(ts.obj.f, ts.p0)
 
 nλ = size(data_small.flux, 1)
 
@@ -79,28 +69,38 @@ nλ = size(data_small.flux, 1)
 # _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix) =
 #     sum(((SSOF.total_model(tel, star, rv) .- workspace.d.flux) .^ 2) ./ workspace.d.var)
 # LSF and χ²
+# _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix) =
+#     mapreduce(i -> sum((((workspace.d.lsf_broadener[i] * (view(tel, :, i) .* (view(star, :, i) .+ view(rv, :, i)))) .- view(workspace.d.flux, :, i)) .^ 2) ./ view(workspace.d.var, :, i)), +, 1:size(tel, 2))
+# _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix) =
+#     mapreduce(i -> sum((((workspace.d.lsf_broadener * (view(tel, :, i) .* (view(star, :, i) .+ view(rv, :, i)))) .- view(workspace.d.flux, :, i)) .^ 2) ./ view(workspace.d.var, :, i)), +, 1:size(tel, 2))
 _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix) =
-    mapreduce(i -> sum((((workspace.d.lsf_broadener[i] * (view(tel, :, i) .* (view(star, :, i) .+ view(rv, :, i)))) .- view(workspace.d.flux, :, i)) .^ 2) ./ view(workspace.d.var, :, i)), +, 1:size(tel, 2))
+    sum((((workspace.d.lsf_broadener * (tel .* (star .+ rv))) .- workspace.d.flux) .^ 2) ./ workspace.d.var)
 
 # Interpolation
-# loss2(om::SSOF.OrderModel; tel::SSOF.LinearModel=om.tel.lm, star::SSOF.LinearModel=om.star.lm) =
-# 	_loss(SSOF.tel_model(om; lm=tel), SSOF.star_model(om; lm=star), workspace.o.rv)
-# no Interpolation
 loss2(om::SSOF.OrderModel; tel::SSOF.LinearModel=om.tel.lm, star::SSOF.LinearModel=om.star.lm) =
-	_loss(tel()[1:nλ, :], star()[1:nλ, :], workspace.o.rv)
+	_loss(SSOF.tel_model(om; lm=tel), SSOF.star_model(om; lm=star), workspace.o.rv)
+# no Interpolation
+# loss2(om::SSOF.OrderModel; tel::SSOF.LinearModel=om.tel.lm, star::SSOF.LinearModel=om.star.lm) =
+# 	_loss(tel()[1:nλ, :], star()[1:nλ, :], workspace.o.rv)
 
-# Adding priors
 l_telstar(nt::NamedTuple{(:tel, :star,),<:Tuple{SSOF.LinearModel, SSOF.LinearModel}}) =
 	loss2(workspace.om; tel=nt.tel, star=nt.star) + SSOF.model_prior(nt.tel, workspace.om.reg_tel) + SSOF.model_prior(nt.star, workspace.om.reg_star)
-# No priors
-# l_telstar(nt::NamedTuple{(:tel, :star,),<:Tuple{SSOF.LinearModel, SSOF.LinearModel}}) =
-# 	loss2(workspace.om; tel=nt.tel, star=nt.star)
 
-p0, unflatten = flatten(ts.θ)  # unflatten returns NamedTuple of untransformed params
+p0, unflatten = ParameterHandling.flatten(ts.θ)  # unflatten returns NamedTuple of untransformed params
 f = l_telstar ∘ unflatten
-f(p0)
-@time Zygote.gradient(f, p0)
+@btime f(p0)
+@btime Zygote.gradient(f, p0)
 
+
+using SparseArrays
+using SuiteSparse
+y = SSOF.tel_model(model)
+x = data_small.lsf_broadener
+xx = SuiteSparse.CHOLMOD.Sparse(x)
+xxx = Array(x)
+@btime x*y
+@btime xx*y
+@btime xxx*y
 
 
 ########## ONLY USELESS GARBAGE BELOW
@@ -212,11 +212,3 @@ f2(lm) = sum(((data_small.lsf_broadener[1] * (model.t2o[1] * lm() .* sm) - data_
 sum(2 .* β .* dβ ./ data_small.var)
 
 @time Zygote.gradient(f3, p0)
-
-##
-using Plots
-
-y = 3 .+ randn(7)
-
-plot(y; ylims=(0,5))
-png("test")
