@@ -6,7 +6,7 @@ using JLD2
 using Statistics
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 import StatsBase
-using MKLSparse
+# using MKLSparse
 
 ## Setting up necessary variables
 
@@ -25,6 +25,28 @@ if !use_reg
     save_path *= "noreg_"
 end
 
+using BandedMatrices
+
+inds = 1:100
+include("lsf.jl")
+x1 = lsf_broadener(exp.(data.log_λ_obs[inds,:]))
+x3 = Array(x2)
+x4 = BandedMatrix(x3, (5,5))
+y = data.flux[inds,:]
+
+function g_test(inps, l)
+	p0, unflatten = flatten(inps)  # unflatten returns NamedTuple of untransformed params
+	f = l ∘ unflatten
+	return unflatten(only(Zygote.gradient(f, p0))), f, p0
+end
+
+
+f1(y) = sum(x1 * y)
+f3(y) = sum(x3 * y)
+f4(y) = sum(x4 * y)
+@btime g_test(y, f1)
+@btime g_test(y, f3)
+@btime g_test(y, f4)
 
 # 7020, 114
 ind_λ = 1:1200; ind_t = 1:114

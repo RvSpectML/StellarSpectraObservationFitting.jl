@@ -118,7 +118,7 @@ if !model.metadata[:todo][:err_estimated]
     data_holder = copy(data)
     model_holder = copy(model)
     n = 50
-    rv_holder = zeros(n, length(model.rv.lm.s))
+    rv_holder = Array{Float64}(undef, n, length(model.rv.lm.s))
     @time for i in 1:n
         data_holder.flux .= data.flux .+ (data_noise .* randn(size(data_holder.var)))
         SSOF.train_OrderModel!(SSOF.OptimWorkspace(model_holder, data_holder), f_tol=1e-8)

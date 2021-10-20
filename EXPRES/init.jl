@@ -89,9 +89,9 @@ for order in 1:n_orders
 	if length(mask_inds) > min_order_width
 		len_obs = length(mask_inds)
 		flux_obs = ones(len_obs, n_obs)
-		var_obs = zeros(len_obs, n_obs)
-		log_λ_obs = zeros(len_obs, n_obs)
-		log_λ_star = zeros(len_obs, n_obs)
+		var_obs = Array{Float64}(undef, len_obs, n_obs)
+		log_λ_obs = Array{Float64}(undef, len_obs, n_obs)
+		log_λ_star = Array{Float64}(undef, len_obs, n_obs)
 		for i in 1:n_obs # 13s
 		    flux_obs[:, i] .= all_spectra[i].flux[mask_inds, order]
 		    var_obs[:, i] .= all_spectra[i].var[mask_inds, order]

@@ -12,7 +12,7 @@ end
 
 function fit_regularization_helper!(reg_field::Symbol, reg_key::Symbol, om::OrderModel, d::Data, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; kwargs...)
     @assert 0 < reg_min < reg_max < Inf
-    ℓs = zeros(2)
+    ℓs = Array{Float64}(undef, 2)
     regs = getfield(om, reg_field)
     reg_hold = [1, test_factor] .* regs[reg_key]
     println("initial regularization eval")

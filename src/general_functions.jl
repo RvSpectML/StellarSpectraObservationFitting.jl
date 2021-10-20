@@ -22,7 +22,7 @@ function searchsortednearest(a::AbstractVector{T} where T<:Real, x::AbstractVect
 	@assert issorted(x)
 	len_x = length(x)
    	len_a = length(a)
-   	idxs = zeros(Int64, len_x)
+   	idxs = Array{Int64}(undef, len_x)
    	idxs[1] = searchsortednearest(a, x[1]; kwargs...)
 	for i in 2:len_x
 	   	idxs[i] = idxs[i-1] + searchsortednearest(view(a, idxs[i-1]:len_a), x[i]; kwargs...) - 1
@@ -143,8 +143,9 @@ ordinary_lst_sq(
 
 function ordinary_lst_sq_f(data::AbstractVector, order::Int; kwargs...)
 	w = ordinary_lst_sq(data, order; kwargs...)
-	return x -> ([x ^ i for i in 0:order]' * w)
+	return x -> LinearAlgebra.BLAS.dot([x ^ i for i in 0:order], w)
 	# faster than the following
+	# return x -> ([x ^ i for i in 0:order]' * w)
 	# return x -> mapreduce(i -> w[i+1] * x ^ i , +, 0:order)
 	# return x -> sum([x ^ i for i in 0:order] .* w)
 end
@@ -205,18 +206,18 @@ oversamp_interp(lo_x::Real, hi_x::Real, x::AbstractVector, y::AbstractVector) =
 
 # pixel_separation(xs::AbstractVector) = multiple_append!([xs[1] - xs[2]], (xs[1:end-2] - xs[3:end]) ./ 2, [xs[end-1] - xs[end]])
 function bounds_generator!(bounds::AbstractVector, xs::AbstractVector)
-	bounds[2:end-1] = (view(xs, 1:length(xs)-1) .+ view(xs, 2:length(xs))) ./ 2
 	bounds[1] = (3*xs[1] - xs[2]) / 2
+	bounds[2:end-1] = (view(xs, 1:length(xs)-1) .+ view(xs, 2:length(xs))) ./ 2
 	bounds[end] = (3*xs[end] - xs[end-1]) / 2
 	return bounds
 end
 function bounds_generator(xs::AbstractVector)
-	bounds = zeros(length(xs)+1)
+	bounds = Array{Float64}(undef, length(xs)+1)
 	bounds_generator!(bounds, xs)
 	return bounds
 end
 function bounds_generator(xs::AbstractMatrix)
-	bounds = zeros(size(xs, 1)+1, size(xs, 2))
+	bounds = Array{Float64}(undef, size(xs, 1)+1, size(xs, 2))
 	for i in 1:size(xs, 2)
 		bounds_generator!(view(bounds, :, i), view(xs, :, i))
 	end

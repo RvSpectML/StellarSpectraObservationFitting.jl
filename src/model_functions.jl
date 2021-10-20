@@ -165,8 +165,7 @@ default_reg_tel = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
 default_reg_star = Dict([(:L2_μ, 1e4), (:L1_μ, 1e3),
 	(:L1_μ₊_factor, 7.2), (:L2_M, 1e1), (:L1_M, 1e6)])
 
-
-function oversamp_interp_helper!(to_bounds::AbstractVector, from_x::AbstractVector)
+function oversamp_interp_helper(to_bounds::AbstractVector, from_x::AbstractVector)
 	ans = spzeros(length(to_bounds)-1, length(from_x))
 	bounds_inds = searchsortednearest(from_x, to_bounds)
 	for i in 1:size(ans, 1)
@@ -191,33 +190,8 @@ function oversamp_interp_helper!(to_bounds::AbstractVector, from_x::AbstractVect
 	dropzeros!(ans)
 	return ans
 end
-function oversamp_interp_helper!_t(to_bounds::AbstractVector, from_x::AbstractVector)
-	ans = spzeros(length(from_x), length(to_bounds)-1)
-	bounds_inds = searchsortednearest(from_x, to_bounds)
-	for i in 1:size(ans, 2)
-		x_lo, x_hi = to_bounds[i], to_bounds[i+1]
-		lo_ind, hi_ind = bounds_inds[i], bounds_inds[i+1]
-		if from_x[lo_ind] < x_lo; lo_ind += 1 end
-		if from_x[hi_ind] > x_hi; hi_ind -= 1 end
-
-		edge_term_lo = (from_x[lo_ind] - x_lo) ^ 2 / (from_x[lo_ind] - from_x[lo_ind-1])
-		edge_term_hi = (x_hi - from_x[hi_ind]) ^ 2 / (from_x[hi_ind+1] - from_x[hi_ind])
-
-		ans[lo_ind-1, i] = edge_term_lo
-		ans[lo_ind, i] = from_x[lo_ind+1] + from_x[lo_ind] - 2 * x_lo - edge_term_lo
-
-		ans[lo_ind+1:hi_ind-1, i] .= view(from_x, lo_ind+2:hi_ind) .- view(from_x, lo_ind:hi_ind-2)
-
-		ans[hi_ind, i] = 2 * x_hi - from_x[hi_ind] - from_x[hi_ind-1] - edge_term_hi
-		ans[hi_ind+1, i] = edge_term_hi
-
-		ans[lo_ind-1:hi_ind+1, i] ./= 2 * (x_hi - x_lo)
-	end
-	dropzeros!(ans)
-	return ans'
-end
 oversamp_interp_helper(to_bounds::AbstractMatrix, from_x::AbstractVector) =
-	[oversamp_interp_helper!(view(to_bounds, :, i), from_x) for i in 1:size(to_bounds, 2)]
+	[oversamp_interp_helper(view(to_bounds, :, i), from_x) for i in 1:size(to_bounds, 2)]
 
 
 struct OrderModel{T<:Number}
