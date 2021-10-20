@@ -7,7 +7,7 @@ using Distributions
 # using BandedMatrices
 using SparseArrays
 using LinearAlgebra
-_recalc = true
+_recalc = false
 _inter_poly_order = 2
 _intra_poly_order = 2
 
@@ -53,14 +53,15 @@ if _recalc
     _w = SSOF.general_lst_sq(dm, σ, (dλs_func(eo."wavenumber [1/cm]") .* eo."fwhm error [1/cm]") .^ 2)  # note the errors are not scaled FWHM -> σ
     println("new lsf_σ w: ", _w)
     model = dm * _w
+    _min_wn, _max_wn = extrema(_λs)
 else
     _w = [-0.013170986773323784, 4.8136021892119126e-6, -3.772787891582741e-11, 2.3266186490906004e-5, 1.100967064582426e-7]
+    _min_wn, _max_wn = 13760.52558749721, 20111.11872452446
 end
 
 lsf_σ_inter_order(wn::Real) = _w[1] + wn*(_w[2] + _w[3]*wn)
 lsf_σ_intra_order(wn_m_order_mean::Real) = wn_m_order_mean*(_w[4] + _w[5]*wn_m_order_mean)
 lsf_σ(wn::Real, wn_m_order_mean::Real) = lsf_σ_inter_order(wn) + lsf_σ_intra_order(wn_m_order_mean)
-_min_wn, _max_wn = extrema(_λs)
 function lsf_σ_safe(wn::Real, wn_m_order_mean::Real)
     if _min_wn < wn < _max_wn
         return lsf_σ(wn, wn_m_order_mean)
@@ -142,7 +143,7 @@ function lsf_broadener(λ::AbstractVector; safe::Bool=true)
     dropzeros!(ans)
     return ans
 end
-lsf_broadeners(λ::AbstractMatrix; kwargs...) =
-    [lsf_broadener(view(λ, :, i); kwargs...) for i in 1:size(λ, 2)]
+# lsf_broadeners(λ::AbstractMatrix; kwargs...) =
+#     [lsf_broadener(view(λ, :, i); kwargs...) for i in 1:size(λ, 2)]
 lsf_broadener(λ::AbstractMatrix; kwargs...) =
     lsf_broadener(vec(median(λ; dims=2)); kwargs...)
