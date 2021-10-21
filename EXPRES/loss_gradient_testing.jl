@@ -6,7 +6,6 @@ using JLD2
 using Statistics
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 import StatsBase
-# using MKLSparse
 
 ## Setting up necessary variables
 
@@ -25,33 +24,133 @@ if !use_reg
     save_path *= "noreg_"
 end
 
+## it appears that Array = BandedMatrix << SparseArray for basic gradient timing
+
+using Zygote
+using ParameterHandling
+using BenchmarkTools
+using SparseArrays
+using MKLSparse
 using BandedMatrices
 
-inds = 1:100
+inds = 1:1000
+y = SSOF.FullLinearModel(ones(length(inds),2), ones(2,114), ones(length(inds)))
 include("lsf.jl")
-x1 = lsf_broadener(exp.(data.log_λ_obs[inds,:]))
-x3 = Array(x2)
-x4 = BandedMatrix(x3, (5,5))
-y = data.flux[inds,:]
-
+xb = lsf_broadener(exp.(data.log_λ_obs[inds,:]))
+xs = sparse(xb)
+xa = Array(xb)
+# y = data.flux[inds,:]
 function g_test(inps, l)
 	p0, unflatten = flatten(inps)  # unflatten returns NamedTuple of untransformed params
 	f = l ∘ unflatten
-	return unflatten(only(Zygote.gradient(f, p0))), f, p0
+	return unflatten(only(Zygote.gradient(f, p0))), f, p0, unflatten
 end
 
+fb(y) = sum(xb * y())
+_, fx, p0 = g_test(y, fb)
+@btime Zygote.gradient(fx, p0)
+fs(y) = sum(xs * y())
+_, fx, p0 = g_test(y, fs)
+Zygote.gradient(fx, p0)
+fa(y) = sum(xa * y())
+_, fx2, p02 = g_test(y, fa)
+@btime Zygote.gradient(fx, p0)
 
-f1(y) = sum(x1 * y)
-f3(y) = sum(x3 * y)
-f4(y) = sum(x4 * y)
-@btime g_test(y, f1)
-@btime g_test(y, f3)
-@btime g_test(y, f4)
+using Juno
+@profiler Zygote.gradient(fx, p0)
+@profiler Zygote.gradient(fx2, p02)
+
+
+
+# Diagonal
+ProjectTo(x::Diagonal) = ProjectTo{Diagonal}(; diag=ProjectTo(x.diag))
+(project::ProjectTo{Diagonal})(dx::AbstractMatrix) = Diagonal(project.diag(diag(dx)))
+(project::ProjectTo{Diagonal})(dx::Diagonal) = Diagonal(project.diag(dx.diag))
+
+# BandedMatrices
+ProjectTo(x::Diagonal) = ProjectTo{BandedMatrix}(; diag=ProjectTo(x.diag))
+(project::ProjectTo{BandedMatrix})(dx::AbstractMatrix) = Diagonal(project.diag(diag(dx)))
+(project::ProjectTo{BandedMatrix})(dx::BandedMatrix) = Diagonal(project.diag(dx.diag))
+
+
+## Nabla testing
+
+using Nabla
+using BenchmarkTools
+
+yy = [y.M, y.s, y.μ]
+ke
+dump(y)
+
+x = ones(3000, 3000)
+y = ones(3000)
+z = zeros(3000,3000)
+zz = zeros(3000)
+@time x, y[:] = zeros(3000,3000), zz
+z[1] = 1
+x[1]
+
+fb(yy) = sum(xb * ((yy[1] * yy[2]) .+ yy[3]))
+_, fx, p0, unf = g_test(yy, fb)
+@btime flatten(∇(fb)(yy))
+@btime only(Zygote.gradient(fx, p0))
+
+fs(yy) = sum(xs * ((yy[1] * yy[2]) .+ yy[3]))
+_, fx, p0, unf = g_test(yy, fs)
+@btime flatten(∇(fs)(yy))
+@btime only(Zygote.gradient(fx, p0))
+
+83.3/4.465
+494.9/1.364
+
+
+
+##
+inds = 1:100
+x = data.log_λ_obs_bounds[1:inds[end]+1, :]
+log_λ, _ = SSOF.create_λ_template(x; upscale=sqrt(2))
+y = SSOF.FullLinearModel(ones(length(log_λ),2), ones(2,114), ones(length(log_λ)))
+zs = SSOF.oversamp_interp_helper(x, log_λ)
+za = [Array(i) for i in zs]
+
+
+heatmap(SSOF.spectra_interp(y(), zs))
+heatmap(SSOF.spectra_interp(y(), za))
+
+ss = SSOF.spectra_interp(y(), zs)
+ss[1,1]
+zs[1] * y()
+
+
+fs(y) = sum(SSOF.spectra_interp(y(), zs))
+_, fx, p0 = g_test(y, fs)
+@btime Zygote.gradient(fx, p0)
+
+spectra_interp(y(), zs)
+sum(xb * y())
+
+
+
+
+
+
+
 
 # 7020, 114
 ind_λ = 1:1200; ind_t = 1:114
 data_small = SSOF.LSFData(data.flux[ind_λ, ind_t], data.var[ind_λ, ind_t], data.log_λ_obs[ind_λ, ind_t], data.log_λ_star[ind_λ, ind_t], data.lsf_broadener[ind_λ,ind_λ])
 
+function lsf_broadener(λ::AbstractVector; safe::Bool=true)
+    max_w = 0
+    for i in 1:length(nwn)
+        lo, mid, hi = SSOF.searchsortednearest(nwn, [nwn[i] - 3 * σs[i], nwn[i], nwn[i] + 3 * σs[i]])
+        lsf = Normal(wn[i], σs[i])
+        holder[i, lo:hi] = pdf.(lsf, wn[lo:hi])
+        holder[i, lo:hi] ./= sum(view(holder, i, lo:hi))
+        max_w = max(max_w, max(hi-mid, mid-lo))
+    end
+    return BandedMatrix(holder, (max_w, max_w))
+end
 if false#isfile(save_path*"results.jld2")
     @load save_path*"results.jld2" model rvs_naive rvs_notel
     if model.metadata[:todo][:err_estimated]
@@ -114,23 +213,12 @@ f = l_telstar ∘ unflatten
 @btime Zygote.gradient(f, p0)
 
 
-using SparseArrays
-using SuiteSparse
-y = SSOF.tel_model(model)
-x = data_small.lsf_broadener
-xx = SuiteSparse.CHOLMOD.Sparse(x)
-xxx = Array(x)
-@btime x*y
-@btime xx*y
-@btime xxx*y
-
-
 ########## ONLY USELESS GARBAGE BELOW
 ## one parameter
 function g_test(inps, l)
 	p0, unflatten = flatten(inps)  # unflatten returns NamedTuple of untransformed params
 	f = l ∘ unflatten
-	return unflatten(only(Zygote.gradient(f, p0))), f, p0
+	return unflatten(only(Zygote.gradient(f, p0)))#, f, p0
 end
 
 f2(lm) = sum(lm())
@@ -138,10 +226,15 @@ g_test(model.tel.lm, f2)
 
 x = copy(model.tel.lm)
 x.M .= 0; x.μ .= 0; x.M[1000] = 1;
+# x.M .= 1; x.μ .= 0;
+
+model.tel.lm
 
 f2(lm) = sum(lm())
 g_test(model.tel.lm, f2).M[1000]
 sum(x.M * x.s)
+x.s[]
+x.s
 
 f2(lm) = sum(model.t2o[1] * lm())
 g_test(model.tel.lm, f2).M[1000]

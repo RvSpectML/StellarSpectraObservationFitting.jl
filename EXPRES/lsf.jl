@@ -133,15 +133,18 @@ function lsf_broadener(λ::AbstractVector; safe::Bool=true)
     σs = lsf_σ_safe(wn, wn .- mean(wn))
     nwn = -wn
     holder = zeros(length(nwn), length(nwn))
+    # max_w = 0
     for i in 1:length(nwn)
         lo, hi = SSOF.searchsortednearest(nwn, [nwn[i] - 3 * σs[i], nwn[i] + 3 * σs[i]])
         lsf = Normal(wn[i], σs[i])
         holder[i, lo:hi] = pdf.(lsf, wn[lo:hi])
         holder[i, lo:hi] ./= sum(view(holder, i, lo:hi))
+        # max_w = max(max_w, max(hi-i, i-lo))
     end
     ans = sparse(holder)
     dropzeros!(ans)
     return ans
+    # return BandedMatrix(holder, (max_w, max_w))
 end
 # lsf_broadeners(λ::AbstractMatrix; kwargs...) =
 #     [lsf_broadener(view(λ, :, i); kwargs...) for i in 1:size(λ, 2)]
