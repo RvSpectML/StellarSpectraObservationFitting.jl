@@ -410,23 +410,14 @@ end
 
 L1(a::AbstractArray) = sum(abs.(a))
 L2(a::AbstractArray) = sum(a .* a)
-shared_attention(v1::AbstractVector, v2::AbstractVector) = dot(abs.(v1), abs.(v2))
+function shared_attention(M::AbstractMatrix)
+	shared_attentions = M' * M
+	return sum(shared_attentions) - sum(diag(shared_attentions))
+end
 
 
-function model_prior(lm::LinearModel, reg::Dict{Symbol, <:Real})
+function model_prior(lm::Union{FullLinearModel, TemplateModel}, reg::Dict{Symbol, <:Real})
 	val = 0
-	if haskey(reg, :shared_M)
-		shared_att = 0
-		# number of basis vectors too small for mapreduce to help
-		for i in size(lm.M, 2)
-			for j in size(lm.M, 2)
-				if i != j
-					shared_att += shared_attention(lm.M[:, i], lm.M[:, j])
-				end
-			end
-		end
-		val += shared_att * reg[:shared_M]
-	end
 	if haskey(reg, :L2_μ) || haskey(reg, :L1_μ) || haskey(reg, :L1_μ₊_factor)
 		μ_mod = lm.μ .- 1
 		if haskey(reg, :L2_μ); val += L2(μ_mod) * reg[:L2_μ] end
@@ -438,12 +429,36 @@ function model_prior(lm::LinearModel, reg::Dict{Symbol, <:Real})
 		end
 	end
 	if !(typeof(lm) <: TemplateModel)
+		if haskey(reg, :shared_M); val += shared_attention(lm.M) * reg[:shared_M] end
 		if haskey(reg, :L2_M); val += L2(lm.M) * reg[:L2_M] end
 		if haskey(reg, :L1_M); val += L1(lm.M) * reg[:L1_M] end
 		if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0); val += L1(lm.s) end
 	end
 	return val
 end
+# function model_prior(lm::Vector{<:AbstractArray}, reg::Dict{Symbol, <:Real})
+#
+# 	isFullLinearModel = typeof(lm) <: Vector{<:AbstractArray}
+# 	val = 0
+#
+# 	if haskey(reg, :L2_μ) || haskey(reg, :L1_μ) || haskey(reg, :L1_μ₊_factor)
+# 		μ_mod = lm[1+2*isFullLinearModel] .- 1
+# 		if haskey(reg, :L2_μ); val += L2(μ_mod) * reg[:L2_μ] end
+# 		if haskey(reg, :L1_μ)
+# 			val += L1(μ_mod) * reg[:L1_μ]
+# 			if haskey(reg, :L1_μ₊_factor)
+# 				val += sum(view(μ_mod, μ_mod .> 0)) * reg[:L1_μ₊_factor] * reg[:L1_μ]
+# 			end
+# 		end
+# 	end
+# 	if isFullLinearModel
+# 		if haskey(reg, :shared_M); val += shared_attention(lm[1]) * reg[:shared_M] end
+# 		if haskey(reg, :L2_M); val += L2(lm[1]) * reg[:L2_M] end
+# 		if haskey(reg, :L1_M); val += L1(lm[1]) * reg[:L1_M] end
+# 		if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0); val += L1(lm[2]) end
+# 	end
+# 	return val
+# end
 
 total_model(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix) = tel .* (star .+ rv)
 
