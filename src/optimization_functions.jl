@@ -1,10 +1,10 @@
 # using LineSearches
 using ParameterHandling
 using Optim
-using Zygote
+using Nabla
 
 # χ² loss function
-_loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericData) =
+_loss(tel, star, rv, d::GenericData) =
     sum(((total_model(tel, star, rv) .- d.flux) .^ 2) ./ d.var)
 # χ² loss function broadened by an lsf at each time (about 2x slower)
 # _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::LSFData) =
@@ -12,45 +12,49 @@ _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericD
 _loss(tel, star, rv, d::LSFData) =
     sum((((d.lsf * total_model(tel, star, rv)) .- d.flux) .^ 2) ./ d.var)
 function loss(o::Output, om::OrderModel, d::Data;
-	tel::LinearModel=om.tel.lm, star::LinearModel=om.star.lm, rv::LinearModel=om.rv.lm,
+	tel=om.tel.lm, star=om.star.lm, rv=om.rv.lm,
 	recalc_tel::Bool=true, recalc_star::Bool=true, recalc_rv::Bool=true)
 
-    recalc_tel ? tel_o = tel_model(om; lm=tel) : tel_o = o.tel
-    recalc_star ? star_o = star_model(om; lm=star) : star_o = o.star
-    recalc_rv ? rv_o = rv_model(om; lm=rv) : rv_o = o.rv
+    recalc_tel ? tel_o = spectra_interp(_eval_lm(tel), om.t2o) : tel_o = o.tel
+    recalc_star ? star_o = spectra_interp(_eval_lm(star), om.b2o) : star_o = o.star
+    recalc_rv ? rv_o = spectra_interp(_eval_lm(rv), om.b2o) : rv_o = o.rv
     return _loss(tel_o, star_o, rv_o, d)
 end
 
-possible_θ = Union{LinearModel, AbstractMatrix, NamedTuple}
+possible_θ = Union{Vector{<:Vector{<:AbstractArray}}, AbstractMatrix}
 
 function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
-    l() = loss(o, om, d)
+    l(; kwargs...) = loss(o, om, d; kwargs...)
 
-    l_telstar(nt::NamedTuple{(:tel, :star,),<:Tuple{LinearModel, LinearModel}}) =
-        loss(o, om, d; tel=nt.tel, star=nt.star, recalc_rv=false) +
-        model_prior(nt.tel, om.reg_tel) + model_prior(nt.star, om.reg_star)
-    function l_telstar_s(nt::NamedTuple{(:tel, :star,),<:Tuple{AbstractVector, AbstractVector}})
-        tel = LinearModel(om.tel, nt.tel)
-        star = LinearModel(om.star, nt.star)
-        return loss(o, om, d; tel=tel, star=star, recalc_rv=false) +
-            model_prior(tel, om.reg_tel) + model_prior(star, om.reg_star)
+    l_telstar(telstar; kwargs...) =
+        loss(o, om, d; tel=telstar[1], star=telstar[2], recalc_rv=false, kwargs...) +
+			model_prior(telstar[1], om.reg_tel) + model_prior(telstar[2], om.reg_star)
+    function l_telstar_s(telstar_s)
+		recalc_tel = !(typeof(om.tel.lm) <: TemplateModel)
+		recalc_star = !(typeof(om.tel.lm) <: TemplateModel)
+		recalc_tel ? tel = [om.tel.lm.M, telstar_s[1], om.tel.lm.μ] : tel = om.tel.lm
+		recalc_star ? star = [om.star.lm.M, telstar_s[2], om.star.lm.μ] : star = om.star.lm
+		return loss(o, om, d; tel=tel, star=star, recalc_rv=false, recalc_tel=recalc_tel, recalc_star=recalc_star) +
+			model_prior(tel, om.reg_tel) + model_prior(star, om.reg_star)
     end
 
-    l_rv(rv::AbstractMatrix) = loss(o, om, d; rv=BaseLinearModel(om.rv.M, rv), recalc_tel=false, recalc_star=false)
+    l_rv(rv_s) = loss(o, om, d; rv=[om.rv.lm.M, rv_s], recalc_tel=false, recalc_star=false)
 
     return l, l_telstar, l_telstar_s, l_rv
 end
 
 
 function opt_funcs(loss::Function, pars::possible_θ)
-    flat_initial_params, unflatten = flatten(pars)  # unflatten returns NamedTuple of untransformed params
+    flat_initial_params, unflatten = flatten(pars)  # unflatten returns Vector of untransformed params
     f = loss ∘ unflatten
     function g!(G, θ)
-        G .= only(Zygote.gradient(f, θ))
+		θunfl = unflatten(θ)
+        G[:], _= flatten(∇(loss)(θunfl))
     end
     function fg_obj!(G, θ)
-        l, back = Zygote.pullback(f, θ)
-        G .= only(back(1))
+		θunfl = unflatten(θ)
+		l, g = ∇(loss; get_output=true)(θunfl)
+		G[:], _= flatten(g)
         return l
     end
     return flat_initial_params, OnceDifferentiable(f, g!, fg_obj!, flat_initial_params), unflatten
@@ -84,7 +88,7 @@ function OptimWorkspace(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=
 	rv = OptimSubWorkspace(om.rv.lm.s, loss_rv; use_cg=true)
 	only_s ?
 		telstar = OptimSubWorkspace([om.tel.lm.s, om.star.lm.s], loss_telstar_s; use_cg=!only_s) :
-		telstar = OptimSubWorkspace(vec([om.tel.lm, om.star.lm]), loss_telstar; use_cg=!only_s)
+		telstar = OptimSubWorkspace([vec(om.tel.lm), vec(om.star.lm)], loss_telstar; use_cg=!only_s)
 	ow = OptimWorkspace(telstar, rv, om, o, d, only_s)
 	if return_loss_f
 		return ow, loss
