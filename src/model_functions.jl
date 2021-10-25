@@ -1,43 +1,54 @@
 using AbstractGPs
+using LinearAlgebra
 using KernelFunctions
 using TemporalGPs
 using Distributions
 import Base.copy
+import Base.vec
+import Base.getindex
+import Base.eachindex
+import Base.setindex!
 # using BandedMatrices
 using SparseArrays
 using SpecialFunctions
 
 abstract type Data end
 
-struct LSFData{T<:Real} <: Data
-    flux::AbstractMatrix{T}
-    var::AbstractMatrix{T}
-    log_λ_obs::AbstractMatrix{T}
-	log_λ_obs_bounds::AbstractMatrix{T}
-    log_λ_star::AbstractMatrix{T}
-	log_λ_star_bounds::AbstractMatrix{T}
-	lsf_broadener::SparseMatrixCSC
-	function LSFData(flux::AbstractMatrix{T}, var, log_λ_obs, log_λ_star, lsf_broadener) where {T<:Real}
+_current_matrix_modifier = SparseMatrixCSC
+
+struct LSFData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
+    flux::AM
+    var::AM
+    log_λ_obs::AM
+	log_λ_obs_bounds::M
+    log_λ_star::AM
+	log_λ_star_bounds::M
+	lsf::_current_matrix_modifier
+	function LSFData(flux::AM, var::AM, log_λ_obs::AM, log_λ_star::AM, lsf::_current_matrix_modifier) where {T<:Real, AM<:AbstractMatrix{T}}
 		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
-		@assert size(lsf_broadener, 1) == size(lsf_broadener, 2) == size(flux, 1)
-		return new{T}(flux, var, log_λ_obs, bounds_generator(log_λ_obs), log_λ_star, bounds_generator(log_λ_star), lsf_broadener)
+		@assert size(lsf, 1) == size(lsf, 2) == size(flux, 1)
+		log_λ_obs_bounds = bounds_generator(log_λ_obs)
+		log_λ_star_bounds = bounds_generator(log_λ_star)
+		return new{T, AM, typeof(log_λ_obs_bounds)}(flux::AM, var::AM, log_λ_obs::AM, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds, lsf)
 	end
 end
 (d::LSFData)(inds::AbstractVecOrMat) =
 	LSFData(view(d.flux, :, inds), view(d.var, :, inds),
-	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds), lsf_broadener)
-Base.copy(d::LSFData) = LSFData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star), copy(lsf_broadener))
+	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds), lsf)
+Base.copy(d::LSFData) = LSFData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star), copy(lsf))
 
-struct GenericData{T<:Real} <: Data
-    flux::AbstractMatrix{T}
-    var::AbstractMatrix{T}
-    log_λ_obs::AbstractMatrix{T}
-	log_λ_obs_bounds::AbstractMatrix{T}
-    log_λ_star::AbstractMatrix{T}
-	log_λ_star_bounds::AbstractMatrix{T}
-	function GenericData(flux::AbstractMatrix{T}, var, log_λ_obs, log_λ_star) where {T<:Real}
+struct GenericData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
+    flux::AM
+    var::AM
+    log_λ_obs::AM
+	log_λ_obs_bounds::M
+    log_λ_star::AM
+	log_λ_star_bounds::M
+	function GenericData(flux::AM, var::AM, log_λ_obs::AM, log_λ_star::AM) where {T<:Number, AM<:AbstractMatrix{T}}
 		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
-		return new{T}(flux, var, log_λ_obs, bounds_generator(log_λ_obs), log_λ_star, bounds_generator(log_λ_star))
+		log_λ_obs_bounds = bounds_generator(log_λ_obs)
+		log_λ_star_bounds = bounds_generator(log_λ_star)
+		return new{T, AM, typeof(log_λ_obs_bounds)}(flux, var, log_λ_obs, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds)
 	end
 end
 (d::GenericData)(inds::AbstractVecOrMat) =
@@ -57,41 +68,46 @@ end
 abstract type LinearModel end
 
 # Full (includes mean) linear model
-struct FullLinearModel{T<:Number} <: LinearModel
-	M::AbstractMatrix{T}
-	s::AbstractMatrix{T}
-	μ::Vector{T}
-	function FullLinearModel(M::AbstractMatrix{T}, s, μ) where {T<:Number}
-		@assert length(μ) == size(M, 1)
-		@assert size(M, 2) == size(s, 1)
-		return new{T}(M, s, μ)
-	end
+struct FullLinearModel{T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}, AV<:AbstractVector{T}}  <: LinearModel
+	M::AM1
+	s::AM2
+	μ::AV
+end
+function FullLinearModel(M::AM1, s::AM2, μ::AV) where {T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}, AV<:AbstractVector{T}}
+	@assert length(μ) == size(M, 1)
+	@assert size(M, 2) == size(s, 1)
+	return FullLinearModel{T, AM1, AM2, AV}(M, s, μ)
 end
 Base.copy(flm::FullLinearModel) = FullLinearModel(copy(flm.M), copy(flm.s), copy(flm.μ))
 LinearModel(flm::FullLinearModel, inds::AbstractVecOrMat) =
 	FullLinearModel(flm.M, view(flm.s, :, inds), flm.μ)
 
 # Base (no mean) linear model
-struct BaseLinearModel{T<:Number} <: LinearModel
-	M::AbstractMatrix{T}
-	s::AbstractMatrix{T}
-	function BaseLinearModel(M::AbstractMatrix{T}, s) where {T<:Number}
-		@assert size(M, 2) == size(s, 1)
-		return new{T}(M, s)
-	end
+struct BaseLinearModel{T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}} <: LinearModel
+	M::AM1
+	s::AM2
+end
+function BaseLinearModel(M::AM1, s::AM2) where {T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}}
+	@assert size(M, 2) == size(s, 1)
+	return BaseLinearModel{T, AM1, AM2}(M, s)
 end
 Base.copy(blm::BaseLinearModel) = BaseLinearModel(copy(blm.M), copy(blm.s))
 LinearModel(blm::BaseLinearModel, inds::AbstractVecOrMat) =
 	BaseLinearModel(blm.M, view(blm.s, :, inds))
 
 # Template (no bases) model
-struct TemplateModel{T<:Number} <: LinearModel
-	μ::Vector{T}
+struct TemplateModel{T<:Number, AV<:AbstractVector{T}} <: LinearModel
+	μ::AV
 	n::Int
-	TemplateModel(μ::Vector{T}, n) where {T<:Number} = new{T}(μ, n)
 end
 Base.copy(tlm::TemplateModel) = TemplateModel(copy(tlm.μ), tlm.n)
 LinearModel(tm::TemplateModel, inds::AbstractVecOrMat) = tm
+
+Base.getindex(lm::LinearModel, s::Symbol) = getfield(lm, s)
+Base.eachindex(lm::T) where {T<:LinearModel} = fieldnames(T)
+Base.setindex!(lm::LinearModel, a::AbstractVecOrMat, s::Symbol) = (lm[s] .= a)
+vec(lm::LinearModel) = [lm[i] for i in eachindex(lm)]
+vec(lms::Vector{<:LinearModel}) = [vec(lm) for lm in lms]
 
 LinearModel(M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector) = FullLinearModel(M, s, μ)
 LinearModel(M::AbstractMatrix, s::AbstractMatrix) = BaseLinearModel(M, s)
@@ -121,29 +137,29 @@ function copy_LinearModel!(from::LinearModel, to::LinearModel)
 	end
 end
 
-struct Submodel{T<:Number}
-    log_λ::AbstractVector{T}
-    λ::AbstractVector{T}
+struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}}
+    log_λ::AV1
+    λ::AV2
 	lm::LinearModel
-    function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=true, kwargs...)
-        n_obs = size(log_λ_obs, 2)
-		log_λ, λ = create_λ_template(log_λ_obs; kwargs...)
-		len = length(log_λ)
-		if include_mean
-			lm = FullLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs), ones(len))
-		else
-			lm = BaseLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs))
-		end
-        return Submodel(log_λ, λ, lm)
-    end
-    function Submodel(log_λ::AbstractVector{T}, λ, lm) where {T<:Number}
-		if typeof(lm) <: TemplateModel
-			@assert length(log_λ) == length(λ) == length(lm.μ)
-        else
-			@assert length(log_λ) == length(λ) == size(lm.M, 1)
-		end
-        return new{T}(log_λ, λ, lm)
-    end
+end
+function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=true, kwargs...)
+	n_obs = size(log_λ_obs, 2)
+	log_λ, λ = create_λ_template(log_λ_obs; kwargs...)
+	len = length(log_λ)
+	if include_mean
+		lm = FullLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs), ones(len))
+	else
+		lm = BaseLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs))
+	end
+	return Submodel(log_λ, λ, lm)
+end
+function Submodel(log_λ::AV1, λ::AV2, lm) where {T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}}
+	if typeof(lm) <: TemplateModel
+		@assert length(log_λ) == length(λ) == length(lm.μ)
+	else
+		@assert length(log_λ) == length(λ) == size(lm.M, 1)
+	end
+	return Submodel{T, AV1, AV2}(log_λ, λ, lm)
 end
 (sm::Submodel)(inds::AbstractVecOrMat) =
 	Submodel(sm.log_λ, sm.λ, LinearModel(sm.lm, inds))
@@ -161,7 +177,7 @@ function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 end
 
 default_reg_tel = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
-	(:L1_μ₊_factor, 6), (:L2_M, 1e-1), (:L1_M, 1e3)])
+	(:L1_μ₊_factor, 6.), (:L2_M, 1e-1), (:L1_M, 1e3)])
 default_reg_star = Dict([(:L2_μ, 1e4), (:L1_μ, 1e3),
 	(:L1_μ₊_factor, 7.2), (:L2_M, 1e1), (:L1_M, 1e6)])
 
@@ -197,42 +213,39 @@ oversamp_interp_helper(to_bounds::AbstractMatrix, from_x::AbstractVector) =
 
 
 struct OrderModel{T<:Number}
-    tel::Submodel{T}
-    star::Submodel{T}
-	rv::Submodel{T}
+    tel::Submodel
+    star::Submodel
+	rv::Submodel
 	reg_tel::Dict{Symbol, T}
 	reg_star::Dict{Symbol, T}
-	b2o::Vector{SparseMatrixCSC}
-	t2o::Vector{SparseMatrixCSC}
+	b2o::Vector{<:_current_matrix_modifier}
+	t2o::Vector{<:_current_matrix_modifier}
 	metadata::Dict{Symbol, Any}
-    function OrderModel(
-		d::Data,
-		instrument::String,
-		order::Int,
-		star::String;
-		n_comp_tel::Int=2,
-		n_comp_star::Int=2,
-		kwargs...)
+end
+function OrderModel(
+	d::Data,
+	instrument::String,
+	order::Int,
+	star::String;
+	n_comp_tel::Int=2,
+	n_comp_star::Int=2,
+	kwargs...)
 
-        tel = Submodel(d.log_λ_obs, n_comp_tel; kwargs...)
-        star = Submodel(d.log_λ_star, n_comp_star; kwargs...)
-		rv = Submodel(d.log_λ_star, 1; include_mean=false, kwargs...)
+	tel = Submodel(d.log_λ_obs, n_comp_tel; kwargs...)
+	star = Submodel(d.log_λ_star, n_comp_star; kwargs...)
+	rv = Submodel(d.log_λ_star, 1; include_mean=false, kwargs...)
 
-        n_obs = size(d.log_λ_obs, 2)
-        star_dop = [d.log_λ_star[1, i] - d.log_λ_obs[1, i] for i in 1:n_obs]
-        star_log_λ_tel = ones(length(star.log_λ), n_obs)
-        for i in 1:n_obs
-            star_log_λ_tel[:, i] .= star.log_λ .+ star_dop[i]
-        end
-		todo = Dict([(:reg_improved, false), (:downsized, false), (:optimized, false), (:err_estimated, false)])
-		metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
-		b2o = oversamp_interp_helper(d.log_λ_star_bounds, star.log_λ)
-		t2o = oversamp_interp_helper(d.log_λ_obs_bounds, tel.log_λ)
-        return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), b2o, t2o, metadata)
-    end
-    function OrderModel(tel::Submodel{T}, star, rv, reg_tel, reg_star, b2o, t2o, metadata) where {T<:Number}
-		return new{T}(tel, star, rv, reg_tel, reg_star, b2o, t2o, metadata)
+	n_obs = size(d.log_λ_obs, 2)
+	star_dop = [d.log_λ_star[1, i] - d.log_λ_obs[1, i] for i in 1:n_obs]
+	star_log_λ_tel = ones(length(star.log_λ), n_obs)
+	for i in 1:n_obs
+		star_log_λ_tel[:, i] .= star.log_λ .+ star_dop[i]
 	end
+	todo = Dict([(:reg_improved, false), (:downsized, false), (:optimized, false), (:err_estimated, false)])
+	metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
+	b2o = oversamp_interp_helper(d.log_λ_star_bounds, star.log_λ)
+	t2o = oversamp_interp_helper(d.log_λ_obs_bounds, tel.log_λ)
+	return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), b2o, t2o, metadata)
 end
 Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), copy(om.metadata))
 (om::OrderModel)(inds::AbstractVecOrMat) =
@@ -408,9 +421,9 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2, kw
 	return rvs_notel, rvs_naive, fracvar_tel, fracvar_star
 end
 
-L1(a::AbstractArray) = sum(abs.(a))
-L2(a::AbstractArray) = sum(a .* a)
-function shared_attention(M::AbstractMatrix)
+L1(a) = sum(abs, a)
+L2(a) = sum(abs2, a)
+function shared_attention(M)
 	shared_attentions = M' * M
 	return sum(shared_attentions) - sum(diag(shared_attentions))
 end
@@ -460,30 +473,30 @@ end
 # 	return val
 # end
 
-total_model(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix) = tel .* (star .+ rv)
+total_model(tel, star, rv) = tel .* (star .+ rv)
 
-struct Output{T<:Real}
-	tel::AbstractMatrix{T}
-	star::AbstractMatrix{T}
-	rv::AbstractMatrix{T}
-	total::AbstractMatrix{T}
-	Output(om::OrderModel, d::Data) =
-		Output(tel_model(om), star_model(om), rv_model(om), d)
-	Output(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericData) =
-		Output(tel, star, rv, total_model(tel, star, rv))
-	Output(tel::AbstractMatrix{T}, star::AbstractMatrix{T}, rv::AbstractMatrix{T}, d::LSFData) where {T<:Real} =
-		Output(tel, star, rv, d.lsf_broadener * total_model(tel, star, rv))
-	function Output(tel::AbstractMatrix{T}, star::AbstractMatrix{T}, rv::AbstractMatrix{T}, total::AbstractMatrix{T}) where {T<:Real}
-		@assert size(tel) == size(star) == size(rv) == size(total)
-		new{T}(tel, star, rv, total)
-	end
+struct Output{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}}
+	tel::AM
+	star::AM
+	rv::AM
+	total::M
+end
+Output(om::OrderModel, d::Data) =
+	Output(tel_model(om), star_model(om), rv_model(om), d)
+Output(tel, star, rv, d::GenericData) =
+	Output(tel, star, rv, total_model(tel, star, rv))
+Output(tel, star, rv, d::LSFData) =
+	Output(tel, star, rv, d.lsf * total_model(tel, star, rv))
+function Output(tel::AM, star::AM, rv::AM, total::M) where {T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}}
+	@assert size(tel) == size(star) == size(rv) == size(total)
+	Output{T, AM, M}(tel, star, rv, total)
 end
 Base.copy(o::Output) = Output(copy(tel), copy(star), copy(rv))
 function recalc_total!(o::Output, d::GenericData)
 	o.total .= total_model(o.tel, o.star, o.rv)
 end
 function recalc_total!(o::Output, d::LSFData)
-	o.total .= d.lsf_broadener * total_model(o.tel, o.star, o.rv)
+	o.total .= d.lsf * total_model(o.tel, o.star, o.rv)
 end
 
 function copy_reg!(from::OrderModel, to::OrderModel)

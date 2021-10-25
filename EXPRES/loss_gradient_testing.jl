@@ -2,9 +2,9 @@
 using Pkg
 Pkg.activate("EXPRES")
 
+import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 using JLD2
 using Statistics
-import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 import StatsBase
 
 ## Setting up necessary variables
@@ -36,8 +36,8 @@ using BandedMatrices
 inds = 1:1000
 y = SSOF.FullLinearModel(ones(length(inds),2), ones(2,114), ones(length(inds)))
 include("lsf.jl")
-xb = lsf_broadener(exp.(data.log_λ_obs[inds,:]))
-xs = sparse(xb)
+xs = EXPRES_lsf(exp.(data.log_λ_obs[inds,:]))
+xb = BandedMatrix(xs)
 xa = Array(xb)
 # y = data.flux[inds,:]
 function g_test(inps, l)

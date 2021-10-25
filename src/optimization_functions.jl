@@ -8,9 +8,9 @@ _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::GenericD
     sum(((total_model(tel, star, rv) .- d.flux) .^ 2) ./ d.var)
 # χ² loss function broadened by an lsf at each time (about 2x slower)
 # _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::LSFData) =
-#     mapreduce(i -> sum((((d.lsf_broadener[i] * (view(tel, :, i) .* (view(star, :, i) .+ view(rv, :, i)))) .- view(d.flux, :, i)) .^ 2) ./ view(d.var, :, i)), +, 1:size(tel, 2))
-_loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::LSFData) =
-    sum((((d.lsf_broadener * total_model(tel, star, rv)) .- d.flux) .^ 2) ./ d.var)
+#     mapreduce(i -> sum((((d.lsf[i] * (view(tel, :, i) .* (view(star, :, i) .+ view(rv, :, i)))) .- view(d.flux, :, i)) .^ 2) ./ view(d.var, :, i)), +, 1:size(tel, 2))
+_loss(tel, star, rv, d::LSFData) =
+    sum((((d.lsf * total_model(tel, star, rv)) .- d.flux) .^ 2) ./ d.var)
 function loss(o::Output, om::OrderModel, d::Data;
 	tel::LinearModel=om.tel.lm, star::LinearModel=om.star.lm, rv::LinearModel=om.rv.lm,
 	recalc_tel::Bool=true, recalc_star::Bool=true, recalc_rv::Bool=true)
@@ -62,13 +62,13 @@ struct OptimSubWorkspace
     opt::Optim.FirstOrderOptimizer
     p0::Vector
     unflatten::Function
-    function OptimSubWorkspace(θ::possible_θ, loss::Function; use_cg::Bool=true)
-        p0, obj, unflatten = opt_funcs(loss, θ)
-        # opt = LBFGS(alphaguess = LineSearches.InitialHagerZhang(α0=NaN))
-        use_cg ? opt = ConjugateGradient() : opt = LBFGS()
-        # initial_state(method::LBFGS, ...) doesn't use the options for anything
-        return new(θ, obj, opt, p0, unflatten)
-    end
+end
+function OptimSubWorkspace(θ::possible_θ, loss::Function; use_cg::Bool=true)
+	p0, obj, unflatten = opt_funcs(loss, θ)
+	# opt = LBFGS(alphaguess = LineSearches.InitialHagerZhang(α0=NaN))
+	use_cg ? opt = ConjugateGradient() : opt = LBFGS()
+	# initial_state(method::LBFGS, ...) doesn't use the options for anything
+	return OptimSubWorkspace(θ, obj, opt, p0, unflatten)
 end
 
 struct OptimWorkspace
@@ -78,24 +78,24 @@ struct OptimWorkspace
     o::Output
     d::Data
     only_s::Bool
-    function OptimWorkspace(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=false, only_s::Bool=false)
-        loss, loss_telstar, loss_telstar_s, loss_rv = loss_funcs_telstar(o, om, d)
-        rv = OptimSubWorkspace(om.rv.lm.s, loss_rv; use_cg=true)
-        only_s ?
-            telstar = OptimSubWorkspace((tel = om.tel.lm.s, star = om.star.lm.s,), loss_telstar_s; use_cg=!only_s) :
-            telstar = OptimSubWorkspace((tel = om.tel.lm, star = om.star.lm,), loss_telstar; use_cg=!only_s)
-        ow = new(telstar, rv, om, o, d, only_s)
-        if return_loss_f
-            return ow, loss
-        else
-            return ow
-        end
-    end
-    OptimWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
-        OptimWorkspace(om(inds), d(inds); kwargs...)
-    OptimWorkspace(om::OrderModel, d::Data; kwargs...) =
-        OptimWorkspace(om, Output(om, d), d; kwargs...)
 end
+function OptimWorkspace(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=false, only_s::Bool=false)
+	loss, loss_telstar, loss_telstar_s, loss_rv = loss_funcs_telstar(o, om, d)
+	rv = OptimSubWorkspace(om.rv.lm.s, loss_rv; use_cg=true)
+	only_s ?
+		telstar = OptimSubWorkspace([om.tel.lm.s, om.star.lm.s], loss_telstar_s; use_cg=!only_s) :
+		telstar = OptimSubWorkspace(vec([om.tel.lm, om.star.lm]), loss_telstar; use_cg=!only_s)
+	ow = OptimWorkspace(telstar, rv, om, o, d, only_s)
+	if return_loss_f
+		return ow, loss
+	else
+		return ow
+	end
+end
+OptimWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
+	OptimWorkspace(om(inds), d(inds); kwargs...)
+OptimWorkspace(om::OrderModel, d::Data; kwargs...) =
+	OptimWorkspace(om, Output(om, d), d; kwargs...)
 
 function _OSW_optimize!(osw::OptimSubWorkspace, options::Optim.Options; return_result::Bool=true)
     result = Optim.optimize(osw.obj, osw.p0, osw.opt, options)
