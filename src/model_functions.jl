@@ -72,11 +72,11 @@ struct FullLinearModel{T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}
 	M::AM1
 	s::AM2
 	μ::AV
-end
-function FullLinearModel(M::AM1, s::AM2, μ::AV) where {T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}, AV<:AbstractVector{T}}
-	@assert length(μ) == size(M, 1)
-	@assert size(M, 2) == size(s, 1)
-	return FullLinearModel{T, AM1, AM2, AV}(M, s, μ)
+	function FullLinearModel(M::AM1, s::AM2, μ::AV) where {T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}, AV<:AbstractVector{T}}
+		@assert length(μ) == size(M, 1)
+		@assert size(M, 2) == size(s, 1)
+		return new{T, AM1, AM2, AV}(M, s, μ)
+	end
 end
 Base.copy(flm::FullLinearModel) = FullLinearModel(copy(flm.M), copy(flm.s), copy(flm.μ))
 LinearModel(flm::FullLinearModel, inds::AbstractVecOrMat) =
@@ -86,10 +86,10 @@ LinearModel(flm::FullLinearModel, inds::AbstractVecOrMat) =
 struct BaseLinearModel{T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}} <: LinearModel
 	M::AM1
 	s::AM2
-end
-function BaseLinearModel(M::AM1, s::AM2) where {T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}}
-	@assert size(M, 2) == size(s, 1)
-	return BaseLinearModel{T, AM1, AM2}(M, s)
+	function BaseLinearModel(M::AM1, s::AM2) where {T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}}
+		@assert size(M, 2) == size(s, 1)
+		return new{T, AM1, AM2}(M, s)
+	end
 end
 Base.copy(blm::BaseLinearModel) = BaseLinearModel(copy(blm.M), copy(blm.s))
 LinearModel(blm::BaseLinearModel, inds::AbstractVecOrMat) =
@@ -117,17 +117,26 @@ LinearModel(lm::FullLinearModel, s::AbstractMatrix) = FullLinearModel(lm.M, s, l
 LinearModel(lm::BaseLinearModel, s::AbstractMatrix) = BaseLinearModel(lm.M, s)
 LinearModel(lm::TemplateModel, s::AbstractMatrix) = lm
 
-_eval_blm(M::AbstractVecOrMat, s::AbstractVecOrMat) = M * s
-_eval_flm(M::AbstractVecOrMat, s::AbstractVecOrMat, μ::AbstractVector) =
-	_eval_blm(M, s) .+ μ
-_eval_lm(M::AbstractVecOrMat, s::AbstractVecOrMat) = _eval_blm(M, s)
-_eval_lm(M::AbstractVecOrMat, s::AbstractVecOrMat, μ::AbstractVector) = _eval_flm(M, s, μ)
+# Ref(lm::FullLinearModel) = [Ref(lm.M), Ref(lm.s), Ref(lm.μ)]
+# Ref(lm::BaseLinearModel) = [Ref(lm.M), Ref(lm.s)]
+# Ref(lm::TemplateModel) = [Ref(lm.μ)]
 
-(flm::FullLinearModel)() = _eval_flm(flm.M, flm.s, flm.μ)
-(blm::BaseLinearModel)() = _eval_blm(blm.M, blm.s)
-(tlm::TemplateModel)() = repeat(tlm.μ, 1, tlm.n)
-(flm::FullLinearModel)(inds::AbstractVecOrMat) = _eval_flm(view(flm.M, inds, :), flm.s, flm.μ)
-(blm::BaseLinearModel)(inds::AbstractVecOrMat) = _eval_blm(view(blm.M, inds, :), blm.s)
+function _eval_lm(v)
+	@assert 1 < length(v) < 4
+	return length(v) < 3 ? _eval_lm(v[1],v[2]) : _eval_lm(v[1],v[2],v[3])
+end
+_eval_lm(μ, n::Int) = repeat(μ, 1, n)
+_eval_lm(M, s) = M * s
+_eval_lm(M, s, μ) =
+	_eval_lm(M, s) .+ μ
+
+_eval_lm(flm::FullLinearModel) = _eval_lm(flm.M, flm.s, flm.μ)
+_eval_lm(blm::BaseLinearModel) = _eval_lm(blm.M, blm.s)
+_eval_lm(tlm::TemplateModel) = _eval_lm(tlm.μ, tlm.n)
+(lm::LinearModel)() = _eval_lm(lm)
+
+(flm::FullLinearModel)(inds::AbstractVecOrMat) = _eval_lm(view(flm.M, inds, :), flm.s, flm.μ)
+(blm::BaseLinearModel)(inds::AbstractVecOrMat) = _eval_lm(view(blm.M, inds, :), blm.s)
 (tlm::TemplateModel)(inds::AbstractVecOrMat) = repeat(view(tlm.μ, inds), 1, tlm.n)
 
 function copy_LinearModel!(from::LinearModel, to::LinearModel)
@@ -283,8 +292,10 @@ downsize(m::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
 tel_prior(om::OrderModel) = model_prior(om.tel.lm, om.reg_tel)
 star_prior(om::OrderModel) = model_prior(om.star.lm, om.reg_star)
 
-spectra_interp(model::AbstractMatrix, interp_helper::Vector{SparseMatrixCSC}) =
+spectra_interp(model::AbstractMatrix, interp_helper::Vector{<:_current_matrix_modifier}) =
 	hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
+spectra_interp(model, interp_helper::Vector{<:_current_matrix_modifier}) =
+	hcat([interp_helper[i] * model[:, i] for i in 1:size(model, 2)]...)
 
 tel_model(om::OrderModel; lm=om.tel.lm::LinearModel) = spectra_interp(lm(), om.t2o)
 star_model(om::OrderModel; lm=om.star.lm::LinearModel) = spectra_interp(lm(), om.b2o)
@@ -295,11 +306,11 @@ function fix_FullLinearModel_s!(flm, min::Number, max::Number)
 	@assert all(min .< flm.μ .< max)
 	result = ones(typeof(flm.μ[1]), length(flm.μ))
 	for i in 1:size(flm.s, 2)
-		result[:] = _eval_flm(flm.M, flm.s[:, i], flm.μ)
+		result[:] = _eval_lm(flm.M, flm.s[:, i], flm.μ)
 		while any(result .> max) || any(result .< min)
 			# println("$i, old s: $(lm.s[:, i]), min: $(minimum(result)), max:  $(maximum(result))")
 			flm.s[:, i] ./= 2
-			result[:] = _eval_flm(flm.M, view(flm.s, :, i), flm.μ)
+			result[:] = _eval_lm(flm.M, view(flm.s, :, i), flm.μ)
 			# println("$i, new s: $(lm.s[:, i]), min: $(minimum(result)), max:  $(maximum(result))")
 		end
 	end
@@ -429,49 +440,30 @@ function shared_attention(M)
 end
 
 
-function model_prior(lm::Union{FullLinearModel, TemplateModel}, reg::Dict{Symbol, <:Real})
+
+function model_prior(lm, reg::Dict{Symbol, <:Real})
+
+	isFullLinearModel = length(lm) > 2
 	val = 0
+
 	if haskey(reg, :L2_μ) || haskey(reg, :L1_μ) || haskey(reg, :L1_μ₊_factor)
-		μ_mod = lm.μ .- 1
+		μ_mod = lm[1+2*isFullLinearModel] .- 1
 		if haskey(reg, :L2_μ); val += L2(μ_mod) * reg[:L2_μ] end
 		if haskey(reg, :L1_μ)
 			val += L1(μ_mod) * reg[:L1_μ]
-			if haskey(reg, :L1_μ₊_factor)
-				val += sum(view(μ_mod, μ_mod .> 0)) * reg[:L1_μ₊_factor] * reg[:L1_μ]
-			end
+			# For some reason dot() works but BLAS.dot() doesn't
+			if haskey(reg, :L1_μ₊_factor); val += dot(μ_mod, μ_mod .> 0) * reg[:L1_μ₊_factor] * reg[:L1_μ] end
 		end
 	end
-	if !(typeof(lm) <: TemplateModel)
-		if haskey(reg, :shared_M); val += shared_attention(lm.M) * reg[:shared_M] end
-		if haskey(reg, :L2_M); val += L2(lm.M) * reg[:L2_M] end
-		if haskey(reg, :L1_M); val += L1(lm.M) * reg[:L1_M] end
-		if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0); val += L1(lm.s) end
+	if isFullLinearModel
+		if haskey(reg, :shared_M); val += shared_attention(lm[1]) * reg[:shared_M] end
+		if haskey(reg, :L2_M); val += L2(lm[1]) * reg[:L2_M] end
+		if haskey(reg, :L1_M); val += L1(lm[1]) * reg[:L1_M] end
+		if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0); val += L1(lm[2]) end
 	end
 	return val
 end
-# function model_prior(lm::Vector{<:AbstractArray}, reg::Dict{Symbol, <:Real})
-#
-# 	isFullLinearModel = typeof(lm) <: Vector{<:AbstractArray}
-# 	val = 0
-#
-# 	if haskey(reg, :L2_μ) || haskey(reg, :L1_μ) || haskey(reg, :L1_μ₊_factor)
-# 		μ_mod = lm[1+2*isFullLinearModel] .- 1
-# 		if haskey(reg, :L2_μ); val += L2(μ_mod) * reg[:L2_μ] end
-# 		if haskey(reg, :L1_μ)
-# 			val += L1(μ_mod) * reg[:L1_μ]
-# 			if haskey(reg, :L1_μ₊_factor)
-# 				val += sum(view(μ_mod, μ_mod .> 0)) * reg[:L1_μ₊_factor] * reg[:L1_μ]
-# 			end
-# 		end
-# 	end
-# 	if isFullLinearModel
-# 		if haskey(reg, :shared_M); val += shared_attention(lm[1]) * reg[:shared_M] end
-# 		if haskey(reg, :L2_M); val += L2(lm[1]) * reg[:L2_M] end
-# 		if haskey(reg, :L1_M); val += L1(lm[1]) * reg[:L1_M] end
-# 		if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0); val += L1(lm[2]) end
-# 	end
-# 	return val
-# end
+model_prior(lm::Union{FullLinearModel, TemplateModel}, reg) = model_prior(vec(lm), reg)
 
 total_model(tel, star, rv) = tel .* (star .+ rv)
 
@@ -480,6 +472,10 @@ struct Output{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}}
 	star::AM
 	rv::AM
 	total::M
+	function Output(tel::AM, star::AM, rv::AM, total::M) where {T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}}
+		@assert size(tel) == size(star) == size(rv) == size(total)
+		new{T, AM, M}(tel, star, rv, total)
+	end
 end
 Output(om::OrderModel, d::Data) =
 	Output(tel_model(om), star_model(om), rv_model(om), d)
@@ -487,10 +483,6 @@ Output(tel, star, rv, d::GenericData) =
 	Output(tel, star, rv, total_model(tel, star, rv))
 Output(tel, star, rv, d::LSFData) =
 	Output(tel, star, rv, d.lsf * total_model(tel, star, rv))
-function Output(tel::AM, star::AM, rv::AM, total::M) where {T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}}
-	@assert size(tel) == size(star) == size(rv) == size(total)
-	Output{T, AM, M}(tel, star, rv, total)
-end
 Base.copy(o::Output) = Output(copy(tel), copy(star), copy(rv))
 function recalc_total!(o::Output, d::GenericData)
 	o.total .= total_model(o.tel, o.star, o.rv)
