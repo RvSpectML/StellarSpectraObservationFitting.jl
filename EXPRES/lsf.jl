@@ -127,7 +127,7 @@ end
 # scatter!(_λs[inds2], resids[inds2]; label="data / model")
 # png(plt, "expres_lsf_resids_zoom")
 
-function lsf_broadener(λ::AbstractVector; safe::Bool=true)
+function EXPRES_lsf(λ::AbstractVector; safe::Bool=true)
     if safe; @assert 1000 < mean(λ) < 50000  "Are you sure you're using λ (Å) and not wavenumber (1/cm) or log(λ)?" end
     wn = SSOF.Å_to_wavenumber.(λ)
     σs = lsf_σ_safe(wn, wn .- mean(wn))
@@ -146,7 +146,7 @@ function lsf_broadener(λ::AbstractVector; safe::Bool=true)
     return ans
     # return BandedMatrix(holder, (max_w, max_w))
 end
-# lsf_broadeners(λ::AbstractMatrix; kwargs...) =
-#     [lsf_broadener(view(λ, :, i); kwargs...) for i in 1:size(λ, 2)]
-lsf_broadener(λ::AbstractMatrix; kwargs...) =
-    lsf_broadener(vec(median(λ; dims=2)); kwargs...)
+# EXPRES_lsfs(λ::AbstractMatrix; kwargs...) =
+#     [lsf(view(λ, :, i); kwargs...) for i in 1:size(λ, 2)]
+EXPRES_lsf(λ::AbstractMatrix; kwargs...) =
+    EXPRES_lsf(vec(median(λ; dims=2)); kwargs...)

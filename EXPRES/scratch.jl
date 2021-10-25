@@ -302,8 +302,8 @@ model2 .= broadener * model
 
 
 # inds = 5:24
-# heatmap(exp.(data.log_λ_obs[inds,1]),exp.(data.log_λ_obs[inds,1]),data.lsf_broadener[1][inds,inds])
+# heatmap(exp.(data.log_λ_obs[inds,1]),exp.(data.log_λ_obs[inds,1]),data.lsf[1][inds,inds])
 # png("lsf1")
 # inds = size(data.log_λ_obs,1)-23:size(data.log_λ_obs,1)-4
-# heatmap(exp.(data.log_λ_obs[inds,1]),exp.(data.log_λ_obs[inds,1]),data.lsf_broadener[1][inds,inds])
+# heatmap(exp.(data.log_λ_obs[inds,1]),exp.(data.log_λ_obs[inds,1]),data.lsf[1][inds,inds])
 # png("lsf2")
