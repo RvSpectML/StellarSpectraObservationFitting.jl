@@ -49,13 +49,13 @@ function opt_funcs(loss::Function, pars::possible_θ)
     f = loss ∘ unflatten
     function g!(G, θ)
 		θunfl = unflatten(θ)
-        G[:], _= flatten(∇(loss)(θunfl))
+        G[:], _ = flatten(∇(loss)(θunfl))
     end
     function fg_obj!(G, θ)
 		θunfl = unflatten(θ)
 		l, g = ∇(loss; get_output=true)(θunfl)
 		G[:], _= flatten(g)
-        return l
+        return l.val
     end
     return flat_initial_params, OnceDifferentiable(f, g!, fg_obj!, flat_initial_params), unflatten
 end
@@ -101,14 +101,10 @@ OptimWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
 OptimWorkspace(om::OrderModel, d::Data; kwargs...) =
 	OptimWorkspace(om, Output(om, d), d; kwargs...)
 
-function _OSW_optimize!(osw::OptimSubWorkspace, options::Optim.Options; return_result::Bool=true)
+function _OSW_optimize!(osw::OptimSubWorkspace, options::Optim.Options)
     result = Optim.optimize(osw.obj, osw.p0, osw.opt, options)
-    osw.p0 .= result.minimizer
-    if return_result
-        return result, osw.unflatten(osw.p0)
-    else
-        return osw.unflatten(osw.p0)
-    end
+    osw.p0[:] = result.minimizer
+    return result
 end
 
 # ends optimization if true
@@ -132,20 +128,6 @@ _iter_def = 100
 _f_tol_def = 1e-6
 _g_tol_def = 400
 
-function _custom_copy!(from::NamedTuple, to...)
-	for (i, k) in enumerate(keys(from))
-        @assert typeof(from[k])==typeof(to[i])
-        if typeof(to[i])<:LinearModel
-            copy_LinearModel!(from[k], to[i])
-        elseif typeof(to[i])<:AbstractVector
-            to[i] .= from[k]
-        else
-            @error "didn't expect an object of type $(typeof(to[i]))"
-        end
-	end
-end
-
-
 function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def*sqrt(length(ow.telstar.p0)), train_telstar::Bool=true, ignore_regularization::Bool=false, kwargs...)
     optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
 
@@ -158,11 +140,14 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
     if train_telstar
         options = Optim.Options(;iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
         # optimize tellurics and star
-        result_telstar, nt = _OSW_optimize!(ow.telstar, options)
+        result_telstar = _OSW_optimize!(ow.telstar, options)
+		lm_vec = ow.telstar.unflatten(ow.telstar.p0)
         if ow.only_s
-            _custom_copy!(nt, ow.om.tel.lm.s, ow.om.star.lm.s)
+			ow.om.tel.lm.s[:] = lm_vec[1]
+			ow.om.star.lm.s[:] = lm_vec[2]
         else
-            _custom_copy!(nt, ow.om.tel.lm, ow.om.star.lm)
+            copy_to_LinearModel!(lm_vec[1], ow.om.tel.lm)
+			copy_to_LinearModel!(lm_vec[2], ow.om.star.lm)
         end
         ow.o.star .= star_model(ow.om)
         ow.o.tel .= tel_model(ow.om)
@@ -171,9 +156,10 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
     # optimize RVs
     options = Optim.Options(;callback=optim_cb_local, g_tol=g_tol*sqrt(length(ow.rv.p0) / length(ow.telstar.p0)), kwargs...)
     ow.om.rv.lm.M .= calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
-    result_rv, ow.om.rv.lm.s[:] = _OSW_optimize!(ow.rv, options)
+    result_rv = _OSW_optimize!(ow.rv, options)
+	ow.om.rv.lm.s[:] = ow.rv.unflatten(ow.rv.p0)
     ow.o.rv .= rv_model(ow.om)
-	recalc_total!(ow.o, d)
+	recalc_total!(ow.o, ow.d)
 
     if ignore_regularization
         copy_dict!(reg_tel_holder, ow.om.reg_tel)
