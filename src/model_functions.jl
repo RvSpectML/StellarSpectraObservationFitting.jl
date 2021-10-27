@@ -139,10 +139,17 @@ _eval_lm(tlm::TemplateModel) = _eval_lm(tlm.μ, tlm.n)
 (blm::BaseLinearModel)(inds::AbstractVecOrMat) = _eval_lm(view(blm.M, inds, :), blm.s)
 (tlm::TemplateModel)(inds::AbstractVecOrMat) = repeat(view(tlm.μ, inds), 1, tlm.n)
 
-function copy_LinearModel!(from::LinearModel, to::LinearModel)
+function copy_to_LinearModel!(from::LinearModel, to::LinearModel)
 	@assert typeof(to)==typeof(from)
 	for i in fieldnames(typeof(from))
 		getfield(to, i) .= getfield(from, i)
+	end
+end
+function copy_to_LinearModel!(from::Vector, to::LinearModel)
+	fns = fieldnames(typeof(to))
+	@assert length(from)==length(fns)
+	for i in 1:length(fns)
+		getfield(to, fns[i]) .= from[i]
 	end
 end
 
@@ -210,7 +217,7 @@ function oversamp_interp_helper(to_bounds::AbstractVector, from_x::AbstractVecto
 		ans[i, hi_ind] = 2 * x_hi - from_x[hi_ind] - from_x[hi_ind-1] - edge_term_hi
 		ans[i, hi_ind+1] = edge_term_hi
 		# println(sum(view(ans, i, lo_ind-1:hi_ind+1))," vs ", 2 * (x_hi - x_lo))
-		# @assert isapprox(sum(view(ans, i, lo_ind-1:hi_ind+1)), 2 * (x_hi - x_lo); rtol=1e-3)
+		@assert isapprox(sum(view(ans, i, lo_ind-1:hi_ind+1)), 2 * (x_hi - x_lo); rtol=1e-3)
 		# ans[i, lo_ind-1:hi_ind+1] ./= sum(view(ans, i, lo_ind-1:hi_ind+1))
 		ans[i, lo_ind-1:hi_ind+1] ./= 2 * (x_hi - x_lo)
 	end
@@ -256,7 +263,7 @@ function OrderModel(
 	t2o = oversamp_interp_helper(d.log_λ_obs_bounds, tel.log_λ)
 	return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), b2o, t2o, metadata)
 end
-Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), copy(om.metadata))
+Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.b2o, om.t2o, copy(om.metadata))
 (om::OrderModel)(inds::AbstractVecOrMat) =
 	OrderModel(om.tel(inds), om.star(inds), om.rv(inds), om.reg_tel,
 	om.reg_star, copy(om.metadata))
