@@ -70,7 +70,8 @@ end
 function OptimSubWorkspace(θ::possible_θ, loss::Function; use_cg::Bool=true)
 	p0, obj, unflatten = opt_funcs(loss, θ)
 	# opt = LBFGS(alphaguess = LineSearches.InitialHagerZhang(α0=NaN))
-	use_cg ? opt = ConjugateGradient() : opt = LBFGS()
+	# use_cg ? opt = ConjugateGradient() : opt = LBFGS()
+	opt = LBFGS()
 	# initial_state(method::LBFGS, ...) doesn't use the options for anything
 	return OptimSubWorkspace(θ, obj, opt, p0, unflatten)
 end
@@ -115,7 +116,7 @@ function optim_cb(x::OptimizationState; print_stuff::Bool=true)
             println("Iter:  ", x.iteration)
             println("Time:  ", x.metadata["time"], " s")
             println("ℓ:     ", x.value)
-            println("l2(∇): ", x.g_norm)
+            println("l∞(∇): ", x.g_norm)
             println()
         end
     end
@@ -146,8 +147,8 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
 			ow.om.tel.lm.s[:] = lm_vec[1]
 			ow.om.star.lm.s[:] = lm_vec[2]
         else
-            copy_to_LinearModel!(lm_vec[1], ow.om.tel.lm)
-			copy_to_LinearModel!(lm_vec[2], ow.om.star.lm)
+            copy_to_LinearModel!(ow.om.tel.lm, lm_vec[1])
+			copy_to_LinearModel!(ow.om.star.lm, lm_vec[2])
         end
         ow.o.star .= star_model(ow.om)
         ow.o.tel .= tel_model(ow.om)

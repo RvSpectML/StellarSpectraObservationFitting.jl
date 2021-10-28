@@ -139,13 +139,13 @@ _eval_lm(tlm::TemplateModel) = _eval_lm(tlm.μ, tlm.n)
 (blm::BaseLinearModel)(inds::AbstractVecOrMat) = _eval_lm(view(blm.M, inds, :), blm.s)
 (tlm::TemplateModel)(inds::AbstractVecOrMat) = repeat(view(tlm.μ, inds), 1, tlm.n)
 
-function copy_to_LinearModel!(from::LinearModel, to::LinearModel)
+function copy_to_LinearModel!(to::LinearModel, from::LinearModel)
 	@assert typeof(to)==typeof(from)
 	for i in fieldnames(typeof(from))
 		getfield(to, i) .= getfield(from, i)
 	end
 end
-function copy_to_LinearModel!(from::Vector, to::LinearModel)
+function copy_to_LinearModel!(to::LinearModel, from::Vector)
 	fns = fieldnames(typeof(to))
 	@assert length(from)==length(fns)
 	for i in 1:length(fns)
@@ -484,8 +484,10 @@ struct Output{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}}
 		new{T, AM, M}(tel, star, rv, total)
 	end
 end
-Output(om::OrderModel, d::Data) =
-	Output(tel_model(om), star_model(om), rv_model(om), d)
+function Output(om::OrderModel, d::Data)
+	@assert size(om.b2o[1], 1) == size(d.flux, 1)
+	return Output(tel_model(om), star_model(om), rv_model(om), d)
+end
 Output(tel, star, rv, d::GenericData) =
 	Output(tel, star, rv, total_model(tel, star, rv))
 Output(tel, star, rv, d::LSFData) =
@@ -496,6 +498,12 @@ function recalc_total!(o::Output, d::GenericData)
 end
 function recalc_total!(o::Output, d::LSFData)
 	o.total .= d.lsf * total_model(o.tel, o.star, o.rv)
+end
+function Output!(o::Output, om::OrderModel, d::Data)
+	o.tel .= tel_model(om)
+	o.star .= star_model(om)
+	o.rv .= rv_model(om)
+	recalc_total!(o, d)
 end
 
 function copy_reg!(from::OrderModel, to::OrderModel)
