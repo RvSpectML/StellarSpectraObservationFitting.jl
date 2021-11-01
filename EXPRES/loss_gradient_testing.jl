@@ -24,55 +24,11 @@ if !use_reg
     save_path *= "noreg_"
 end
 
-## Nabla is fast for gradients
-
-using ParameterHandling
-using BenchmarkTools
-using SparseArrays
-# using MKLSparse
-using BandedMatrices
-using Nabla
-
-inds = 1:1000
-y = SSOF.FullLinearModel(ones(length(inds),2), ones(2,114), ones(length(inds)))
-include("lsf.jl")
-xs = EXPRES_lsf(exp.(data.log_λ_obs[inds,:]))
-xb = BandedMatrix(xs)
-xa = Array(xb)
-yy = vec(y)
-
-# p0, unfl = flatten(y)
-p0, unfl = flatten(yy)
-
-function ∇flat(f, inps)
-	o, g = ∇(f; get_output=true)(inps)
-	gf, _ = flatten(g)
-	return gf, o.val
-end
-
-fb(yy) = sum(xb * ((yy[1] * yy[2]) .+ yy[3]))
-∇flat(fb, unfl(p0))
-
-fs(yy) = sum(xs * ((yy[1] * yy[2]) .+ yy[3]))
-∇flat(fs, unfl(p0))
-
-## Can we use LinearModel objects? YES
-
-fs(y) = sum(xs * y())
-∇(fs)(y)
-
-fs(M, s, μ) = sum(xs * ((M * s).+ μ))
-∇(y->fs(y.M, y.s, y.μ))(y)
-∇(y->fs(y[:M], y[:s], y[:μ]))(y)
-
-fs(lm1, lm2) = sum(xs * SSOF._eval_lm(lm1) + xs * SSOF._eval_lm(lm2))
-∇((yy1, yy2)->fs([yy1[i] for i in eachindex(y)], [yy2[i] for i in eachindex(y)]))(y, y)
-
 ## Making a model
 
 # 7020, 114
-ind_λ = 1:300; ind_t = 1:114
-data_small = SSOF.LSFData(data.flux[ind_λ, ind_t], data.var[ind_λ, ind_t], data.log_λ_obs[ind_λ, ind_t], data.log_λ_star[ind_λ, ind_t], data.lsf_broadener[ind_λ,ind_λ])
+ind_λ = 1:7020; ind_t = 1:114
+data_small = SSOF.LSFData(data.flux[ind_λ, ind_t], data.var[ind_λ, ind_t], data.log_λ_obs[ind_λ, ind_t], data.log_λ_star[ind_λ, ind_t], data.lsf[ind_λ,ind_λ])
 
 if false#isfile(save_path*"results.jld2")
     @load save_path*"results.jld2" model rvs_naive rvs_notel
@@ -98,6 +54,8 @@ end
 workspace, loss = SSOF.OptimWorkspace(model, data_small; return_loss_f=true)
 
 ts = workspace.telstar
+@btime ts.obj.df(gn, ts.p0);
+
 om = model; d = data_small; o = SSOF.Output(om, d); only_s=false
 loss, loss_telstar, loss_telstar_s, loss_rv = SSOF.loss_funcs_telstar(o, om, d)
 

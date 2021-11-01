@@ -441,6 +441,8 @@ end
 
 L1(a) = sum(abs, a)
 L2(a) = sum(abs2, a)
+L∞(Δ::VecOrMat{<:Real}) = maximum(Δ)
+L∞(Δ) = maximum(L∞.(Δ))
 function shared_attention(M)
 	shared_attentions = M' * M
 	return sum(shared_attentions) - sum(diag(shared_attentions))
