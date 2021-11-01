@@ -307,3 +307,22 @@ model2 .= broadener * model
 # inds = size(data.log_λ_obs,1)-23:size(data.log_λ_obs,1)-4
 # heatmap(exp.(data.log_λ_obs[inds,1]),exp.(data.log_λ_obs[inds,1]),data.lsf[1][inds,inds])
 # png("lsf2")
+
+## Looking at interpolation matrices
+
+heatmap(Array(model.b2o[1][1:1000, 1:1000]))
+
+hmm = hcat([Array(model.b2o[i][100,:]) for i in 1:114]...)
+shift = round(Int, 100*2*sqrt(2))
+model_inds = 50+shift:370+shift
+plt = heatmap(1:114, model_inds, hmm[model_inds, :]; xlabel="Time", ylabel="Model Pixels", title="Star Model ➡ Obs Pixel Interpolation Map (Pix 100)")
+png(plt, "b2o_heatmap")
+plt = scatter(exp.(data.log_λ_star[99:101,:]'); label="Pix 99-101", xlabel="Time", ylabel="Obs Bary λ (Å)")
+png(plt, "b2o_scatter")
+
+hmm = hcat([Array(model.t2o[i][100,:]) for i in 1:114]...)
+model_inds = 50+shift:100+shift
+plt = heatmap(1:114, model_inds, hmm[model_inds, :]; xlabel="Time", ylabel="Model Pixels", title="Tel Model ➡ Obs Pixel Interpolation Map (Pix 100)")
+png(plt, "t2o_heatmap")
+plt = scatter(exp.(data.log_λ_obs[99:101,:]'); label="Pix 99-101", xlabel="Time", ylabel="Obs λ (Å)")
+png(plt, "t2o_scatter")

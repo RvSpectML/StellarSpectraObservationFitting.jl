@@ -2,11 +2,10 @@
 using Pkg
 Pkg.activate("EXPRES")
 
+import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 using JLD2
 using Statistics
-import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 import StatsBase
-using MKLSparse
 
 ## Setting up necessary variables
 
@@ -34,8 +33,7 @@ if isfile(save_path*"results.jld2")
         @load save_path*"model_decision.jld2" comp_ls ℓ aic bic ks test_n_comp_tel test_n_comp_star
     end
 else
-    model_upscale = sqrt(2)
-    # model_upscale = 2 * sqrt(2)
+    model_upscale = 2 * sqrt(2)
     @time model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8, upscale=model_upscale)
     @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
     if !use_reg

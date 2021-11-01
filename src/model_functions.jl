@@ -139,10 +139,17 @@ _eval_lm(tlm::TemplateModel) = _eval_lm(tlm.μ, tlm.n)
 (blm::BaseLinearModel)(inds::AbstractVecOrMat) = _eval_lm(view(blm.M, inds, :), blm.s)
 (tlm::TemplateModel)(inds::AbstractVecOrMat) = repeat(view(tlm.μ, inds), 1, tlm.n)
 
-function copy_LinearModel!(from::LinearModel, to::LinearModel)
+function copy_to_LinearModel!(to::LinearModel, from::LinearModel)
 	@assert typeof(to)==typeof(from)
 	for i in fieldnames(typeof(from))
 		getfield(to, i) .= getfield(from, i)
+	end
+end
+function copy_to_LinearModel!(to::LinearModel, from::Vector)
+	fns = fieldnames(typeof(to))
+	@assert length(from)==length(fns)
+	for i in 1:length(fns)
+		getfield(to, fns[i]) .= from[i]
 	end
 end
 
@@ -210,7 +217,7 @@ function oversamp_interp_helper(to_bounds::AbstractVector, from_x::AbstractVecto
 		ans[i, hi_ind] = 2 * x_hi - from_x[hi_ind] - from_x[hi_ind-1] - edge_term_hi
 		ans[i, hi_ind+1] = edge_term_hi
 		# println(sum(view(ans, i, lo_ind-1:hi_ind+1))," vs ", 2 * (x_hi - x_lo))
-		# @assert isapprox(sum(view(ans, i, lo_ind-1:hi_ind+1)), 2 * (x_hi - x_lo); rtol=1e-3)
+		@assert isapprox(sum(view(ans, i, lo_ind-1:hi_ind+1)), 2 * (x_hi - x_lo); rtol=1e-3)
 		# ans[i, lo_ind-1:hi_ind+1] ./= sum(view(ans, i, lo_ind-1:hi_ind+1))
 		ans[i, lo_ind-1:hi_ind+1] ./= 2 * (x_hi - x_lo)
 	end
@@ -256,7 +263,7 @@ function OrderModel(
 	t2o = oversamp_interp_helper(d.log_λ_obs_bounds, tel.log_λ)
 	return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), b2o, t2o, metadata)
 end
-Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), copy(om.metadata))
+Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.b2o, om.t2o, copy(om.metadata))
 (om::OrderModel)(inds::AbstractVecOrMat) =
 	OrderModel(om.tel(inds), om.star(inds), om.rv(inds), om.reg_tel,
 	om.reg_star, copy(om.metadata))
@@ -434,6 +441,8 @@ end
 
 L1(a) = sum(abs, a)
 L2(a) = sum(abs2, a)
+L∞(Δ::VecOrMat{<:Real}) = maximum(Δ)
+L∞(Δ) = maximum(L∞.(Δ))
 function shared_attention(M)
 	shared_attentions = M' * M
 	return sum(shared_attentions) - sum(diag(shared_attentions))
@@ -477,8 +486,10 @@ struct Output{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}}
 		new{T, AM, M}(tel, star, rv, total)
 	end
 end
-Output(om::OrderModel, d::Data) =
-	Output(tel_model(om), star_model(om), rv_model(om), d)
+function Output(om::OrderModel, d::Data)
+	@assert size(om.b2o[1], 1) == size(d.flux, 1)
+	return Output(tel_model(om), star_model(om), rv_model(om), d)
+end
 Output(tel, star, rv, d::GenericData) =
 	Output(tel, star, rv, total_model(tel, star, rv))
 Output(tel, star, rv, d::LSFData) =
@@ -489,6 +500,12 @@ function recalc_total!(o::Output, d::GenericData)
 end
 function recalc_total!(o::Output, d::LSFData)
 	o.total .= d.lsf * total_model(o.tel, o.star, o.rv)
+end
+function Output!(o::Output, om::OrderModel, d::Data)
+	o.tel .= tel_model(om)
+	o.star .= star_model(om)
+	o.rv .= rv_model(om)
+	recalc_total!(o, d)
 end
 
 function copy_reg!(from::OrderModel, to::OrderModel)
