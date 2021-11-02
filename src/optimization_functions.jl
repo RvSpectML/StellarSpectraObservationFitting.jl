@@ -2,6 +2,7 @@
 using ParameterHandling
 using Optim
 using Nabla
+import Base.show
 
 # χ² loss function
 _loss(tel, star, rv, d::GenericData) =
@@ -43,6 +44,97 @@ function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
     return l, l_telstar, l_telstar_s, l_rv
 end
 
+α, β1, β2, ϵ = 1e-3, 0.9, 0.999, 1e-8
+mutable struct Adam{T<:AbstractArray}
+    α::Float64
+    β1::Float64
+    β2::Float64
+    m::T
+    v::T
+    β1_acc::Float64
+    β2_acc::Float64
+    ϵ::Float64
+end
+Adam(θ0::AbstractArray, α::Float64, β1::Float64, β2::Float64, ϵ::Float64) =
+    Adam(α, β1, β2, vector_zero(θ0), vector_zero(θ0), β1, β2, ϵ)
+Adam(θ0::AbstractArray; α::Float64=α, β1::Float64=β1, β2::Float64=β2, ϵ::Float64=ϵ) =
+	Adam(θ0, α, β1, β2, ϵ)
+
+mutable struct AdamState
+    iter::Int
+    ℓ::Float64
+    L1_Δ::Float64
+    L2_Δ::Float64
+    L∞_Δ::Float64
+	δ_ℓ::Float64
+	δ_L1_Δ::Float64
+	δ_L2_Δ::Float64
+	δ_L∞_Δ::Float64
+end
+AdamState() = AdamState(0, 0., 0., 0., 0., 1., 1., 1., 1.)
+AdamState_show_helper(as::AdamState, f::Symbol) =
+function show(io::IO, as::AdamState)
+    println("Iter:  ", as.iter)
+    println("ℓ:     ", as.ℓ, "ℓ_$(as.iter)/ℓ_$(as.iter-1): ", as.δ_ℓ)
+	println("L2_Δ:  ", as.L2_Δ, "L2_Δ_$(as.iter)/L2_Δ_$(as.iter-1): ", as.δ_L2_Δ)
+	println()
+end
+
+function _iterate_helper!(θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt::Adam; m=opt.m, v=opt.v, α=opt.α, β1=opt.β1, β2=opt.β2, ϵ=opt.ϵ, β1_acc=opt.β1_acc, β2_acc=opt.β2_acc)
+    # the matrix and dotted version is slower
+    @inbounds for n in eachindex(θ)
+        m[n] = β1 * m[n] + (1.0 - β1) * ∇θ[n]
+        v[n] = β2 * v[n] + (1.0 - β2) * ∇θ[n]^2
+        m̂ = m[n] / (1 - β1_acc)
+        v̂ = v[n] / (1 - β2_acc)
+        θ[n] -= α * m̂ / (sqrt(v̂) + ϵ)
+    end
+end
+# this is slightly slower
+# function iterate!(θs::Vector{<:Vector{<:AbstractArray{<:Real}}}, ∇θs::Vector{<:Vector{<:AbstractArray{<:Real}}}, opts::Vector{Vector{Adam}})
+#     for i in eachindex(θs)
+#         for j in eachindex(θs[i])
+#             _iterate_helper!(θs[i][j], ∇θs[i][j], opts[i][j])
+#             opt.β1_acc *= opt.β1
+#             opt.β2_acc *= opt.β2
+#         end
+#     end
+# end
+function iterate!(θs::Vector{<:Vector{<:AbstractArray{<:Real}}}, ∇θs::Vector{<:Vector{<:AbstractArray{<:Real}}}, opt::Adam)
+    for i in eachindex(θs)
+        for j in eachindex(θs[i])
+            _iterate_helper!(θs[i][j], ∇θs[i][j], opt; m=opt.m[i][j], v=opt.v[i][j])
+        end
+    end
+    opt.β1_acc *= opt.β1
+    opt.β2_acc *= opt.β2
+end
+
+L∞_cust(Δ) = maximum([maximum([maximum(i) for i in j]) for j in Δ])
+function AdamState!_helper(as::AdamState, f::Symbol, val)
+	getfield(as, Symbol(:δ_, f)) = val / getfield(as, f)
+	getfield(as, f) = val
+end
+function AdamState!(as::AdamState, ℓ, Δ)
+	as.iter += 1
+	AdamState!_helper(as, :ℓ, ℓ)
+	flat_Δ = Iterators.flatten(Iterators.flatten(Δ))
+	AdamState!_helper(as, :L1_Δ, sum(abs, flat_Δ))
+	AdamState!_helper(as, :L2_Δ, sum(abs2, flat_Δ))
+	AdamState!_helper(as, :L∞_Δ, L∞_cust(Δ))
+end
+
+_print_stuff_def = false
+_iter_def = 100
+_f_tol_def = 1e-6
+_g_tol_def = 400
+
+function update!(θ, opt::Adam, as::AdamState, l::Function; print_stuff::Bool=_print_stuff_def)
+    val, Δ = ∇(l; get_output=true)(θ)
+	AdamState!(as, val.val, only(Δ))
+    iterate!(θ, Δ, opt)
+	if print_stuff; println(as) end
+end
 
 function opt_funcs(loss::Function, pars::possible_θ)
     flat_initial_params, unflatten = flatten(pars)  # unflatten returns Vector of untransformed params

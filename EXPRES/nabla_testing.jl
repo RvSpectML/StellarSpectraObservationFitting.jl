@@ -87,19 +87,13 @@ png(plt, "before")
 _, l, _, _ = SSOF.loss_funcs_telstar(o, om, d)
 opt = Adam(θ, α, β1, β2, ϵ)
 
-mutable struct AdamState
-    iter::Int
-    ℓ::Float64
-    L1_Δ::Float64
-    L2_Δ::Float64
-    L∞_Δ::Float64
-end
-AdamState() = AdamState(0, 0., 0., 0., 0.)
+
+
 function AdamState!(as::AdamState, ℓ, Δ)
 
 as = AdamState()
 
-L∞_cust(Δ) = maximum([maximum([maximum(i) for i in j]) for j in Δ])
+
 # function L∞_cust2(Δ)  # 4x slower
 #     it = Iterators.flatten(Iterators.flatten(Δ))
 #     return maximum(it)
@@ -107,16 +101,17 @@ L∞_cust(Δ) = maximum([maximum([maximum(i) for i in j]) for j in Δ])
 function update!()
     val, Δ = ∇(l; get_output=true)(θ)
     Δ = only(Δ)
+    as.iter += 1
     as.ℓ = val.val
     flat_Δ = Iterators.flatten(Iterators.flatten(Δ))
     as.L1_Δ = sum(abs, flat_Δ)
     as.L2_Δ = sum(abs2, flat_Δ)
     as.L∞_Δ = L∞_cust(Δ)
     iterate!(θ, Δ, opt)
-    # println("Iter:  ", x.iteration)
-    # println("Time:  ", x.metadata["time"], " s")
+    println("Iter:  ", as.iter)
     println("ℓ:     ", as.ℓ)
-    # println("l2(Δ): ", sum(abs2, Iterators.flatten(Iterators.flatten(Δ))))
+    println("L2(Δ): ", as.L2_Δ)
+    println("L2(Δ): ", as.L2_Δ)
     println("L∞(Δ): ", as.L∞_Δ)
     println()
 end
