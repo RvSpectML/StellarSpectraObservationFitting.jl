@@ -227,3 +227,6 @@ end
 # converts wavelength (Å) to wavenumber (1/cm) (and vice versa)
 Å_to_wavenumber(λ::Real) = 1e8 / λ
 wavenumber_to_Å(wn::Real) = Å_to_wavenumber(wn)
+
+vector_zero(θ::VecOrMat) = zero(θ)
+vector_zero(θ::Vector{<:Array}) = [vector_zero(i) for i in θ]
