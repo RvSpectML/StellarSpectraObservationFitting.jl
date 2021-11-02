@@ -127,7 +127,7 @@ general_lst_sq(dm, data) = ordinary_lst_sq(dm, data)
 
 "a generalized version of the built in append!() function"
 function multiple_append!(a::Vector{T}, b...) where {T<:Real}
-    for i in 1:length(b)
+    for i in eachindex(b)
         append!(a, b[i])
     end
     return a

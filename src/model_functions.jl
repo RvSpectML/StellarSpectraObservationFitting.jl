@@ -148,7 +148,7 @@ end
 function copy_to_LinearModel!(to::LinearModel, from::Vector)
 	fns = fieldnames(typeof(to))
 	@assert length(from)==length(fns)
-	for i in 1:length(fns)
+	for i in eachindex(fns)
 		getfield(to, fns[i]) .= from[i]
 	end
 end

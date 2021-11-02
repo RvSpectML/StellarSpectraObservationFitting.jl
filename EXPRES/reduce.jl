@@ -31,7 +31,7 @@ x = orders_list[star_ind]
 annot=text.(x, :top, :white, 5)
 α = 1
 # robust_str = ["" for i in x]
-# for i in 1:length(robust_str)
+# for i in eachindex(robust_str)
 #     robust_str[i] *= "$(x[i])"
 #     if !robust[i]; robust_str[i] *= "!" end
 # end
@@ -104,7 +104,7 @@ plt = my_scatter(1:length(χ²), sort(χ²); label="χ²", series_annotations=an
 png(plt, prep_str * star * "_χ²")
 
 χ²_orders = sortperm(χ²)[1:end-5]
-inds = [orders[i] for i in 1:length(orders) if (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders)]
+inds = [orders[i] for i in eachindex(orders) if (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders)]
 
 rvs_red = collect(Iterators.flatten((sum(rvs[inds, :] ./ (rvs_σ[inds, :] .^ 2); dims=1) ./ sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1))'))
 rvs_red .-= median(rvs_red)
@@ -156,13 +156,13 @@ use_mad ? png(plt, "lc_mad_test") : png(plt, "lc_test")
 keys = SSOF._key_list[1:5]
 
 plt = _my_plot(;xlabel="Order", ylabel="Regularization", title="Regularizations per order (HD$star)", yaxis=:log)
-for i in 1:length(keys)
+for i in eachindex(keys)
     plot!(plt, orders, reg_tels[:, i], label="reg_$(keys[i])", markershape=:circle, markerstrokewidth=0)
 end
-# for i in 1:length(keys)
+# for i in eachindex(keys)
 #     plot!(plt, orders, reg_stars[:, i], label="star_$(keys[i])", markershape=:circle, markerstrokewidth=0)
 # end
-for i in 1:length(keys)
+for i in eachindex(keys)
     hline!(plt, [SSOF.default_reg_tel[keys[i]]], c=plt_colors[i], label="")
     # hline!(plt, [SSOF.default_reg_star[keys[i]]], c=plt_colors[i+length(keys)], label="")
 end
@@ -170,13 +170,13 @@ display(plt)
 png(plt, "reg_tel_test")
 
 plt = _my_plot(;xlabel="Order", ylabel="Regularization", title="Regularizations per order (HD$star)", yaxis=:log)
-# for i in 1:length(keys)
+# for i in eachindex(keys)
 #     plot!(plt, orders, reg_tels[:, i], label="reg_$(keys[i])", markershape=:circle, markerstrokewidth=0)
 # end
-for i in 1:length(keys)
+for i in eachindex(keys)
     plot!(plt, orders, reg_stars[:, i], label="star_$(keys[i])", markershape=:circle, markerstrokewidth=0)
 end
-for i in 1:length(keys)
+for i in eachindex(keys)
     # hline!(plt, [SSOF.default_reg_tel[keys[i]]], c=plt_colors[i], label="")
     hline!(plt, [SSOF.default_reg_star[keys[i]]], c=plt_colors[i], label="")
 end

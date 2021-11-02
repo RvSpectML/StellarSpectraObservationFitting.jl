@@ -34,7 +34,7 @@
 function proposed_new_cuts(M::AbstractVector, mask_inds::UnitRange, cutoff::Real)
     abs_M = abs.(M)
     # plot((1:length(abs_M)) ./ length(abs_M), sort(abs_M); xrange=(0.9,1))
-    # cdf = [sum(view(abs_M, 1:i)) for i in 1:length(abs_M)] ./ sum(abs_M)
+    # cdf = [sum(view(abs_M, 1:i)) for i in eachindex(abs_M)] ./ sum(abs_M)
     # plot(cdf)
     @assert 0 < cutoff < 1
     high_M = quantile(abs_M, cutoff)
@@ -69,7 +69,7 @@ proposed_new_cuts(model.star.lm.M[:, 1], mask_inds, 0.975)
 
 abs_M = abs.(model.star.lm.M[:, 1])
 plot((1:length(abs_M)) ./ length(abs_M), sort(abs_M); xrange=(0.9,1))
-cdf = [sum(view(abs_M, 1:i)) for i in 1:length(abs_M)] ./ sum(abs_M)
+cdf = [sum(view(abs_M, 1:i)) for i in eachindex(abs_M)] ./ sum(abs_M)
 plot(cdf)
 
 new_inds_M(model.star.lm.M, mask_inds, 0.9975)
@@ -202,8 +202,8 @@ function elbow(x::AbstractVector, y::AbstractVector)
     return tester[argmax(abs.(d2poly.(tester)))]
 end
 
-Int.([elbow(test_n_comp_star, comp_ℓs[i, :]) for i in 1:length(test_n_comp_tel)])  # number of suggested stellar components
-Int.([elbow(test_n_comp_tel, comp_ℓs[:, i]) for i in 1:length(test_n_comp_star)])  # number of suggested telluric components
+Int.([elbow(test_n_comp_star, comp_ℓs[i, :]) for i in eachindex(test_n_comp_tel)])  # number of suggested stellar components
+Int.([elbow(test_n_comp_tel, comp_ℓs[:, i]) for i in eachindex(test_n_comp_star)])  # number of suggested telluric components
 
 pltx = test_n_comp_tel[1]-1:0.1:test_n_comp_tel[end]+1
 poly = Polynomials.fit(test_n_comp_tel, comp_ℓs[:, 1], 5)

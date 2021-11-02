@@ -45,7 +45,7 @@ end
 _key_list = [:L2_μ, :L1_μ, :L1_μ₊_factor, :L2_M, :L1_M, :shared_M]
 function check_for_valid_regularization(reg::Dict{Symbol, <:Real})
     reg_keys = reg.keys
-    for i in 1:length(reg_keys)
+    for i in eachindex(reg_keys)
         try
             @assert reg_keys[i] in _key_list
         catch y

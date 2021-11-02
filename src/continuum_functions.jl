@@ -55,7 +55,7 @@ end
 
 function mask_low_pixels!(y::AbstractVector, σ²::AbstractVector; min_flux::Real= 0., padding::Int= 2)
 	bad = y .< min_flux
-	for i in 1:length(bad)
+	for i in eachindex(bad)
 		bad[i] = bad[i] || !isfinite(y[i])
 	end
 	y[bad] .= min_flux
@@ -73,7 +73,7 @@ end
 
 function mask_high_pixels!(y::AbstractVector, σ²::AbstractVector; max_flux::Real= 2., padding::Int= 2)
 	bad = y .> max_flux
-	for i in 1:length(bad)
+	for i in eachindex(bad)
 		bad[i] = bad[i] || !isfinite(y[i])
 	end
 	y[bad] .= max_flux
