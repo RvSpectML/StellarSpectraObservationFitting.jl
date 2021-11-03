@@ -215,8 +215,8 @@ function train_OrderModel!(mw::TelStarWorkspace; train_telstar::Bool=true, ignor
 	recalc_total!(mw.o, mw.d)
 
     if ignore_regularization
-        copy_dict!(reg_tel_holder, mw.om.reg_tel)
-        copy_dict!(reg_star_holder, mw.om.reg_star)
+        copy_dict!(mw.om.reg_tel, reg_tel_holder)
+        copy_dict!(mw.om.reg_star, reg_star_holder)
     end
 	return result_telstar, result_rv
 end
@@ -343,8 +343,8 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
 	recalc_total!(ow.o, ow.d)
 
     if ignore_regularization
-        copy_dict!(reg_tel_holder, ow.om.reg_tel)
-        copy_dict!(reg_star_holder, ow.om.reg_star)
+        copy_dict!(ow.om.reg_tel, reg_tel_holder)
+        copy_dict!(mw.om.reg_star, reg_star_holder)
     end
     return result_telstar, result_rv
 end

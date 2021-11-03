@@ -509,6 +509,6 @@ function Output!(o::Output, om::OrderModel, d::Data)
 end
 
 function copy_reg!(from::OrderModel, to::OrderModel)
-	copy_dict!(from.reg_tel, to.reg_tel)
-	copy_dict!(from.reg_star, to.reg_star)
+	copy_dict!(to.reg_tel, from.reg_tel)
+	copy_dict!(to.reg_star, from.reg_star)
 end
