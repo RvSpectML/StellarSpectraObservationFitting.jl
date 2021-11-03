@@ -71,12 +71,11 @@ mutable struct AdamState
 	δ_L2_Δ::Float64
 	δ_L∞_Δ::Float64
 end
-AdamState() = AdamState(0, 0., 0., 0., 0., 1., 1., 1., 1.)
-AdamState_show_helper(as::AdamState, f::Symbol) =
+AdamState() = AdamState(0, 0., 0., 0., 0., 0., 0., 0., 0.)
 function show(io::IO, as::AdamState)
     println("Iter:  ", as.iter)
-    println("ℓ:     ", as.ℓ, "ℓ_$(as.iter)/ℓ_$(as.iter-1): ", as.δ_ℓ)
-	println("L2_Δ:  ", as.L2_Δ, "L2_Δ_$(as.iter)/L2_Δ_$(as.iter-1): ", as.δ_L2_Δ)
+    println("ℓ:     ", as.ℓ,    "  ℓ_$(as.iter)/ℓ_$(as.iter-1):       ", as.δ_ℓ)
+	println("L2_Δ:  ", as.L2_Δ, "  L2_Δ_$(as.iter)/L2_Δ_$(as.iter-1): ", as.δ_L2_Δ)
 	println()
 end
 
@@ -109,11 +108,16 @@ function iterate!(θs::Vector{<:Vector{<:AbstractArray{<:Real}}}, ∇θs::Vector
     opt.β1_acc *= opt.β1
     opt.β2_acc *= opt.β2
 end
+function iterate!(θ::AbstractVecOrMat{<:Real}, ∇θ::AbstractVecOrMat{<:Real}, opt::Adam)
+	_iterate_helper!(θ, ∇θ, opt; m=opt.m, v=opt.v)
+    opt.β1_acc *= opt.β1
+    opt.β2_acc *= opt.β2
+end
 
 L∞_cust(Δ) = maximum([maximum([maximum(i) for i in j]) for j in Δ])
 function AdamState!_helper(as::AdamState, f::Symbol, val)
-	getfield(as, Symbol(:δ_, f)) = val / getfield(as, f)
-	getfield(as, f) = val
+	setfield!(as, Symbol(:δ_,f), val / getfield(as, f))
+	setfield!(as, f, val)
 end
 function AdamState!(as::AdamState, ℓ, Δ)
 	as.iter += 1
@@ -126,15 +130,99 @@ end
 
 _print_stuff_def = false
 _iter_def = 100
-_f_tol_def = 1e-6
-_g_tol_def = 400
+_f_tol_def = 1e-3
+_g_tol_def = 1e-3
 
-function update!(θ, opt::Adam, as::AdamState, l::Function; print_stuff::Bool=_print_stuff_def)
-    val, Δ = ∇(l; get_output=true)(θ)
-	AdamState!(as, val.val, only(Δ))
-    iterate!(θ, Δ, opt)
-	if print_stuff; println(as) end
+struct AdamWorkspace{T}
+	θ::T
+	opt::Adam
+	as::AdamState
+	l::Function
+	function AdamWorkspace(θ::T, opt, as, l) where T
+		@assert typeof(l(θ)) <: Real
+		return new{T}(θ, opt, as, l)
+	end
 end
+AdamWorkspace(θ, l::Function) = AdamWorkspace(θ, Adam(θ), AdamState(), l)
+
+function update!(aws::AdamWorkspace)
+    val, Δ = ∇(aws.l; get_output=true)(aws.θ)
+	Δ = only(Δ)
+	AdamState!(aws.as, val.val, Δ)
+    iterate!(aws.θ, Δ, aws.opt)
+end
+
+check_converged(as::AdamState, f_tol::Real, g_tol::Real) = (max(as.δ_ℓ, 1/as.δ_ℓ) < (1 + abs(f_tol))) && (max(as.δ_L2_Δ,1/as.δ_L2_Δ) < (1+abs(g_tol)))
+check_converged(as::AdamState, iter::Int, f_tol::Real, g_tol::Real) = (as.iter > iter) || check_converged(as, f_tol, g_tol)
+function train_SubModel!(aws::AdamWorkspace; iter=_iter_def, f_tol = _f_tol_def, g_tol = _g_tol_def, cb::Function=()->(), kwargs...)
+	converged = false  # check_converged(aws.as, iter, f_tol, g_tol)
+	while !converged
+		update!(aws)
+		cb()
+		converged = check_converged(aws.as, iter, f_tol, g_tol)
+	end
+	converged = check_converged(aws.as, f_tol, g_tol)
+	converged ? println("Converged") : println("Max Iters Reached")
+	return converged
+end
+function default_cb(as::AdamState; print_stuff=_print_stuff_def)
+	if print_stuff
+		return () -> println(as)
+	else
+		return () -> ()
+	end
+end
+
+abstract type ModelWorkspace end
+
+struct TelStarWorkspace <: ModelWorkspace
+	telstar::AdamWorkspace
+	rv::AdamWorkspace
+	om::OrderModel
+	o::Output
+	d::Data
+	only_s::Bool
+end
+function TelStarWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false)
+	loss, loss_telstar, loss_telstar_s, loss_rv = loss_funcs_telstar(o, om, d)
+	only_s ?
+		telstar = AdamWorkspace([om.tel.lm.s, om.star.lm.s], loss_telstar_s) :
+		telstar = AdamWorkspace([vec(om.tel.lm), vec(om.star.lm)], loss_telstar)
+	rv = AdamWorkspace(om.rv.lm.s, loss_rv)
+	return ModelWorkspace(telstar, rv, om, o, d, only_s)
+end
+
+function train_OrderModel!(mw::TelStarWorkspace; train_telstar::Bool=true, ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, kwargs...)
+
+    if ignore_regularization
+        reg_tel_holder = copy(mw.om.reg_tel)
+        reg_star_holder = copy(mw.om.reg_star)
+        zero_regularization(mw.om)
+    end
+
+    if train_telstar
+		cb_telstar = default_cb(mw.telstar.as; print_stuff)
+		result_telstar = train_SubModel!(mw.telstar; cb=cb_telstar, kwargs...)
+		mw.telstar.as.iter = 0
+        mw.o.star .= star_model(mw.om)
+        mw.o.tel .= tel_model(mw.om)
+    end
+	mw.om.rv.lm.M .= calc_doppler_component_RVSKL(mw.om.star.λ, mw.om.star.lm.μ)
+	cb_rv = default_cb(mw.rv.as; print_stuff)
+	result_rv = train_SubModel!(mw.rv; cb=cb_rv, kwargs...)
+    mw.rv.as.iter = 0
+	mw.o.rv .= rv_model(mw.om)
+	recalc_total!(mw.o, mw.d)
+
+    if ignore_regularization
+        copy_dict!(reg_tel_holder, mw.om.reg_tel)
+        copy_dict!(reg_star_holder, mw.om.reg_star)
+    end
+	return result_telstar, result_rv
+end
+
+
+## Optim Versions
 
 function opt_funcs(loss::Function, pars::possible_θ)
     flat_initial_params, unflatten = flatten(pars)  # unflatten returns Vector of untransformed params
