@@ -9,72 +9,6 @@ optim_cb_local(x::OptimizationState) = SSOF.optim_cb(x; print_stuff=true)
 options = Optim.Options(;iterations=100, f_tol=SSOF._f_tol_def, g_tol=SSOF._g_tol_def*sqrt(length(osw.p0)), callback=optim_cb_local)
 @time result = Optim.optimize(osw.obj, osw.p0, osw.opt, options)
 
-## ADAM
-using Nabla
-
-""" Implementation of the Adam optimiser. """
-mutable struct Adam{T<:AbstractArray}
-    α::Float64
-    β1::Float64
-    β2::Float64
-    m::T
-    v::T
-    β1_acc::Float64
-    β2_acc::Float64
-    ϵ::Float64
-end
-Adam(θ0::AbstractArray, α::Float64, β1::Float64, β2::Float64, ϵ::Float64) =
-    Adam(α, β1, β2, custom_zeros(θ0), custom_zeros(θ0), β1, β2, ϵ)
-custom_zeros(θ::VecOrMat) = zero(θ)
-custom_zeros(θ::Vector{<:Array}) = [custom_zeros(i) for i in θ]
-
-function _iterate_helper!(θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt::Adam; m=opt.m, v=opt.v, α=opt.α, β1=opt.β1, β2=opt.β2, ϵ=opt.ϵ, β1_acc=opt.β1_acc, β2_acc=opt.β2_acc)
-    # the matrix and dotted version is slower
-    @inbounds for n in eachindex(θ)
-        m[n] = β1 * m[n] + (1.0 - β1) * ∇θ[n]
-        v[n] = β2 * v[n] + (1.0 - β2) * ∇θ[n]^2
-        m̂ = m[n] / (1 - β1_acc)
-        v̂ = v[n] / (1 - β2_acc)
-        θ[n] -= α * m̂ / (sqrt(v̂) + ϵ)
-    end
-end
-function iterate!(θs::Vector{<:Vector{<:AbstractArray{<:Real}}}, ∇θs::Vector{<:Vector{<:AbstractArray{<:Real}}}, opts::Vector{Vector{Adam}})
-    for i in 1:length(θs)
-        for j in 1:length(θs[i])
-            _iterate_helper!(θs[i][j], ∇θs[i][j], opts[i][j])
-            opt.β1_acc *= opt.β1
-            opt.β2_acc *= opt.β2
-        end
-    end
-end
-function iterate!(θs::Vector{<:Vector{<:AbstractArray{<:Real}}}, ∇θs::Vector{<:Vector{<:AbstractArray{<:Real}}}, opt::Adam)
-    for i in 1:length(θs)
-        for j in 1:length(θs[i])
-            _iterate_helper!(θs[i][j], ∇θs[i][j], opt; m=opt.m[i][j], v=opt.v[i][j])
-        end
-    end
-    opt.β1_acc *= opt.β1
-    opt.β2_acc *= opt.β2
-end
-α, β1, β2, ϵ = 1e-3, 0.9, 0.999, 1e-8
-
-# model = reset_model()
-# om = model; d = data; o = SSOF.Output(om, d)
-# θ = [vec(om.tel.lm), vec(om.star.lm)]
-# _, l, _, _ = SSOF.loss_funcs_telstar(o, om, d)
-#
-# l(ts.θ)
-# Δ = only(∇(l)(ts.θ))
-#
-# opts = [Adam.(θ, α, β1, β2, ϵ) for θ in ts.θ]
-# # 0.001816 seconds (61 allocations: 1008 bytes)
-# @time iterate!(ts.θ, Δ, opts)
-#
-# opt = Adam(ts.θ, α, β1, β2, ϵ)
-# #  0.001803 seconds (14 allocations: 448 bytes)
-# iterate!(ts.θ, Δ, opt)
-
-
 ## using ADAM to optimize
 
 model = reset_model()
@@ -83,51 +17,11 @@ SSOF_path = dirname(dirname(pathof(SSOF)))
 include(SSOF_path * "/src/_plot_functions.jl")
 plt = status_plot(o, d)
 png(plt, "before")
-θ = [vec(om.tel.lm), vec(om.star.lm)]
-_, l, _, _ = SSOF.loss_funcs_telstar(o, om, d)
-opt = Adam(θ, α, β1, β2, ϵ)
 
-
-
-function AdamState!(as::AdamState, ℓ, Δ)
-
-as = AdamState()
-
-
-# function L∞_cust2(Δ)  # 4x slower
-#     it = Iterators.flatten(Iterators.flatten(Δ))
-#     return maximum(it)
-# end
-function update!()
-    val, Δ = ∇(l; get_output=true)(θ)
-    Δ = only(Δ)
-    as.iter += 1
-    as.ℓ = val.val
-    flat_Δ = Iterators.flatten(Iterators.flatten(Δ))
-    as.L1_Δ = sum(abs, flat_Δ)
-    as.L2_Δ = sum(abs2, flat_Δ)
-    as.L∞_Δ = L∞_cust(Δ)
-    iterate!(θ, Δ, opt)
-    println("Iter:  ", as.iter)
-    println("ℓ:     ", as.ℓ)
-    println("L2(Δ): ", as.L2_Δ)
-    println("L2(Δ): ", as.L2_Δ)
-    println("L∞(Δ): ", as.L∞_Δ)
-    println()
-end
-
-
-@btime L∞_cust(Δ)
-it = Iterators.flatten(Iterators.flatten(Δ))
-@btime L∞_cust2(it)
-val, Δ = ∇(l; get_output=true)(θ)
-Δ = only(Δ)
-@time sum(abs2, Iterators.flatten(Iterators.flatten(Δ)))
-@time L∞(Δ)
-@time for i in 1:100
-    update!()
-end
-
+mws = SSOF.ModelWorkspace(o, om, d);
+as = mws.telstar.as;
+callback() = println(as)
+SSOF.train_OrderModel!(mws; print_stuff=true)
 SSOF.Output!(o, om, d)
 plt = status_plot(o, d)
 png(plt, "after")
