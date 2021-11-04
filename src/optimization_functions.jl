@@ -56,8 +56,14 @@ mutable struct Adam{T<:AbstractArray}
     ϵ::Float64
 end
 Adam(θ0::AbstractArray, α::Float64, β1::Float64, β2::Float64, ϵ::Float64) =
-    Adam(α, β1, β2, vector_zero(θ0), vector_zero(θ0), β1, β2, ϵ)
+	Adam(α, β1, β2, vector_zero(θ0), vector_zero(θ0), β1, β2, ϵ)
 Adam(θ0::AbstractArray; α::Float64=α, β1::Float64=β1, β2::Float64=β2, ϵ::Float64=ϵ) =
+	Adam(θ0, α, β1, β2, ϵ)
+Adams(θ0s::Vector{<:AbstractArray}, α::Float64, β1::Float64, β2::Float64, ϵ::Float64) =
+	Adams.(θ0s, α, β1, β2, ϵ)
+Adams(θ0s::Vector{<:AbstractArray}; α::Float64=α, β1::Float64=β1, β2::Float64=β2, ϵ::Float64=ϵ) =
+	Adams(θ0s, α, β1, β2, ϵ)
+Adams(θ0::AbstractVecOrMat{<:Real}, α::Float64, β1::Float64, β2::Float64, ϵ::Float64) =
 	Adam(θ0, α, β1, β2, ϵ)
 
 mutable struct AdamState
@@ -79,7 +85,14 @@ function println(as::AdamState)
 	println()
 end
 
-function _iterate_helper!(θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt::Adam; m=opt.m, v=opt.v, α=opt.α, β1=opt.β1, β2=opt.β2, ϵ=opt.ϵ, β1_acc=opt.β1_acc, β2_acc=opt.β2_acc)
+function iterate!(θs::Vector{<:Array}, ∇θs::Vector{<:Array}, opts::Vector)
+    @assert length(θs) == length(∇θs) == length(opts)
+	@inbounds for i in eachindex(θs)
+		_iterate_helper!(θs[i], ∇θs[i], opts[i])
+    end
+end
+function iterate!(θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt::Adam)
+	α=opt.α; β1=opt.β1; β2=opt.β2; ϵ=opt.ϵ; β1_acc=opt.β1_acc; β2_acc=opt.β2_acc; m=opt.m; v=opt.v
     # the matrix and dotted version is slower
     @inbounds for n in eachindex(θ)
         m[n] = β1 * m[n] + (1.0 - β1) * ∇θ[n]
@@ -88,30 +101,8 @@ function _iterate_helper!(θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float
         v̂ = v[n] / (1 - β2_acc)
         θ[n] -= α * m̂ / (sqrt(v̂) + ϵ)
     end
-end
-# this is slightly slower
-# function iterate!(θs::Vector{<:Vector{<:AbstractArray{<:Real}}}, ∇θs::Vector{<:Vector{<:AbstractArray{<:Real}}}, opts::Vector{Vector{Adam}})
-#     for i in eachindex(θs)
-#         for j in eachindex(θs[i])
-#             _iterate_helper!(θs[i][j], ∇θs[i][j], opts[i][j])
-#             opt.β1_acc *= opt.β1
-#             opt.β2_acc *= opt.β2
-#         end
-#     end
-# end
-function iterate!(θs::Vector{<:Vector{<:AbstractArray{<:Real}}}, ∇θs::Vector{<:Vector{<:AbstractArray{<:Real}}}, opt::Adam)
-    for i in eachindex(θs)
-        for j in eachindex(θs[i])
-            _iterate_helper!(θs[i][j], ∇θs[i][j], opt; m=opt.m[i][j], v=opt.v[i][j])
-        end
-    end
-    opt.β1_acc *= opt.β1
-    opt.β2_acc *= opt.β2
-end
-function iterate!(θ::AbstractVecOrMat{<:Real}, ∇θ::AbstractVecOrMat{<:Real}, opt::Adam)
-	_iterate_helper!(θ, ∇θ, opt; m=opt.m, v=opt.v)
-    opt.β1_acc *= opt.β1
-    opt.β2_acc *= opt.β2
+	β1_acc *= β1
+	β2_acc *= β2
 end
 
 # L∞_cust(Δ) = maximum([maximum([maximum(i) for i in j]) for j in Δ])
@@ -135,7 +126,7 @@ _g_tol_def = 1e-3
 
 struct AdamWorkspace{T}
 	θ::T
-	opt::Adam
+	opt
 	as::AdamState
 	l::Function
 	function AdamWorkspace(θ::T, opt, as, l) where T
@@ -143,7 +134,7 @@ struct AdamWorkspace{T}
 		return new{T}(θ, opt, as, l)
 	end
 end
-AdamWorkspace(θ, l::Function) = AdamWorkspace(θ, Adam(θ), AdamState(), l)
+AdamWorkspace(θ, l::Function) = AdamWorkspace(θ, Adams(θ), AdamState(), l)
 
 function update!(aws::AdamWorkspace)
     val, Δ = ∇(aws.l; get_output=true)(aws.θ)
