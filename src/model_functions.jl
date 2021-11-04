@@ -194,8 +194,10 @@ end
 
 default_reg_tel = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
 	(:L1_μ₊_factor, 6.), (:L2_M, 1e-1), (:L1_M, 1e3)])
-default_reg_star = Dict([(:L2_μ, 1e4), (:L1_μ, 1e3),
-	(:L1_μ₊_factor, 7.2), (:L2_M, 1e1), (:L1_M, 1e6)])
+# default_reg_star = Dict([(:L2_μ, 1e4), (:L1_μ, 1e3),
+# 	(:L1_μ₊_factor, 7.2), (:L2_M, 1e1), (:L1_M, 1e6)])
+default_reg_star = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
+	(:L1_μ₊_factor, 6.), (:L2_M, 1e-1), (:L1_M, 1e3)])
 
 function oversamp_interp_helper(to_bounds::AbstractVector, from_x::AbstractVector)
 	ans = spzeros(length(to_bounds)-1, length(from_x))
