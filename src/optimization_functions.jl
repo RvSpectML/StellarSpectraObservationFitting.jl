@@ -2,7 +2,7 @@
 using ParameterHandling
 using Optim
 using Nabla
-import Base.show
+import Base.println
 
 # χ² loss function
 _loss(tel, star, rv, d::GenericData) =
@@ -72,7 +72,7 @@ mutable struct AdamState
 	δ_L∞_Δ::Float64
 end
 AdamState() = AdamState(0, 0., 0., 0., 0., 0., 0., 0., 0.)
-function show(io::IO, as::AdamState)
+function println(as::AdamState)
     println("Iter:  ", as.iter)
     println("ℓ:     ", as.ℓ,    "  ℓ_$(as.iter)/ℓ_$(as.iter-1):       ", as.δ_ℓ)
 	println("L2_Δ:  ", as.L2_Δ, "  L2_Δ_$(as.iter)/L2_Δ_$(as.iter-1): ", as.δ_L2_Δ)
