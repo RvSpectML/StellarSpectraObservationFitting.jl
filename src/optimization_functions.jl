@@ -22,11 +22,11 @@ function loss(o::Output, om::OrderModel, d::Data;
     return _loss(tel_o, star_o, rv_o, d)
 end
 
-possible_θ = Union{Vector{<:Vector{<:AbstractArray}}, AbstractMatrix}
-
+function loss_func(o::Output, om::OrderModel, d::Data)
+	l(; kwargs...) = loss(o, om, d; kwargs...)
+	return l
+end
 function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
-    l(; kwargs...) = loss(o, om, d; kwargs...)
-
     l_telstar(telstar; kwargs...) =
         loss(o, om, d; tel=telstar[1], star=telstar[2], recalc_rv=false, kwargs...) +
 			model_prior(telstar[1], om.reg_tel) + model_prior(telstar[2], om.reg_star)
@@ -41,7 +41,7 @@ function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
 
     l_rv(rv_s) = loss(o, om, d; rv=[om.rv.lm.M, rv_s], recalc_tel=false, recalc_star=false)
 
-    return l, l_telstar, l_telstar_s, l_rv
+    return l_telstar, l_telstar_s, l_rv
 end
 
 α, β1, β2, ϵ = 1e-3, 0.9, 0.999, 1e-8
@@ -184,12 +184,12 @@ struct TelStarWorkspace <: ModelWorkspace
 	only_s::Bool
 end
 function TelStarWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false)
-	loss, loss_telstar, loss_telstar_s, loss_rv = loss_funcs_telstar(o, om, d)
+	loss_telstar, loss_telstar_s, loss_rv = loss_funcs_telstar(o, om, d)
 	only_s ?
 		telstar = AdamWorkspace([om.tel.lm.s, om.star.lm.s], loss_telstar_s) :
 		telstar = AdamWorkspace([vec(om.tel.lm), vec(om.star.lm)], loss_telstar)
 	rv = AdamWorkspace(om.rv.lm.s, loss_rv)
-	return ModelWorkspace(telstar, rv, om, o, d, only_s)
+	return TelStarWorkspace(telstar, rv, om, o, d, only_s)
 end
 
 function train_OrderModel!(mw::TelStarWorkspace; train_telstar::Bool=true, ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, kwargs...)
@@ -223,6 +223,8 @@ end
 
 
 ## Optim Versions
+
+possible_θ = Union{Vector{<:Vector{<:AbstractArray}}, Vector{<:Array}, AbstractMatrix}
 
 function opt_funcs(loss::Function, pars::possible_θ)
     flat_initial_params, unflatten = flatten(pars)  # unflatten returns Vector of untransformed params
@@ -265,14 +267,14 @@ struct OptimWorkspace
     only_s::Bool
 end
 function OptimWorkspace(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=false, only_s::Bool=false)
-	loss, loss_telstar, loss_telstar_s, loss_rv = loss_funcs_telstar(o, om, d)
+	loss_telstar, loss_telstar_s, loss_rv = loss_funcs_telstar(o, om, d)
 	rv = OptimSubWorkspace(om.rv.lm.s, loss_rv; use_cg=true)
 	only_s ?
 		telstar = OptimSubWorkspace([om.tel.lm.s, om.star.lm.s], loss_telstar_s; use_cg=!only_s) :
 		telstar = OptimSubWorkspace([vec(om.tel.lm), vec(om.star.lm)], loss_telstar; use_cg=!only_s)
 	ow = OptimWorkspace(telstar, rv, om, o, d, only_s)
 	if return_loss_f
-		return ow, loss
+		return ow, loss_func(o, om, d)
 	else
 		return ow
 	end
