@@ -114,7 +114,7 @@ function iterate!(θ::AbstractVecOrMat{<:Real}, ∇θ::AbstractVecOrMat{<:Real},
     opt.β2_acc *= opt.β2
 end
 
-L∞_cust(Δ) = maximum([maximum([maximum(i) for i in j]) for j in Δ])
+# L∞_cust(Δ) = maximum([maximum([maximum(i) for i in j]) for j in Δ])
 function AdamState!_helper(as::AdamState, f::Symbol, val)
 	setfield!(as, Symbol(:δ_,f), val / getfield(as, f))
 	setfield!(as, f, val)
@@ -125,7 +125,7 @@ function AdamState!(as::AdamState, ℓ, Δ)
 	flat_Δ = Iterators.flatten(Iterators.flatten(Δ))
 	AdamState!_helper(as, :L1_Δ, sum(abs, flat_Δ))
 	AdamState!_helper(as, :L2_Δ, sum(abs2, flat_Δ))
-	AdamState!_helper(as, :L∞_Δ, L∞_cust(Δ))
+	AdamState!_helper(as, :L∞_Δ, L∞(Δ))
 end
 
 _print_stuff_def = false
