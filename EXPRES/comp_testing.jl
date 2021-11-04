@@ -39,7 +39,7 @@ if isfile(save_path*"results.jld2")
 end
 
 ## Creating optimization workspace
-workspace, loss = SSOF.OptimWorkspace(test_model, data; return_loss_f=true)
+workspace = SSOF.OptimWorkspace(test_model, data)
 
 ## Plotting
 

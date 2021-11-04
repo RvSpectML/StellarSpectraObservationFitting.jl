@@ -2,12 +2,11 @@ function eval_regularization(reg_field::Symbol, reg_key::Symbol, reg_val::Real, 
     om = copy(start_om)
     getfield(om, reg_field)[reg_key] = reg_val
     train = OptimWorkspace(om, d, training_inds)
-    test, loss_test = OptimWorkspace(om, d, testing_inds; return_loss_f=true, only_s=true)
-    train_OrderModel!(train)
-    train_OrderModel!(test)
-    return loss_test()
+    test = OptimWorkspace(om, d, testing_inds; return_loss_f=true, only_s=true)
+    train_OrderModel!(train) # trains basis vectors and (scores at training time)
+    train_OrderModel!(test)  # trains scores at testing times
+    return loss(test.o, test.om, d; recalc_tel=false, recalc_star=false, recalc_rv=false)
 end
-
 
 
 function fit_regularization_helper!(reg_field::Symbol, reg_key::Symbol, om::OrderModel, d::Data, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; kwargs...)

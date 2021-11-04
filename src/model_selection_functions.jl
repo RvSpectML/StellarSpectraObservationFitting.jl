@@ -1,5 +1,6 @@
 function test_ℓ_for_n_comps(n_comps::Vector, om::OrderModel, d::Data; return_inters::Bool=false, kwargs...)
-    ws, l = OptimWorkspace(downsize(om, n_comps[1], n_comps[2]), d; return_loss_f=true)
+    ws = OptimWorkspace(downsize(om, n_comps[1], n_comps[2]), d)
+    l = loss_func(ws.o, ws.om, d)
     fine_train_OrderModel!(ws; kwargs...)  # 16s
     if return_inters
         return ws, l, l(), (length(ws.telstar.p0) + length(ws.rv.p0))

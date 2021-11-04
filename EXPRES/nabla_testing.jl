@@ -3,7 +3,7 @@ include("testing_header.jl")
 
 ## running the optimization outside the functions
 using Optim
-workspace, loss = SSOF.OptimWorkspace(model, data; return_loss_f=true)
+workspace = SSOF.OptimWorkspace(model, data)
 ow = workspace; osw = ow.telstar
 optim_cb_local(x::OptimizationState) = SSOF.optim_cb(x; print_stuff=true)
 options = Optim.Options(;iterations=100, f_tol=SSOF._f_tol_def, g_tol=SSOF._g_tol_def*sqrt(length(osw.p0)), callback=optim_cb_local)

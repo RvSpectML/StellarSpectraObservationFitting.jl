@@ -252,7 +252,6 @@ struct TotalWorkspace <: ModelWorkspace
 	d::Data
 	only_s::Bool
 end
-
 function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=true)
 	l_total, l_total_s = loss_funcs_total(o, om, d)
 	only_s ?
@@ -343,12 +342,7 @@ function OptimWorkspace(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=
 	only_s ?
 		telstar = OptimSubWorkspace([om.tel.lm.s, om.star.lm.s], loss_telstar_s; use_cg=!only_s) :
 		telstar = OptimSubWorkspace([vec(om.tel.lm), vec(om.star.lm)], loss_telstar; use_cg=!only_s)
-	ow = OptimWorkspace(telstar, rv, om, o, d, only_s)
-	if return_loss_f
-		return ow, loss_func(o, om, d)
-	else
-		return ow
-	end
+	return OptimWorkspace(telstar, rv, om, o, d, only_s)
 end
 OptimWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
 	OptimWorkspace(om(inds), d(inds); kwargs...)

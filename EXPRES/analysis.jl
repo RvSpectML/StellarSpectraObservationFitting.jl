@@ -45,7 +45,7 @@ end
 
 
 ## Creating optimization workspace
-workspace, loss = SSOF.OptimWorkspace(model, data; return_loss_f=true)
+mws = SSOF.TotalWorkspace(model, data)
 
 ## Plotting
 
@@ -99,7 +99,7 @@ if !model.metadata[:todo][:downsized]
     model = SSOF.downsize(model, n_comps_best[1], n_comps_best[2])
     model.metadata[:todo][:downsized] = true
     model.metadata[:todo][:reg_improved] = true
-    workspace, loss = SSOF.OptimWorkspace(model, data; return_loss_f=true)
+    workspace = SSOF.OptimWorkspace(model, data)
     SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
     model.metadata[:todo][:optimized] = true
     @save save_path*"results.jld2" model rvs_naive rvs_notel # model_large

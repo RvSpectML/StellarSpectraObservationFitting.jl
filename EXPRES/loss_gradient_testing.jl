@@ -51,7 +51,7 @@ else
 end
 
 ## Creating optimization workspace
-workspace, loss = SSOF.OptimWorkspace(model, data_small; return_loss_f=true)
+workspace = SSOF.OptimWorkspace(model, data_small)
 
 ts = workspace.telstar
 @btime ts.obj.df(gn, ts.p0);
