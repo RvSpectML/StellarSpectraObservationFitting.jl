@@ -21,6 +21,12 @@ function loss(o::Output, om::OrderModel, d::Data;
     recalc_rv ? rv_o = spectra_interp(_eval_lm(rv), om.b2o) : rv_o = o.rv
     return _loss(tel_o, star_o, rv_o, d)
 end
+function loss_recalc_rv_basis(om::OrderModel, d::Data, tel, star, rv_s)
+	om.rv.lm.M .= calc_doppler_component_RVSKL_Flux(om.star.λ, om.star.lm.μ)
+    return _loss(spectra_interp(_eval_lm(tel), om.t2o),
+	        spectra_interp(_eval_lm(star), om.b2o),
+			spectra_interp(_eval_lm(om.rv.lm.M, rv_s), om.b2o), d)
+end
 
 function loss_func(o::Output, om::OrderModel, d::Data)
 	l(; kwargs...) = loss(o, om, d; kwargs...)
@@ -43,6 +49,24 @@ function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
 
     return l_telstar, l_telstar_s, l_rv
 end
+function loss_funcs_total(o::Output, om::OrderModel, d::Data)
+    l_total(total) =
+		loss_recalc_rv_basis(om, d, total[1], total[2], total[3]) +
+		model_prior(total[1], om.reg_tel) + model_prior(total[2], om.reg_star)
+    function l_total_s(total_s)
+		recalc_tel = !(typeof(om.tel.lm) <: TemplateModel)
+		recalc_star = !(typeof(om.tel.lm) <: TemplateModel)
+		recalc_tel ? tel = [om.tel.lm.M, total_s[1], om.tel.lm.μ] : tel = om.tel.lm
+		recalc_star ? star = [om.star.lm.M, total_s[2], om.star.lm.μ] : star = om.star.lm
+		rv = [om.rv.lm.M, total_s[3]]
+		return loss(o, om, d; tel=tel, star=star, rv=rv, recalc_tel=recalc_tel, recalc_star=recalc_star) +
+			model_prior(tel, om.reg_tel) + model_prior(star, om.reg_star)
+    end
+
+    return l_total, l_total_s
+end
+
+## Adam Version
 
 α, β1, β2, ϵ = 1e-3, 0.9, 0.999, 1e-8
 mutable struct Adam{T<:AbstractArray}
@@ -212,6 +236,59 @@ function train_OrderModel!(mw::TelStarWorkspace; train_telstar::Bool=true, ignor
 	return result_telstar, result_rv
 end
 
+function rel_step_size(∇θ, opt, θ)
+    α=opt.α; β1=opt.β1; β2=opt.β2; ϵ=opt.ϵ; β1_acc=opt.β1_acc; β2_acc=opt.β2_acc; m = opt.m; v=opt.v
+    m2 = β1 .* m .+ (1.0 - β1) .* ∇θ
+    v2 = β2 .* v .+ (1.0 - β2) .* ∇θ.^2
+    m̂ = m2 ./ (1 - β1_acc)
+    v̂ = v2 ./ (1 - β2_acc)
+    return sqrt(sum(abs2, -α .* m̂ ./ (sqrt.(v̂) .+ ϵ)) / sum(abs2, θ))
+end
+
+struct TotalWorkspace <: ModelWorkspace
+	total::AdamWorkspace
+	om::OrderModel
+	o::Output
+	d::Data
+	only_s::Bool
+end
+
+function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α)
+	l_total, l_total_s = loss_funcs_total(o, om, d)
+	only_s ?
+		total = AdamWorkspace([om.tel.lm.s, om.star.lm.s, om.rv.lm.s], l_total_s) :
+		total = AdamWorkspace([vec(om.tel.lm), vec(om.star.lm), om.rv.lm.s], l_total)
+
+	Δ = only(∇(total.l)(total.θ))
+	α_ratio = α * rel_step_size(Δ[1][1], total.opt[1][1], total.θ[1][1])
+	# for i in 1:2
+	#     for j in 1:3
+	#        total.opt[i][j].α = α_ratio / rel_step_size(Δ[i][j], total.opt[i][j], total.θ[i][j])
+	#     end
+	# end
+	total.opt[3].α = α_ratio / rel_step_size(Δ[3], total.opt[3], total.θ[3])
+	return TotalWorkspace(total, om, o, d, only_s)
+end
+
+function train_OrderModel!(mw::TotalWorkspace; ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, kwargs...)
+
+    if ignore_regularization
+        reg_tel_holder = copy(mw.om.reg_tel)
+        reg_star_holder = copy(mw.om.reg_star)
+        zero_regularization(mw.om)
+    end
+
+	cb = default_cb(mw.total.as; print_stuff)
+	result = train_SubModel!(mw.total; cb=cb, kwargs...)
+	mw.total.as.iter = 0
+    Output!(mw.o, mw.om, mw.d)
+
+    if ignore_regularization
+        copy_dict!(ow.om.reg_tel, reg_tel_holder)
+        copy_dict!(ow.om.reg_star, reg_star_holder)
+    end
+	return result
+end
 
 ## Optim Versions
 
