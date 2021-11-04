@@ -68,7 +68,7 @@ end
 
 ## Adam Version
 
-α, β1, β2, ϵ = 1e-3, 0.9, 0.999, 1e-8
+α, β1, β2, ϵ = 2e-3, 0.9, 0.999, 1e-8
 mutable struct Adam{T<:AbstractArray}
     α::Float64
     β1::Float64
@@ -112,7 +112,7 @@ end
 function iterate!(θs::Vector{<:Array}, ∇θs::Vector{<:Array}, opts::Vector)
     @assert length(θs) == length(∇θs) == length(opts)
 	@inbounds for i in eachindex(θs)
-		_iterate_helper!(θs[i], ∇θs[i], opts[i])
+		iterate!(θs[i], ∇θs[i], opts[i])
     end
 end
 function iterate!(θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt::Adam)
@@ -253,7 +253,7 @@ struct TotalWorkspace <: ModelWorkspace
 	only_s::Bool
 end
 
-function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α)
+function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=true)
 	l_total, l_total_s = loss_funcs_total(o, om, d)
 	only_s ?
 		total = AdamWorkspace([om.tel.lm.s, om.star.lm.s, om.rv.lm.s], l_total_s) :
@@ -261,12 +261,12 @@ function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, 
 
 	Δ = only(∇(total.l)(total.θ))
 	α_ratio = α * rel_step_size(Δ[1][1], total.opt[1][1], total.θ[1][1])
-	# for i in 1:2
-	#     for j in 1:3
-	#        total.opt[i][j].α = α_ratio / rel_step_size(Δ[i][j], total.opt[i][j], total.θ[i][j])
-	#     end
-	# end
 	total.opt[3].α = α_ratio / rel_step_size(Δ[3], total.opt[3], total.θ[3])
+	for i in 1:2
+	    for j in 1:3
+	       scale_α ? total.opt[i][j].α = α_ratio / rel_step_size(Δ[i][j], total.opt[i][j], total.θ[i][j]) : total.opt[i][j].α = α
+	    end
+	end
 	return TotalWorkspace(total, om, o, d, only_s)
 end
 
@@ -289,6 +289,9 @@ function train_OrderModel!(mw::TotalWorkspace; ignore_regularization::Bool=false
     end
 	return result
 end
+fine_train_OrderModel!(mw::TotalWorkspace; iter=3*_iter_def, kwargs...) = 
+	train_OrderModel!(mw; iter=iter, kwargs...)
+
 
 ## Optim Versions
 
@@ -374,10 +377,10 @@ function optim_cb(x::OptimizationState; print_stuff::Bool=true)
 end
 
 
-_print_stuff_def = false
-_iter_def = 100
-_f_tol_def = 1e-6
-_g_tol_def = 400
+# _print_stuff_def = false
+# _iter_def = 100
+# _f_tol_def = 1e-6
+# _g_tol_def = 400
 
 function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def*sqrt(length(ow.telstar.p0)), train_telstar::Bool=true, ignore_regularization::Bool=false, kwargs...)
     optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)

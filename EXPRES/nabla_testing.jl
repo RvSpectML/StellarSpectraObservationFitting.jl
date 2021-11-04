@@ -13,27 +13,13 @@ options = Optim.Options(;iterations=100, f_tol=SSOF._f_tol_def, g_tol=SSOF._g_to
 
 model = reset_model()
 om = model; d = data; o = SSOF.Output(om, d)
-# SSOF_path = dirname(dirname(pathof(SSOF)))
-# include(SSOF_path * "/src/_plot_functions.jl")
-# plt = status_plot(o, d)
-# png(plt, "before")
+SSOF_path = dirname(dirname(pathof(SSOF)))
+include(SSOF_path * "/src/_plot_functions.jl")
+plt = status_plot(o, d)
+png(plt, "before")
 
 mws = SSOF.TotalWorkspace(o, om, d)
-
-
-callback() = println(mws.total.as)
-aws = mws.total
-for i in 1:300
-    SSOF.update!(aws)
-    println(aws.as)
-end
-SSOF.Output!(o, om, d)
-plt = status_plot(o, d)
-
-mws = SSOF.TelStarWorkspace(o, om, d);
-as = mws.telstar.as;
-SSOF.train_OrderModel!(mws; print_stuff=true)
-SSOF.Output!(o, om, d)
+train_OrderModel!(mws; print_stuff=true)
 plt = status_plot(o, d)
 png(plt, "after")
 
