@@ -4,6 +4,8 @@ using Optim
 using Nabla
 import Base.println
 
+abstract type ModelWorkspace end
+
 # χ² loss function
 _loss(tel, star, rv, d::GenericData) =
     sum(((total_model(tel, star, rv) .- d.flux) .^ 2) ./ d.var)
@@ -185,8 +187,6 @@ function default_cb(as::AdamState; print_stuff=_print_stuff_def)
 		return () -> ()
 	end
 end
-
-abstract type ModelWorkspace end
 
 struct TelStarWorkspace <: ModelWorkspace
 	telstar::AdamWorkspace
