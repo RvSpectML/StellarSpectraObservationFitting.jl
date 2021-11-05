@@ -228,5 +228,5 @@ end
 Å_to_wavenumber(λ::Real) = 1e8 / λ
 wavenumber_to_Å(wn::Real) = Å_to_wavenumber(wn)
 
-vector_zero(θ::VecOrMat) = zero(θ)
-vector_zero(θ::Vector{<:Array}) = [vector_zero(i) for i in θ]
+vector_zero(θ::AbstractVecOrMat) = zero(θ)
+vector_zero(θ::Vector{<:AbstractArray}) = [vector_zero(i) for i in θ]

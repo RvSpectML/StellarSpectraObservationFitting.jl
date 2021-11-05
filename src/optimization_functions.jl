@@ -268,6 +268,10 @@ function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, 
 	end
 	return TotalWorkspace(total, om, o, d, only_s)
 end
+TotalWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
+	TotalWorkspace(om(inds), d(inds); kwargs...)
+TotalWorkspace(om::OrderModel, d::Data; kwargs...) =
+	TotalWorkspace(Output(om, d), om, d; kwargs...)
 
 function train_OrderModel!(mw::TotalWorkspace; ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, kwargs...)
 
@@ -283,12 +287,12 @@ function train_OrderModel!(mw::TotalWorkspace; ignore_regularization::Bool=false
     Output!(mw.o, mw.om, mw.d)
 
     if ignore_regularization
-        copy_dict!(ow.om.reg_tel, reg_tel_holder)
-        copy_dict!(ow.om.reg_star, reg_star_holder)
+        copy_dict!(mw.om.reg_tel, reg_tel_holder)
+        copy_dict!(mw.om.reg_star, reg_star_holder)
     end
 	return result
 end
-fine_train_OrderModel!(mw::TotalWorkspace; iter=3*_iter_def, kwargs...) = 
+fine_train_OrderModel!(mw::TotalWorkspace; iter=3*_iter_def, kwargs...) =
 	train_OrderModel!(mw; iter=iter, kwargs...)
 
 

@@ -34,8 +34,8 @@ struct LSFData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
 end
 (d::LSFData)(inds::AbstractVecOrMat) =
 	LSFData(view(d.flux, :, inds), view(d.var, :, inds),
-	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds), lsf)
-Base.copy(d::LSFData) = LSFData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star), copy(lsf))
+	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds), d.lsf)
+Base.copy(d::LSFData) = LSFData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star), copy(d.lsf))
 
 struct GenericData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
     flux::AM
@@ -101,12 +101,13 @@ struct TemplateModel{T<:Number, AV<:AbstractVector{T}} <: LinearModel
 	n::Int
 end
 Base.copy(tlm::TemplateModel) = TemplateModel(copy(tlm.μ), tlm.n)
-LinearModel(tm::TemplateModel, inds::AbstractVecOrMat) = tm
+LinearModel(tm::TemplateModel, inds::AbstractVecOrMat) = TemplateModel(tm.μ, length(inds))
 
 Base.getindex(lm::LinearModel, s::Symbol) = getfield(lm, s)
 Base.eachindex(lm::T) where {T<:LinearModel} = fieldnames(T)
 Base.setindex!(lm::LinearModel, a::AbstractVecOrMat, s::Symbol) = (lm[s] .= a)
 vec(lm::LinearModel) = [lm[i] for i in eachindex(lm)]
+# vec(lm::TemplateModel) = [lm.μ]
 vec(lms::Vector{<:LinearModel}) = [vec(lm) for lm in lms]
 
 LinearModel(M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector) = FullLinearModel(M, s, μ)
@@ -236,8 +237,8 @@ struct OrderModel{T<:Number}
 	rv::Submodel
 	reg_tel::Dict{Symbol, T}
 	reg_star::Dict{Symbol, T}
-	b2o::Vector{<:_current_matrix_modifier}
-	t2o::Vector{<:_current_matrix_modifier}
+	b2o::AbstractVector{<:_current_matrix_modifier}
+	t2o::AbstractVector{<:_current_matrix_modifier}
 	metadata::Dict{Symbol, Any}
 end
 function OrderModel(
@@ -268,7 +269,7 @@ end
 Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.b2o, om.t2o, copy(om.metadata))
 (om::OrderModel)(inds::AbstractVecOrMat) =
 	OrderModel(om.tel(inds), om.star(inds), om.rv(inds), om.reg_tel,
-	om.reg_star, copy(om.metadata))
+		om.reg_star, view(om.b2o, inds), view(om.t2o, inds), copy(om.metadata))
 function zero_regularization(om::OrderModel)
 	for (key, value) in om.reg_tel
 		om.reg_tel[key] = 0
@@ -301,9 +302,9 @@ downsize(m::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
 tel_prior(om::OrderModel) = model_prior(om.tel.lm, om.reg_tel)
 star_prior(om::OrderModel) = model_prior(om.star.lm, om.reg_star)
 
-spectra_interp(model::AbstractMatrix, interp_helper::Vector{<:_current_matrix_modifier}) =
+spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
 	hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
-spectra_interp(model, interp_helper::Vector{<:_current_matrix_modifier}) =
+spectra_interp(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
 	hcat([interp_helper[i] * model[:, i] for i in 1:size(model, 2)]...)
 
 tel_model(om::OrderModel; lm=om.tel.lm::LinearModel) = spectra_interp(lm(), om.t2o)
