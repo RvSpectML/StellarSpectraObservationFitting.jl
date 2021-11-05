@@ -107,7 +107,7 @@ function println(as::AdamState)
 	println()
 end
 
-function iterate!(θs::Vector{<:Array}, ∇θs::Vector{<:Array}, opts::Vector)
+function iterate!(θs::Vector{<:AbstractArray}, ∇θs::Vector{<:AbstractArray}, opts::Vector)
     @assert length(θs) == length(∇θs) == length(opts)
 	@inbounds for i in eachindex(θs)
 		iterate!(θs[i], ∇θs[i], opts[i])
@@ -263,20 +263,11 @@ function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, 
 		total = AdamWorkspace([om.tel.lm.s, om.star.lm.s, om.rv.lm.s], l_total_s) :
 		total = AdamWorkspace([vec(om.tel.lm), vec(om.star.lm), om.rv.lm.s], l_total)
 
-	# if om is not a template model, the basis vectors start normalized
+	# if om's basis vectors start normalized
 	# so rel_step_size(om.tel.lm.M) == sqrt(size(om.tel.lm.M, 1)) == sqrt(length(om.tel.lm.μ))
+	# which is a quantity even template models have
 	α_ratio = α * sqrt(length(om.tel.lm.μ))
-	# total.opt[3].α = α_ratio / rel_step_size(total.θ[3])
 	scale_α_helper!(total.opt, α_ratio, total.θ, α, scale_α)
-	# for i in 1:2
-	# 	if typeof(total.opt[i]) <: Adam
-	# 		scale_α ? total.opt[i].α = α_ratio / rel_step_size(total.θ[i]) : total.opt[i].α = α
-	# 	else
-	# 		for j in eachindex(total.opt[i])
-	# 			scale_α ? total.opt[i][j].α = α_ratio / rel_step_size(total.θ[i][j]) : total.opt[i][j].α = α
-	# 		end
-	# 	end
-	# end
 	return TotalWorkspace(total, om, o, d, only_s)
 end
 TotalWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =

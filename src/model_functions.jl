@@ -107,7 +107,7 @@ Base.getindex(lm::LinearModel, s::Symbol) = getfield(lm, s)
 Base.eachindex(lm::T) where {T<:LinearModel} = fieldnames(T)
 Base.setindex!(lm::LinearModel, a::AbstractVecOrMat, s::Symbol) = (lm[s] .= a)
 vec(lm::LinearModel) = [lm[i] for i in eachindex(lm)]
-# vec(lm::TemplateModel) = [lm.μ]
+vec(lm::TemplateModel) = [lm.μ]
 vec(lms::Vector{<:LinearModel}) = [vec(lm) for lm in lms]
 
 LinearModel(M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector) = FullLinearModel(M, s, μ)
@@ -122,10 +122,6 @@ LinearModel(lm::TemplateModel, s::AbstractMatrix) = lm
 # Ref(lm::BaseLinearModel) = [Ref(lm.M), Ref(lm.s)]
 # Ref(lm::TemplateModel) = [Ref(lm.μ)]
 
-function _eval_lm(v)
-	@assert 1 < length(v) < 4
-	return length(v) < 3 ? _eval_lm(v[1],v[2]) : _eval_lm(v[1],v[2],v[3])
-end
 _eval_lm(μ, n::Int) = repeat(μ, 1, n)
 _eval_lm(M, s) = M * s
 _eval_lm(M, s, μ) =
@@ -240,6 +236,7 @@ struct OrderModel{T<:Number}
 	b2o::AbstractVector{<:_current_matrix_modifier}
 	t2o::AbstractVector{<:_current_matrix_modifier}
 	metadata::Dict{Symbol, Any}
+	n::Int
 end
 function OrderModel(
 	d::Data,
@@ -264,18 +261,29 @@ function OrderModel(
 	metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
 	b2o = oversamp_interp_helper(d.log_λ_star_bounds, star.log_λ)
 	t2o = oversamp_interp_helper(d.log_λ_obs_bounds, tel.log_λ)
-	return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), b2o, t2o, metadata)
+	return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), b2o, t2o, metadata, n_obs)
 end
-Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.b2o, om.t2o, copy(om.metadata))
+Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.b2o, om.t2o, copy(om.metadata), om.n)
 (om::OrderModel)(inds::AbstractVecOrMat) =
 	OrderModel(om.tel(inds), om.star(inds), om.rv(inds), om.reg_tel,
-		om.reg_star, view(om.b2o, inds), view(om.t2o, inds), copy(om.metadata))
+		om.reg_star, view(om.b2o, inds), view(om.t2o, inds), copy(om.metadata), length(inds))
 function zero_regularization(om::OrderModel)
 	for (key, value) in om.reg_tel
 		om.reg_tel[key] = 0
 	end
 	for (key, value) in om.reg_star
 		om.reg_star[key] = 0
+	end
+end
+
+function _eval_lm_vec(om::OrderModel, v)
+	@assert 1 < length(v) < 4
+	if length(v)==1
+		return _eval_lm(v[1], om.n)
+	elseif length(v)==2
+		return _eval_lm(v[1], v[2])
+	elseif length(v)==3
+		return _eval_lm(v[1], v[2], v[3])
 	end
 end
 
