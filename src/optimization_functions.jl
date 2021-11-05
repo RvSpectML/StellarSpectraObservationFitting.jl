@@ -236,13 +236,11 @@ function train_OrderModel!(mw::TelStarWorkspace; train_telstar::Bool=true, ignor
 	return result_telstar, result_rv
 end
 
-function rel_step_size(∇θ, opt, θ)
-    α=opt.α; β1=opt.β1; β2=opt.β2; ϵ=opt.ϵ; β1_acc=opt.β1_acc; β2_acc=opt.β2_acc; m = opt.m; v=opt.v
-    m2 = β1 .* m .+ (1.0 - β1) .* ∇θ
-    v2 = β2 .* v .+ (1.0 - β2) .* ∇θ.^2
-    m̂ = m2 ./ (1 - β1_acc)
-    v̂ = v2 ./ (1 - β2_acc)
-    return sqrt(sum(abs2, -α .* m̂ ./ (sqrt.(v̂) .+ ϵ)) / sum(abs2, θ))
+
+function rel_step_size(θ)
+    # return sqrt(sum(abs2, -α .* ∇θ ./ (∇θ .+ ϵ)) / sum(abs2, θ)) / α
+	# return sqrt(sum(abs2, ∇θ ./ (∇θ .+ ϵ)) / sum(abs2, θ))
+	return sqrt(length(θ) / sum(abs2, θ))
 end
 
 struct TotalWorkspace <: ModelWorkspace
@@ -252,20 +250,35 @@ struct TotalWorkspace <: ModelWorkspace
 	d::Data
 	only_s::Bool
 end
+
+function scale_α_helper!(opt::Adam, α_ratio::Real, θ::AbstractVecOrMat, α::Real, scale_α::Bool)
+	scale_α ? opt.α = α_ratio / rel_step_size(θ) : opt.α = α
+end
+function scale_α_helper!(opts::Vector, α_ratio::Real, θs, α::Real, scale_α::Bool)
+	for i in eachindex(opts)
+		scale_α_helper!(opts[i], α_ratio, θs[i], α, scale_α)
+	end
+end
 function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=true)
 	l_total, l_total_s = loss_funcs_total(o, om, d)
 	only_s ?
 		total = AdamWorkspace([om.tel.lm.s, om.star.lm.s, om.rv.lm.s], l_total_s) :
 		total = AdamWorkspace([vec(om.tel.lm), vec(om.star.lm), om.rv.lm.s], l_total)
 
-	Δ = only(∇(total.l)(total.θ))
-	α_ratio = α * rel_step_size(Δ[1][1], total.opt[1][1], total.θ[1][1])
-	total.opt[3].α = α_ratio / rel_step_size(Δ[3], total.opt[3], total.θ[3])
-	for i in 1:2
-	    for j in 1:3
-	       scale_α ? total.opt[i][j].α = α_ratio / rel_step_size(Δ[i][j], total.opt[i][j], total.θ[i][j]) : total.opt[i][j].α = α
-	    end
-	end
+	# if om is not a template model, the basis vectors start normalized
+	# so rel_step_size(om.tel.lm.M) == sqrt(size(om.tel.lm.M, 1)) == sqrt(length(om.tel.lm.μ))
+	α_ratio = α * sqrt(length(om.tel.lm.μ))
+	# total.opt[3].α = α_ratio / rel_step_size(total.θ[3])
+	scale_α_helper!(total.opt, α_ratio, total.θ, α, scale_α)
+	# for i in 1:2
+	# 	if typeof(total.opt[i]) <: Adam
+	# 		scale_α ? total.opt[i].α = α_ratio / rel_step_size(total.θ[i]) : total.opt[i].α = α
+	# 	else
+	# 		for j in eachindex(total.opt[i])
+	# 			scale_α ? total.opt[i][j].α = α_ratio / rel_step_size(total.θ[i][j]) : total.opt[i][j].α = α
+	# 		end
+	# 	end
+	# end
 	return TotalWorkspace(total, om, o, d, only_s)
 end
 TotalWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
