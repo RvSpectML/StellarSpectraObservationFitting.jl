@@ -1,11 +1,11 @@
 function test_ℓ_for_n_comps(n_comps::Vector, om::OrderModel, d::Data; return_inters::Bool=false, kwargs...)
-    ws = OptimWorkspace(downsize(om, n_comps[1], n_comps[2]), d)
-    l = loss_func(ws.o, ws.om, d)
-    fine_train_OrderModel!(ws; kwargs...)  # 16s
+    mws = OptimWorkspace(downsize(om, n_comps[1], n_comps[2]), d)
+    l = loss_func(mws)
+    fine_train_OrderModel!(mws; kwargs...)  # 16s
     if return_inters
-        return ws, l, l(), (length(ws.telstar.p0) + length(ws.rv.p0))
+        return ws, l, l(), (length(mws.telstar.p0) + length(mws.rv.p0))
     else
-        return l(), (length(ws.telstar.p0) + length(ws.rv.p0))
+        return l(), (length(mws.telstar.p0) + length(mws.rv.p0))
     end
 end
 

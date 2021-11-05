@@ -131,6 +131,8 @@ function status_plot(o::StellarSpectraObservationFitting.Output, d::StellarSpect
     if display_plt; display(plt) end
     return plt
 end
+status_plot(mws::StellarSpectraObservationFitting.ModelWorkspace; kwargs...) =
+    status_plot(mws.o, mws.d; kwargs...)
 
 function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector; size=(_plt_size[1],_plt_size[2]*1.5), ylabel="ℓ")
     plt = _my_plot(; ylabel=ylabel, layout=grid(2, 1), size=size)

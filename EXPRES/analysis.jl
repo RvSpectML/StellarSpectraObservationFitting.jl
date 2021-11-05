@@ -52,7 +52,7 @@ mws = SSOF.TotalWorkspace(model, data)
 SSOF_path = dirname(dirname(pathof(SSOF)))
 if interactive
     include(SSOF_path * "/src/_plot_functions.jl")
-    status_plot(workspace.o, workspace.d)
+    status_plot(mws)
 else
     ENV["GKSwstype"] = "100"  # setting the GR workstation type to 100/nul
 end
@@ -74,7 +74,7 @@ end
 if !model.metadata[:todo][:optimized]
     @time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
     rvs_notel_opt = SSOF.rvs(model)
-    if interactive; status_plot(workspace.o, workspace.d) end
+    if interactive; status_plot(workspace) end
     model.metadata[:todo][:optimized] = true
     @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
@@ -160,7 +160,7 @@ if save_plots
         png(plt, save_path * "model_tel_weights.png")
     end
 
-    plt = status_plot(workspace.o, workspace.d; display_plt=interactive);
+    plt = status_plot(workspace; display_plt=interactive);
     png(plt, save_path * "status_plot.png")
 
     plt = component_test_plot(ℓ, test_n_comp_tel, test_n_comp_star);

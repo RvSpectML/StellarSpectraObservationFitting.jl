@@ -46,7 +46,7 @@ workspace = SSOF.OptimWorkspace(test_model, data)
 SSOF_path = dirname(dirname(pathof(SSOF)))
 if interactive
     include(SSOF_path * "/src/_plot_functions.jl")
-    status_plot(workspace.o, workspace.d)
+    status_plot(workspace)
 else
     ENV["GKSwstype"] = "100"  # setting the GR workstation type to 100/nul
 end

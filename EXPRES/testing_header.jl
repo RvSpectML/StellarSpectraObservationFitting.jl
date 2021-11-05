@@ -49,4 +49,4 @@ end
 
 # SSOF_path = dirname(dirname(pathof(SSOF)))
 # include(SSOF_path * "/src/_plot_functions.jl")
-# status_plot(workspace.o, workspace.d)
+# status_plot(workspace)

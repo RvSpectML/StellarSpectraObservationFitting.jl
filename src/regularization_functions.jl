@@ -5,7 +5,7 @@ function eval_regularization(reg_field::Symbol, reg_key::Symbol, reg_val::Real, 
     test = OptimWorkspace(om, d, testing_inds; only_s=true)
     train_OrderModel!(train) # trains basis vectors and (scores at training time)
     train_OrderModel!(test)  # trains scores at testing times
-    return loss(test.o, test.om, d; recalc_tel=false, recalc_star=false, recalc_rv=false)
+    return _loss(test)
 end
 
 

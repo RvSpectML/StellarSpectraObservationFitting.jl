@@ -162,7 +162,7 @@ _fracvar(workspace.d.flux - workspace.o.tel, Y, 1 ./ workspace.d.var; var_tot=su
 
 # TODO ERES presentation plots
 
-hmm = status_plot(workspace.o, data)
+hmm = status_plot(workspace)
 png(hmm, "status_plot")
 plot_stellar_model_bases(model; inds=1:3)
 hmm = plot_telluric_model_bases(model; inds=1:3)

@@ -12,54 +12,52 @@ _loss(tel, star, rv, d::GenericData) =
 #     mapreduce(i -> sum((((d.lsf[i] * (view(tel, :, i) .* (view(star, :, i) .+ view(rv, :, i)))) .- view(d.flux, :, i)) .^ 2) ./ view(d.var, :, i)), +, 1:size(tel, 2))
 _loss(tel, star, rv, d::LSFData) =
     sum((((d.lsf * total_model(tel, star, rv)) .- d.flux) .^ 2) ./ d.var)
-function loss(o::Output, om::OrderModel, d::Data;
-	tel=om.tel.lm, star=om.star.lm, rv=om.rv.lm,
-	recalc_tel::Bool=true, recalc_star::Bool=true, recalc_rv::Bool=true)
-
-    recalc_tel ? tel_o = spectra_interp(_eval_lm(tel), om.t2o) : tel_o = o.tel
-    recalc_star ? star_o = spectra_interp(_eval_lm(star), om.b2o) : star_o = o.star
-    recalc_rv ? rv_o = spectra_interp(_eval_lm(rv), om.b2o) : rv_o = o.rv
+function _loss(o::Output, om::OrderModel, d::Data;
+	tel=nothing, star=nothing, rv=nothing)
+    !isnothing(tel) ? tel_o = spectra_interp(_eval_lm_vec(om, tel), om.t2o) : tel_o = o.tel
+    !isnothing(star) ? star_o = spectra_interp(_eval_lm_vec(om, star), om.b2o) : star_o = o.star
+    !isnothing(rv) ? rv_o = spectra_interp(_eval_lm_vec(om, rv), om.b2o) : rv_o = o.rv
     return _loss(tel_o, star_o, rv_o, d)
 end
-function loss_recalc_rv_basis(om::OrderModel, d::Data, tel, star, rv_s)
+_loss(mws::ModelWorkspace; kwargs...) = _loss(mws.o, mws.om, mws.d; kwargs...)
+function _loss_recalc_rv_basis(om::OrderModel, d::Data, tel, star, rv_s)
 	om.rv.lm.M .= calc_doppler_component_RVSKL_Flux(om.star.λ, om.star.lm.μ)
-    return _loss(spectra_interp(_eval_lm(tel), om.t2o),
-	        spectra_interp(_eval_lm(star), om.b2o),
+    return _loss(spectra_interp(_eval_lm_vec(om, tel), om.t2o),
+	        spectra_interp(_eval_lm_vec(om, star), om.b2o),
 			spectra_interp(_eval_lm(om.rv.lm.M, rv_s), om.b2o), d)
 end
+_loss_recalc_rv_basis(mws::ModelWorkspace, tel, star, rv_s) = _loss_recalc_rv_basis(mws.om, mws.d, tel, star, rv_s)
 
-function loss_func(o::Output, om::OrderModel, d::Data)
-	l(; kwargs...) = loss(o, om, d; kwargs...)
+function loss_func(mws::ModelWorkspace)
+	l(; kwargs...) = _loss(mws; kwargs...)
 	return l
 end
-function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
+function loss_funcs_telstar(mws::ModelWorkspace)
+	o, om, d = mws.o, mws.om, mws.d
     l_telstar(telstar; kwargs...) =
-        loss(o, om, d; tel=telstar[1], star=telstar[2], recalc_rv=false, kwargs...) +
+        _loss(mws; tel=telstar[1], star=telstar[2], kwargs...) +
 			model_prior(telstar[1], om.reg_tel) + model_prior(telstar[2], om.reg_star)
     function l_telstar_s(telstar_s)
-		recalc_tel = !(typeof(om.tel.lm) <: TemplateModel)
-		recalc_star = !(typeof(om.tel.lm) <: TemplateModel)
-		recalc_tel ? tel = [om.tel.lm.M, telstar_s[1], om.tel.lm.μ] : tel = om.tel.lm
-		recalc_star ? star = [om.star.lm.M, telstar_s[2], om.star.lm.μ] : star = om.star.lm
-		return loss(o, om, d; tel=tel, star=star, recalc_rv=false, recalc_tel=recalc_tel, recalc_star=recalc_star) +
+		!(typeof(om.tel.lm) <: TemplateModel) ? tel = [om.tel.lm.M, telstar_s[1], om.tel.lm.μ] : tel = nothing
+		!(typeof(om.tel.lm) <: TemplateModel) ? star = [om.star.lm.M, telstar_s[2], om.star.lm.μ] : star = nothing
+		return _loss(mws; tel=tel, star=star) +
 			model_prior(tel, om.reg_tel) + model_prior(star, om.reg_star)
     end
 
-    l_rv(rv_s) = loss(o, om, d; rv=[om.rv.lm.M, rv_s], recalc_tel=false, recalc_star=false)
+    l_rv(rv_s) = _loss(mws; rv=[om.rv.lm.M, rv_s])
 
     return l_telstar, l_telstar_s, l_rv
 end
-function loss_funcs_total(o::Output, om::OrderModel, d::Data)
+function loss_funcs_total(mws::ModelWorkspace)
+	o, om, d = mws.o, mws.om, mws.d
     l_total(total) =
-		loss_recalc_rv_basis(om, d, total[1], total[2], total[3]) +
+		_loss_recalc_rv_basis(mws, total[1], total[2], total[3]) +
 		model_prior(total[1], om.reg_tel) + model_prior(total[2], om.reg_star)
     function l_total_s(total_s)
-		recalc_tel = !(typeof(om.tel.lm) <: TemplateModel)
-		recalc_star = !(typeof(om.tel.lm) <: TemplateModel)
-		recalc_tel ? tel = [om.tel.lm.M, total_s[1], om.tel.lm.μ] : tel = om.tel.lm
-		recalc_star ? star = [om.star.lm.M, total_s[2], om.star.lm.μ] : star = om.star.lm
+		!(typeof(om.tel.lm) <: TemplateModel) ? tel = [om.tel.lm.M, total_s[1], om.tel.lm.μ] : tel = nothing
+		!(typeof(om.star.lm) <: TemplateModel) ? star = [om.star.lm.M, total_s[2], om.star.lm.μ] : star = nothing
 		rv = [om.rv.lm.M, total_s[3]]
-		return loss(o, om, d; tel=tel, star=star, rv=rv, recalc_tel=recalc_tel, recalc_star=recalc_star) +
+		return _loss(mws; tel=tel, star=star, rv=rv) +
 			model_prior(tel, om.reg_tel) + model_prior(star, om.reg_star)
     end
 
@@ -286,27 +284,29 @@ TotalWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
 TotalWorkspace(om::OrderModel, d::Data; kwargs...) =
 	TotalWorkspace(Output(om, d), om, d; kwargs...)
 
-function train_OrderModel!(mw::TotalWorkspace; ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, kwargs...)
+Output!(mws::ModelWorkspace) = Output!(mws.o, mws.om, mws.d)
+
+function train_OrderModel!(mws::TotalWorkspace; ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, kwargs...)
 
     if ignore_regularization
-        reg_tel_holder = copy(mw.om.reg_tel)
-        reg_star_holder = copy(mw.om.reg_star)
-        zero_regularization(mw.om)
+        reg_tel_holder = copy(mws.om.reg_tel)
+        reg_star_holder = copy(mws.om.reg_star)
+        zero_regularization(mws.om)
     end
 
-	cb = default_cb(mw.total.as; print_stuff)
-	result = train_SubModel!(mw.total; cb=cb, kwargs...)
-	mw.total.as.iter = 0
-    Output!(mw.o, mw.om, mw.d)
+	cb = default_cb(mws.total.as; print_stuff)
+	result = train_SubModel!(mws.total; cb=cb, kwargs...)
+	mws.total.as.iter = 0
+    Output!(mws)
 
     if ignore_regularization
-        copy_dict!(mw.om.reg_tel, reg_tel_holder)
-        copy_dict!(mw.om.reg_star, reg_star_holder)
+        copy_dict!(mws.om.reg_tel, reg_tel_holder)
+        copy_dict!(mws.om.reg_star, reg_star_holder)
     end
 	return result
 end
-fine_train_OrderModel!(mw::TotalWorkspace; iter=3*_iter_def, kwargs...) =
-	train_OrderModel!(mw; iter=iter, kwargs...)
+fine_train_OrderModel!(mws::TotalWorkspace; iter=3*_iter_def, kwargs...) =
+	train_OrderModel!(mws; iter=iter, kwargs...)
 
 
 ## Optim Versions
@@ -345,7 +345,7 @@ function OptimSubWorkspace(θ::possible_θ, loss::Function; use_cg::Bool=true)
 	return OptimSubWorkspace(θ, obj, opt, p0, unflatten)
 end
 
-struct OptimWorkspace
+struct OptimWorkspace <: ModelWorkspace
     telstar::OptimSubWorkspace
     rv::OptimSubWorkspace
     om::OrderModel
