@@ -59,8 +59,8 @@ end
 
 ## Improving regularization
 
-if false#!model.metadata[:todo][:reg_improved]
-    @time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true, ignore_regularization=true)  # 16s
+if !model.metadata[:todo][:reg_improved]
+    @time SSOF.train_OrderModel!(mws; print_stuff=true, ignore_regularization=true)  # 16s
     n_obs_train = Int(round(0.75 * n_obs))
     training_inds = sort(StatsBase.sample(1:n_obs, n_obs_train; replace=false))
     @time SSOF.fit_regularization!(model, data, training_inds)
