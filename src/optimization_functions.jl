@@ -64,7 +64,7 @@ function loss_funcs_total(o::Output, om::OrderModel, d::Data)
 
     return l_total, l_total_s
 end
-loss_funcs_telstar(mws::ModelWorkspace) = loss_funcs_telstar(mws.o, mws.om, mws.d)
+loss_funcs_total(mws::ModelWorkspace) = loss_funcs_total(mws.o, mws.om, mws.d)
 
 ## Adam Version
 
