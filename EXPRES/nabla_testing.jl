@@ -54,3 +54,13 @@ for i in 1:2
         θ[i][j][100] = hold
     end
 end
+
+## Can we use views in Nabla gradients
+using Nabla
+smol = SSOF.TotalWorkspace(mws.om, mws.d, 1:10)
+Δ = only(∇(smol.total.l)(smol.total.θ))
+
+smol = SSOF.TotalWorkspace(mws.om, mws.d, 1:10; only_s=true)
+Δ = only(∇(smol.total.l)(smol.total.θ))
+
+x2
