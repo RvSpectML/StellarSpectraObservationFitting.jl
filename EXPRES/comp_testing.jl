@@ -40,6 +40,8 @@ end
 
 ## Creating optimization workspace
 workspace = SSOF.OptimWorkspace(test_model, data)
+workspace = SSOF.TotalWorkspace(test_model, data)
+workspace = SSOF.TelStarWorkspace(test_model, data)
 
 ## Plotting
 
