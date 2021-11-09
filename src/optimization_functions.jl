@@ -30,9 +30,12 @@ function _loss_recalc_rv_basis(om::OrderModel, d::Data, tel, star, rv_s)
 end
 _loss_recalc_rv_basis(mws::ModelWorkspace, tel, star, rv_s) = _loss_recalc_rv_basis(mws.om, mws.d, tel, star, rv_s)
 
-function loss_func(mws::ModelWorkspace)
-	l(; kwargs...) = _loss(mws; kwargs...)
-	return l
+function loss_func(mws::ModelWorkspace; include_priors::Bool=false)
+	if include_priors
+		return (; kwargs...) -> _loss(mws; kwargs...) + tel_prior(mws.om) + star_prior(mws.om)
+	else
+		return (; kwargs...) -> _loss(mws; kwargs...)
+	end
 end
 function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
     l_telstar(telstar; kwargs...) =
@@ -85,7 +88,7 @@ Adam(θ0::AbstractArray; α::Float64=α, β1::Float64=β1, β2::Float64=β2, ϵ:
 	Adam(θ0, α, β1, β2, ϵ)
 Adams(θ0s::Vector{<:AbstractArray}, α::Float64, β1::Float64, β2::Float64, ϵ::Float64) =
 	Adams.(θ0s, α, β1, β2, ϵ)
-Adams(θ0s::Vector{<:AbstractArray}; α::Float64=α, β1::Float64=β1, β2::Float64=β2, ϵ::Float64=ϵ) =
+Adams(θ0s; α::Float64=α, β1::Float64=β1, β2::Float64=β2, ϵ::Float64=ϵ) =
 	Adams(θ0s, α, β1, β2, ϵ)
 Adams(θ0::AbstractVecOrMat{<:Real}, α::Float64, β1::Float64, β2::Float64, ϵ::Float64) =
 	Adam(θ0, α, β1, β2, ϵ)
@@ -103,7 +106,7 @@ mutable struct AdamState
 end
 AdamState() = AdamState(0, 0., 0., 0., 0., 0., 0., 0., 0.)
 function println(as::AdamState)
-    println("Iter:  ", as.iter)
+    # println("Iter:  ", as.iter)
     println("ℓ:     ", as.ℓ,    "  ℓ_$(as.iter)/ℓ_$(as.iter-1):       ", as.δ_ℓ)
 	println("L2_Δ:  ", as.L2_Δ, "  L2_Δ_$(as.iter)/L2_Δ_$(as.iter-1): ", as.δ_L2_Δ)
 	println()
@@ -145,8 +148,9 @@ end
 
 _print_stuff_def = false
 _iter_def = 100
-_f_tol_def = 1e-3
-_g_tol_def = 1e-3
+_f_reltol_def = 1e-6
+_g_reltol_def = 1e-3
+_g_L∞tol_def = 1e3
 
 struct AdamWorkspace{T}
 	θ::T
@@ -167,17 +171,17 @@ function update!(aws::AdamWorkspace)
     iterate!(aws.θ, Δ, aws.opt)
 end
 
-check_converged(as::AdamState, f_tol::Real, g_tol::Real) = (max(as.δ_ℓ, 1/as.δ_ℓ) < (1 + abs(f_tol))) && (max(as.δ_L2_Δ,1/as.δ_L2_Δ) < (1+abs(g_tol)))
-check_converged(as::AdamState, iter::Int, f_tol::Real, g_tol::Real) = (as.iter > iter) || check_converged(as, f_tol, g_tol)
-function train_SubModel!(aws::AdamWorkspace; iter=_iter_def, f_tol = _f_tol_def, g_tol = _g_tol_def, cb::Function=()->(), kwargs...)
+check_converged(as::AdamState, f_reltol::Real, g_reltol::Real, g_L∞tol::Real) = ((max(as.δ_ℓ, 1/as.δ_ℓ) < (1 + abs(f_tol))) && (max(as.δ_L2_Δ,1/as.δ_L2_Δ) < (1+abs(g_tol)))) || (as.L∞_Δ < g_L∞tol)
+check_converged(as::AdamState, iter::Int, f_reltol::Real, g_reltol::Real, g_L∞tol::Real) = (as.iter > iter) || check_converged(as, f_reltol, g_reltol, g_L∞tol)
+function train_SubModel!(aws::AdamWorkspace; iter=_iter_def, f_reltol = _f_reltol_def, g_reltol = _g_reltol_def, g_L∞tol = _g_L∞tol_def, cb::Function=()->(), kwargs...)
 	converged = false  # check_converged(aws.as, iter, f_tol, g_tol)
 	while !converged
 		update!(aws)
 		cb()
-		converged = check_converged(aws.as, iter, f_tol, g_tol)
+		converged = check_converged(aws.as, iter, f_reltol, g_reltol, g_L∞tol)
 	end
-	converged = check_converged(aws.as, f_tol, g_tol)
-	converged ? println("Converged") : println("Max Iters Reached")
+	converged = check_converged(aws.as, f_reltol, g_reltol, g_L∞tol)
+	# converged ? println("Converged") : println("Max Iters Reached")
 	return converged
 end
 function default_cb(as::AdamState; print_stuff=_print_stuff_def)
@@ -185,6 +189,20 @@ function default_cb(as::AdamState; print_stuff=_print_stuff_def)
 		return () -> println(as)
 	else
 		return () -> ()
+	end
+end
+
+function rel_step_size(θ)
+    # return sqrt(sum(abs2, -α .* ∇θ ./ (∇θ .+ ϵ)) / sum(abs2, θ)) / α
+	# return sqrt(sum(abs2, ∇θ ./ (∇θ .+ ϵ)) / sum(abs2, θ))
+	return sqrt(length(θ) / sum(abs2, θ))
+end
+function scale_α_helper!(opt::Adam, α_ratio::Real, θ::AbstractVecOrMat, α::Real, scale_α::Bool)
+	scale_α ? opt.α = α_ratio / rel_step_size(θ) : opt.α = α
+end
+function scale_α_helper!(opts::Vector, α_ratio::Real, θs, α::Real, scale_α::Bool)
+	for i in eachindex(opts)
+		scale_α_helper!(opts[i], α_ratio, θs[i], α, scale_α)
 	end
 end
 
@@ -196,50 +214,55 @@ struct TelStarWorkspace <: ModelWorkspace
 	d::Data
 	only_s::Bool
 end
-function TelStarWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false)
+function TelStarWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=false)
 	loss_telstar, loss_telstar_s, loss_rv = loss_funcs_telstar(o, om, d)
 	only_s ?
 		telstar = AdamWorkspace([om.tel.lm.s, om.star.lm.s], loss_telstar_s) :
 		telstar = AdamWorkspace([vec(om.tel.lm), vec(om.star.lm)], loss_telstar)
 	rv = AdamWorkspace(om.rv.lm.s, loss_rv)
+	α_ratio = α * sqrt(length(om.tel.lm.μ))
+	scale_α_helper!(telstar.opt, α_ratio, telstar.θ, α, scale_α)
+	scale_α_helper!(rv.opt, α_ratio, rv.θ, α, true)
 	return TelStarWorkspace(telstar, rv, om, o, d, only_s)
 end
+TelStarWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
+	TelStarWorkspace(om(inds), d(inds); kwargs...)
+TelStarWorkspace(om::OrderModel, d::Data; kwargs...) =
+	TelStarWorkspace(Output(om, d), om, d; kwargs...)
 
-function train_OrderModel!(mw::TelStarWorkspace; train_telstar::Bool=true, ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, kwargs...)
+_telstar_iters_per_loop = 50
+function train_OrderModel!(mw::TelStarWorkspace; train_telstar::Bool=true, ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, iters_per_loop::Int=_telstar_iters_per_loop, iter=_iter_def, kwargs...)
 
     if ignore_regularization
         reg_tel_holder = copy(mw.om.reg_tel)
         reg_star_holder = copy(mw.om.reg_star)
         zero_regularization(mw.om)
     end
-
-    if train_telstar
-		cb_telstar = default_cb(mw.telstar.as; print_stuff)
-		result_telstar = train_SubModel!(mw.telstar; cb=cb_telstar, kwargs...)
-		mw.telstar.as.iter = 0
-        mw.o.star .= star_model(mw.om)
-        mw.o.tel .= tel_model(mw.om)
-    end
-	mw.om.rv.lm.M .= calc_doppler_component_RVSKL(mw.om.star.λ, mw.om.star.lm.μ)
-	cb_rv = default_cb(mw.rv.as; print_stuff)
-	result_rv = train_SubModel!(mw.rv; cb=cb_rv, kwargs...)
-    mw.rv.as.iter = 0
-	mw.o.rv .= rv_model(mw.om)
+	n_loop = Int(ceil(iter//iters_per_loop))
+	for i in 1:n_loop
+		i == n_loop ? current_iter = iter % iters_per_loop : current_iter = iters_per_loop
+	    if train_telstar
+			cb_telstar = default_cb(mw.telstar.as; print_stuff)
+			result_telstar = train_SubModel!(mw.telstar; cb=cb_telstar, iter=current_iter, kwargs...)
+			mw.telstar.as.iter = 0
+	        mw.o.star .= star_model(mw.om)
+	        mw.o.tel .= tel_model(mw.om)
+	    end
+		mw.om.rv.lm.M .= calc_doppler_component_RVSKL(mw.om.star.λ, mw.om.star.lm.μ)
+		cb_rv = default_cb(mw.rv.as; print_stuff)
+		result_rv = train_SubModel!(mw.rv; cb=cb_rv, iter=current_iter, kwargs...)
+	    mw.rv.as.iter = 0
+		mw.o.rv .= rv_model(mw.om)
+	end
 	recalc_total!(mw.o, mw.d)
 
     if ignore_regularization
         copy_dict!(mw.om.reg_tel, reg_tel_holder)
         copy_dict!(mw.om.reg_star, reg_star_holder)
     end
-	return result_telstar, result_rv
+	# return result_telstar, result_rv
 end
 
-
-function rel_step_size(θ)
-    # return sqrt(sum(abs2, -α .* ∇θ ./ (∇θ .+ ϵ)) / sum(abs2, θ)) / α
-	# return sqrt(sum(abs2, ∇θ ./ (∇θ .+ ϵ)) / sum(abs2, θ))
-	return sqrt(length(θ) / sum(abs2, θ))
-end
 
 struct TotalWorkspace <: ModelWorkspace
 	total::AdamWorkspace
@@ -249,15 +272,7 @@ struct TotalWorkspace <: ModelWorkspace
 	only_s::Bool
 end
 
-function scale_α_helper!(opt::Adam, α_ratio::Real, θ::AbstractVecOrMat, α::Real, scale_α::Bool)
-	scale_α ? opt.α = α_ratio / rel_step_size(θ) : opt.α = α
-end
-function scale_α_helper!(opts::Vector, α_ratio::Real, θs, α::Real, scale_α::Bool)
-	for i in eachindex(opts)
-		scale_α_helper!(opts[i], α_ratio, θs[i], α, scale_α)
-	end
-end
-function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=true)
+function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=false)
 	l_total, l_total_s = loss_funcs_total(o, om, d)
 	only_s ?
 		total = AdamWorkspace([om.tel.lm.s, om.star.lm.s, om.rv.lm.s], l_total_s) :
@@ -267,15 +282,14 @@ function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, 
 	# so rel_step_size(om.tel.lm.M) == sqrt(size(om.tel.lm.M, 1)) == sqrt(length(om.tel.lm.μ))
 	# which is a quantity even template models have
 	α_ratio = α * sqrt(length(om.tel.lm.μ))
-	scale_α_helper!(total.opt, α_ratio, total.θ, α, scale_α)
+	scale_α_helper!(total.opt[1:2], α_ratio, total.θ, α, scale_α)
+	scale_α_helper!(total.opt[3], α_ratio, total.θ[3], α, true)
 	return TotalWorkspace(total, om, o, d, only_s)
 end
 TotalWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
 	TotalWorkspace(om(inds), d(inds); kwargs...)
 TotalWorkspace(om::OrderModel, d::Data; kwargs...) =
 	TotalWorkspace(Output(om, d), om, d; kwargs...)
-
-Output!(mws::ModelWorkspace) = Output!(mws.o, mws.om, mws.d)
 
 function train_OrderModel!(mws::TotalWorkspace; ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, kwargs...)
 
@@ -296,8 +310,8 @@ function train_OrderModel!(mws::TotalWorkspace; ignore_regularization::Bool=fals
     end
 	return result
 end
-fine_train_OrderModel!(mws::TotalWorkspace; iter=3*_iter_def, kwargs...) =
-	train_OrderModel!(mws; iter=iter, kwargs...)
+
+Output!(mws::ModelWorkspace) = Output!(mws.o, mws.om, mws.d)
 
 
 ## Optim Versions
@@ -363,29 +377,28 @@ function _OSW_optimize!(osw::OptimSubWorkspace, options::Optim.Options)
     return result
 end
 
+function optim_print(x::OptimizationState)
+	println()
+	if x.iteration > 0
+		println("Iter:  ", x.iteration)
+		println("Time:  ", x.metadata["time"], " s")
+		println("ℓ:     ", x.value)
+		println("l∞(∇): ", x.g_norm)
+		println()
+	end
+	return false
+end
 # ends optimization if true
-function optim_cb(x::OptimizationState; print_stuff::Bool=true)
+function optim_cb_f(x::OptimizationState; print_stuff::Bool=true)
     if print_stuff
-        println()
-        if x.iteration > 0
-            println("Iter:  ", x.iteration)
-            println("Time:  ", x.metadata["time"], " s")
-            println("ℓ:     ", x.value)
-            println("l∞(∇): ", x.g_norm)
-            println()
-        end
+		return (x::OptimizationState) -> optim_print(x::OptimizationState)
+    else
+		return (x::OptimizationState) -> false
     end
-    return false
 end
 
-
-# _print_stuff_def = false
-# _iter_def = 100
-# _f_tol_def = 1e-6
-# _g_tol_def = 400
-
-function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_tol_def, g_tol::Real=_g_tol_def*sqrt(length(ow.telstar.p0)), train_telstar::Bool=true, ignore_regularization::Bool=false, kwargs...)
-    optim_cb_local(x::OptimizationState) = optim_cb(x; print_stuff=print_stuff)
+function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, train_telstar::Bool=true, ignore_regularization::Bool=false, kwargs...)
+    optim_cb = optim_cb_f(x; print_stuff=print_stuff)
 
     if ignore_regularization
         reg_tel_holder = copy(ow.om.reg_tel)
@@ -394,7 +407,7 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
     end
 
     if train_telstar
-        options = Optim.Options(;iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb_local, kwargs...)
+        options = Optim.Options(;iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb, kwargs...)
         # optimize tellurics and star
         result_telstar = _OSW_optimize!(ow.telstar, options)
 		lm_vec = ow.telstar.unflatten(ow.telstar.p0)
@@ -410,7 +423,7 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
     end
 
     # optimize RVs
-    options = Optim.Options(;callback=optim_cb_local, g_tol=g_tol*sqrt(length(ow.rv.p0) / length(ow.telstar.p0)), kwargs...)
+    options = Optim.Options(;callback=optim_cb, g_tol=1e-2, kwargs...)
     ow.om.rv.lm.M .= calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
     result_rv = _OSW_optimize!(ow.rv, options)
 	ow.om.rv.lm.s[:] = ow.rv.unflatten(ow.rv.p0)
@@ -424,13 +437,5 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
     return result_telstar, result_rv
 end
 
-function train_OrderModel!(ow::OptimWorkspace, n::Int; kwargs...)
-    for i in 1:n
-        train_OrderModel!(ow; kwargs...)
-    end
-end
-
-function fine_train_OrderModel!(ow::OptimWorkspace; g_tol::Real=_g_tol_def*sqrt(length(ow.telstar.p0)), kwargs...)
-    train_OrderModel!(ow; kwargs...)  # 16s
-    return train_OrderModel!(ow; g_tol=g_tol/10, f_tol=1e-8, kwargs...)
-end
+fine_train_OrderModel!(mws::ModelWorkspace; iter=3*_iter_def, kwargs...) =
+	train_OrderModel!(mws; iter=iter, kwargs...)
