@@ -55,6 +55,7 @@ end
 	GenericData(view(d.flux, :, inds), view(d.var, :, inds),
 	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds))
 Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star))
+GenericData(d::LSFData) = GenericData(d.flux, d.var, d.log_λ_obs, d.log_λ_star)
 
 function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=2*sqrt(2))
     log_min_wav, log_max_wav = extrema(log_λ_obs)
@@ -122,7 +123,8 @@ LinearModel(lm::TemplateModel, s::AbstractMatrix) = lm
 # Ref(lm::BaseLinearModel) = [Ref(lm.M), Ref(lm.s)]
 # Ref(lm::TemplateModel) = [Ref(lm.μ)]
 
-_eval_lm(μ, n::Int) = repeat(μ, 1, n)
+# _eval_lm(μ, n::Int) = repeat(μ, 1, n)
+_eval_lm(μ, n::Int) = μ * ones(n)'  # this is faster I dont know why
 _eval_lm(M, s) = M * s
 _eval_lm(M, s, μ) =
 	_eval_lm(M, s) .+ μ
@@ -191,10 +193,11 @@ end
 
 default_reg_tel = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
 	(:L1_μ₊_factor, 6.), (:L2_M, 1e-1), (:L1_M, 1e3)])
-# default_reg_star = Dict([(:L2_μ, 1e4), (:L1_μ, 1e3),
-# 	(:L1_μ₊_factor, 7.2), (:L2_M, 1e1), (:L1_M, 1e6)])
-default_reg_star = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
-	(:L1_μ₊_factor, 6.), (:L2_M, 1e-1), (:L1_M, 1e3)])
+default_reg_star = Dict([(:L2_μ, 1e4), (:L1_μ, 1e3),
+	(:L1_μ₊_factor, 7.2), (:L2_M, 1e1), (:L1_M, 1e6)])
+# They need to be different or else the stellar μ will be surpressed
+# default_reg_star = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
+# 	(:L1_μ₊_factor, 6.), (:L2_M, 1e-1), (:L1_M, 1e3)])
 
 function oversamp_interp_helper(to_bounds::AbstractVector, from_x::AbstractVector)
 	ans = spzeros(length(to_bounds)-1, length(from_x))
@@ -277,7 +280,7 @@ function zero_regularization(om::OrderModel)
 end
 
 function _eval_lm_vec(om::OrderModel, v)
-	@assert 1 < length(v) < 4
+	@assert 0 < length(v) < 4
 	if length(v)==1
 		return _eval_lm(v[1], om.n)
 	elseif length(v)==2
@@ -288,24 +291,24 @@ function _eval_lm_vec(om::OrderModel, v)
 end
 
 # I have no idea why the negative sign needs to be here
-rvs(model::OrderModel) = vec(Array((model.rv.lm.s .* -light_speed_nu)'))
+rvs(model::OrderModel) = vec(model.rv.lm.s .* -light_speed_nu)
 
 function downsize(lm::FullLinearModel, n_comp::Int)
 	if n_comp > 0
 		return FullLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :], lm.μ[:])
 	else
-		return TemplateModel(lm.μ[:], size(lm.M, 1))
+		return TemplateModel(lm.μ[:], size(lm.s, 2))
 	end
 end
 downsize(lm::BaseLinearModel, n_comp::Int) =
 	BaseLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :])
 downsize(sm::Submodel, n_comp::Int) =
-	Submodel(sm.log_λ[:], sm.λ[:], downsize(sm.lm, n_comp))
+	Submodel(copy(sm.log_λ), copy(sm.λ), downsize(sm.lm, n_comp))
 downsize(m::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
 	OrderModel(
 		downsize(m.tel, n_comp_tel),
 		downsize(m.star, n_comp_star),
-		m.rv, m.reg_tel, m.reg_star, m.metadata)
+		m.rv, m.reg_tel, m.reg_star, m.b2o, m.t2o, m.metadata, m.n)
 
 tel_prior(om::OrderModel) = model_prior(om.tel.lm, om.reg_tel)
 star_prior(om::OrderModel) = model_prior(om.star.lm, om.reg_star)
@@ -483,7 +486,7 @@ function model_prior(lm, reg::Dict{Symbol, <:Real})
 	end
 	return val
 end
-model_prior(lm::Union{FullLinearModel, TemplateModel}, reg) = model_prior(vec(lm), reg)
+model_prior(lm::Union{FullLinearModel, TemplateModel}, reg::Dict{Symbol, <:Real}) = model_prior(vec(lm), reg)
 
 total_model(tel, star, rv) = tel .* (star .+ rv)
 
