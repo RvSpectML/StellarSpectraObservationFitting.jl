@@ -1,27 +1,25 @@
 include("testing_header.jl")
 # model = reset_model(; overrule=true)
 
-## running the optimization outside the functions
-using Optim
-workspace = SSOF.OptimWorkspace(model, data)
-ow = workspace; osw = ow.telstar
-optim_cb_local(x::OptimizationState) = SSOF.optim_cb(x; print_stuff=true)
-options = Optim.Options(;iterations=100, f_tol=SSOF._f_tol_def, g_tol=SSOF._g_tol_def*sqrt(length(osw.p0)), callback=optim_cb_local)
-@time result = Optim.optimize(osw.obj, osw.p0, osw.opt, options)
+## Optim Version
+
+ows = SSOF.OptimWorkspace(model, data)
+res = SSOF.train_OrderModel!(ows; print_stuff=true)
+res
 
 ## using ADAM to optimize
 
-model = reset_model()
-om = model; d = data; o = SSOF.Output(om, d)
-SSOF_path = dirname(dirname(pathof(SSOF)))
-include(SSOF_path * "/src/_plot_functions.jl")
-plt = status_plot(o, d)
-png(plt, "before")
+model2 = reset_model()
+# om = model; d = data; o = SSOF.Output(om, d)
+# SSOF_path = dirname(dirname(pathof(SSOF)))
+# include(SSOF_path * "/src/_plot_functions.jl")
+# status_plot(o, d)
+# png(plt, "before")
 
-mws = SSOF.TotalWorkspace(o, om, d)
-train_OrderModel!(mws; print_stuff=true)
-plt = status_plot(o, d)
-png(plt, "after")
+mws = SSOF.TelStarWorkspace(model2, data)
+@time SSOF.train_OrderModel!(mws; print_stuff=true)
+# status_plot(o, d)
+# png(plt, "after")
 
 ## looking at Nabla gradients (they seem correct)
 
@@ -63,4 +61,48 @@ smol = SSOF.TotalWorkspace(mws.om, mws.d, 1:10)
 smol = SSOF.TotalWorkspace(mws.om, mws.d, 1:10; only_s=true)
 Δ = only(∇(smol.total.l)(smol.total.θ))
 
-x2
+## Looking at different optimization paths
+
+SSOF_path = dirname(dirname(pathof(SSOF)))
+include(SSOF_path * "/src/_plot_functions.jl")
+function sanity(mws::SSOF.ModelWorkspace)
+    status_plot(mws)
+    plot_stellar_model_bases(mws.om)
+    plot_stellar_model_scores(mws.om)
+    plot_telluric_model_bases(mws.om)
+    plot_telluric_model_scores(mws.om)
+    println("mean(abs(rv)): ", mean(abs, SSOF.rvs(mws.om)))
+end
+function new_model()
+    om = reset_model()
+    # SSOF.copy_dict!(om.reg_star, SSOF.default_reg_star)
+    return om
+end
+function current_loss(mws::SSOF.ModelWorkspace)
+    l = SSOF.loss_func(mws; include_priors=true)
+    l()
+end
+
+d = data
+d = SSOF.GenericData(data)
+
+model1 = new_model()
+mws1 = SSOF.OptimWorkspace(model1, d)
+
+
+# sanity(mws1)
+@time res = SSOF.train_OrderModel!(mws1; print_stuff=true)
+current_loss(mws1)
+sanity(mws1)
+
+model2 = new_model()
+mws2 = SSOF.TelStarWorkspace(model2, d)
+@time SSOF.train_OrderModel!(mws2; print_stuff=true)
+current_loss(mws2)
+sanity(mws2)
+
+model3 = new_model()
+mws3 = SSOF.TotalWorkspace(model3, d)
+@time SSOF.train_OrderModel!(mws3; print_stuff=true)
+current_loss(mws3)
+sanity(mws3)
