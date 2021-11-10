@@ -13,7 +13,7 @@ function eval_regularization(reg_fields::Vector{Symbol}, reg_key::Symbol, reg_va
 end
 
 
-function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; kwargs...)
+function _fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; kwargs...)
     om = mws.om
     @assert 0 < reg_min < reg_max < Inf
     ℓs = Array{Float64}(undef, 2)
@@ -47,6 +47,13 @@ function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol,
         end
     end
 end
+function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; kwargs...)
+    if haskey(getfield(mws.om, reg_fields[1]), reg_key)
+        before = getfield(mws.om, reg_fields[1])[reg_key]
+        _fit_regularization_helper!(_reg_fields, reg_key, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
+        println("$(reg_fields[1])[:$reg_key] : $before -> $(getfield(mws.om, reg_fields[1])[reg_key])")
+    end
+end
 
 
 _key_list = [:L2_μ, :L1_μ, :L1_μ₊_factor, :L2_M, :L1_M, :shared_M]
@@ -57,9 +64,9 @@ function check_for_valid_regularization(reg::Dict{Symbol, <:Real})
 end
 
 
-function fit_regularization!(mws::ModelWorkspace, training_inds::AbstractVecOrMat; key_list::Vector{Symbol}=_key_list, share_regs::Bool=true, kwargs...)
+function fit_regularization!(mws::ModelWorkspace, training_inds::AbstractVecOrMat; key_list::Vector{Symbol}=_key_list, share_regs::Bool=false, kwargs...)
     om = mws.om
-    n_obs = size(d.flux, 2)
+    n_obs = size(mws.d.flux, 2)
     testing_inds = [i for i in 1:n_obs if !(i in training_inds)]
     println("starting regularization searches")
     check_for_valid_regularization(om.reg_tel)
@@ -72,22 +79,10 @@ function fit_regularization!(mws::ModelWorkspace, training_inds::AbstractVecOrMa
             test_factor, reg_min, reg_max = 10, 1e-3, 1e10
         end
         if share_regs
-            if haskey(om.reg_tel, key)
-                println("before: regs[:$key]  = $(om.reg_tel[key])")
-                fit_regularization_helper!(_reg_fields, key, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
-                println("after:  regs[:$key]  = $(om.reg_tel[key])")
-            end
+            fit_regularization_helper!(_reg_fields, key, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
         else
-            if haskey(om.reg_tel, key)
-                println("before: reg_tel[:$key]  = $(om.reg_tel[key])")
-                fit_regularization_helper!([:reg_tel], key, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
-                println("after:  reg_tel[:$key]  = $(om.reg_tel[key])")
-            end
-            if haskey(om.reg_star, key)
-                println("before: reg_star[:$key] = $(om.reg_star[key])")
-                fit_regularization_helper!([:reg_star], key, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
-                println("after:  reg_star[:$key] = $(om.reg_star[key])")
-            end
+            fit_regularization_helper!([:reg_tel], key, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
+            fit_regularization_helper!([:reg_star], key, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
         end
     end
 end
