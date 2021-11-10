@@ -92,6 +92,7 @@ Adams(θ0s; α::Float64=α, β1::Float64=β1, β2::Float64=β2, ϵ::Float64=ϵ) 
 	Adams(θ0s, α, β1, β2, ϵ)
 Adams(θ0::AbstractVecOrMat{<:Real}, α::Float64, β1::Float64, β2::Float64, ϵ::Float64) =
 	Adam(θ0, α, β1, β2, ϵ)
+Base.copy(opt::Adam) = Adam(opt.α, opt.β1, opt.β2, opt.m, opt.v, opt.β1_acc, opt.β2_acc, opt.ϵ)
 
 mutable struct AdamState
     iter::Int
@@ -192,19 +193,16 @@ function default_cb(as::AdamState; print_stuff=_print_stuff_def)
 	end
 end
 
-function rel_step_size(θ)
-    # return sqrt(sum(abs2, -α .* ∇θ ./ (∇θ .+ ϵ)) / sum(abs2, θ)) / α
-	# return sqrt(sum(abs2, ∇θ ./ (∇θ .+ ϵ)) / sum(abs2, θ))
-	return sqrt(length(θ) / sum(abs2, θ))
-end
+rel_step_size(θ::AbstractVecOrMat) = sqrt(mean(abs2, θ))
 function scale_α_helper!(opt::Adam, α_ratio::Real, θ::AbstractVecOrMat, α::Real, scale_α::Bool)
-	scale_α ? opt.α = α_ratio / rel_step_size(θ) : opt.α = α
+	scale_α ? opt.α = α_ratio * rel_step_size(θ) : opt.α = α
 end
 function scale_α_helper!(opts::Vector, α_ratio::Real, θs, α::Real, scale_α::Bool)
 	for i in eachindex(opts)
 		scale_α_helper!(opts[i], α_ratio, θs[i], α, scale_α)
 	end
 end
+_scale_α_def = false
 
 struct TelStarWorkspace <: ModelWorkspace
 	telstar::AdamWorkspace
@@ -214,13 +212,13 @@ struct TelStarWorkspace <: ModelWorkspace
 	d::Data
 	only_s::Bool
 end
-function TelStarWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=false)
+function TelStarWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def)
 	loss_telstar, loss_telstar_s, loss_rv = loss_funcs_telstar(o, om, d)
 	only_s ?
 		telstar = AdamWorkspace([om.tel.lm.s, om.star.lm.s], loss_telstar_s) :
 		telstar = AdamWorkspace([vec(om.tel.lm), vec(om.star.lm)], loss_telstar)
 	rv = AdamWorkspace(om.rv.lm.s, loss_rv)
-	α_ratio = α * sqrt(length(om.tel.lm.μ))
+	α_ratio = α * sqrt(length(om.tel.lm.μ)) # = α / rel_step_size(om.tel.lm.M) assuming M starts as L2 normalized basis vectors. Need to use this instead because TemplateModels don't have basis vectors
 	scale_α_helper!(telstar.opt, α_ratio, telstar.θ, α, scale_α)
 	scale_α_helper!(rv.opt, α_ratio, rv.θ, α, true)
 	return TelStarWorkspace(telstar, rv, om, o, d, only_s)
@@ -272,16 +270,12 @@ struct TotalWorkspace <: ModelWorkspace
 	only_s::Bool
 end
 
-function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=false)
+function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def)
 	l_total, l_total_s = loss_funcs_total(o, om, d)
 	only_s ?
 		total = AdamWorkspace([om.tel.lm.s, om.star.lm.s, om.rv.lm.s], l_total_s) :
 		total = AdamWorkspace([vec(om.tel.lm), vec(om.star.lm), om.rv.lm.s], l_total)
-
-	# if om's basis vectors start normalized
-	# so rel_step_size(om.tel.lm.M) == sqrt(size(om.tel.lm.M, 1)) == sqrt(length(om.tel.lm.μ))
-	# which is a quantity even template models have
-	α_ratio = α * sqrt(length(om.tel.lm.μ))
+	α_ratio = α * sqrt(length(om.tel.lm.μ)) # = α / rel_step_size(om.tel.lm.M) assuming M starts as L2 normalized basis vectors. Need to use this instead because TemplateModels don't have basis vectors
 	scale_α_helper!(total.opt[1:2], α_ratio, total.θ, α, scale_α)
 	scale_α_helper!(total.opt[3], α_ratio, total.θ[3], α, true)
 	return TotalWorkspace(total, om, o, d, only_s)
