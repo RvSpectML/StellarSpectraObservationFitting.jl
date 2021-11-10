@@ -1,10 +1,17 @@
-function test_ℓ_for_n_comps(n_comps::Vector, om::OrderModel, d::Data; return_inters::Bool=false, kwargs...)
-    ws, l = OptimWorkspace(downsize(om, n_comps[1], n_comps[2]), d; return_loss_f=true)
-    fine_train_OrderModel!(ws; kwargs...)  # 16s
+total_length(x::Vector{<:AbstractArray}) = sum(total_length.(x))
+total_length(x::AbstractArray) = length(x)
+total_length(mws::TelStarWorkspace) = total_length(mws.telstar.θ) + total_length(mws.rv.θ)
+total_length(mws::TotalWorkspace) = total_length(mws.total.θ)
+total_length(mws::OptimWorkspace) = length(mws.telstar.p0) + length(mws.rv.p0)
+
+function test_ℓ_for_n_comps(n_comps::Vector, mws_inp::ModelWorkspace; return_inters::Bool=false, kwargs...)
+    mws = typeof(mws_inp)(downsize(mws_inp.om, n_comps[1], n_comps[2]), mws_inp.d)
+    l = loss_func(mws)
+    fine_train_OrderModel!(mws; kwargs...)  # 16s
     if return_inters
-        return ws, l, l(), (length(ws.telstar.p0) + length(ws.rv.p0))
+        return ws, l, l(), total_length(mws)
     else
-        return l(), (length(ws.telstar.p0) + length(ws.rv.p0))
+        return l(), total_length(mws)
     end
 end
 

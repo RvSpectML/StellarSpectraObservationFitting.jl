@@ -34,8 +34,8 @@ struct LSFData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
 end
 (d::LSFData)(inds::AbstractVecOrMat) =
 	LSFData(view(d.flux, :, inds), view(d.var, :, inds),
-	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds), lsf)
-Base.copy(d::LSFData) = LSFData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star), copy(lsf))
+	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds), d.lsf)
+Base.copy(d::LSFData) = LSFData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star), copy(d.lsf))
 
 struct GenericData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
     flux::AM
@@ -55,6 +55,7 @@ end
 	GenericData(view(d.flux, :, inds), view(d.var, :, inds),
 	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds))
 Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star))
+GenericData(d::LSFData) = GenericData(d.flux, d.var, d.log_λ_obs, d.log_λ_star)
 
 function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=2*sqrt(2))
     log_min_wav, log_max_wav = extrema(log_λ_obs)
@@ -101,12 +102,13 @@ struct TemplateModel{T<:Number, AV<:AbstractVector{T}} <: LinearModel
 	n::Int
 end
 Base.copy(tlm::TemplateModel) = TemplateModel(copy(tlm.μ), tlm.n)
-LinearModel(tm::TemplateModel, inds::AbstractVecOrMat) = tm
+LinearModel(tm::TemplateModel, inds::AbstractVecOrMat) = TemplateModel(tm.μ, length(inds))
 
 Base.getindex(lm::LinearModel, s::Symbol) = getfield(lm, s)
 Base.eachindex(lm::T) where {T<:LinearModel} = fieldnames(T)
 Base.setindex!(lm::LinearModel, a::AbstractVecOrMat, s::Symbol) = (lm[s] .= a)
 vec(lm::LinearModel) = [lm[i] for i in eachindex(lm)]
+vec(lm::TemplateModel) = [lm.μ]
 vec(lms::Vector{<:LinearModel}) = [vec(lm) for lm in lms]
 
 LinearModel(M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector) = FullLinearModel(M, s, μ)
@@ -121,11 +123,8 @@ LinearModel(lm::TemplateModel, s::AbstractMatrix) = lm
 # Ref(lm::BaseLinearModel) = [Ref(lm.M), Ref(lm.s)]
 # Ref(lm::TemplateModel) = [Ref(lm.μ)]
 
-function _eval_lm(v)
-	@assert 1 < length(v) < 4
-	return length(v) < 3 ? _eval_lm(v[1],v[2]) : _eval_lm(v[1],v[2],v[3])
-end
-_eval_lm(μ, n::Int) = repeat(μ, 1, n)
+# _eval_lm(μ, n::Int) = repeat(μ, 1, n)
+_eval_lm(μ, n::Int) = μ * ones(n)'  # this is faster I dont know why
 _eval_lm(M, s) = M * s
 _eval_lm(M, s, μ) =
 	_eval_lm(M, s) .+ μ
@@ -148,7 +147,7 @@ end
 function copy_to_LinearModel!(to::LinearModel, from::Vector)
 	fns = fieldnames(typeof(to))
 	@assert length(from)==length(fns)
-	for i in 1:length(fns)
+	for i in eachindex(fns)
 		getfield(to, fns[i]) .= from[i]
 	end
 end
@@ -196,6 +195,9 @@ default_reg_tel = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
 	(:L1_μ₊_factor, 6.), (:L2_M, 1e-1), (:L1_M, 1e3)])
 default_reg_star = Dict([(:L2_μ, 1e4), (:L1_μ, 1e3),
 	(:L1_μ₊_factor, 7.2), (:L2_M, 1e1), (:L1_M, 1e6)])
+# They need to be different or else the stellar μ will be surpressed
+# default_reg_star = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
+# 	(:L1_μ₊_factor, 6.), (:L2_M, 1e-1), (:L1_M, 1e3)])
 
 function oversamp_interp_helper(to_bounds::AbstractVector, from_x::AbstractVector)
 	ans = spzeros(length(to_bounds)-1, length(from_x))
@@ -234,9 +236,10 @@ struct OrderModel{T<:Number}
 	rv::Submodel
 	reg_tel::Dict{Symbol, T}
 	reg_star::Dict{Symbol, T}
-	b2o::Vector{<:_current_matrix_modifier}
-	t2o::Vector{<:_current_matrix_modifier}
+	b2o::AbstractVector{<:_current_matrix_modifier}
+	t2o::AbstractVector{<:_current_matrix_modifier}
 	metadata::Dict{Symbol, Any}
+	n::Int
 end
 function OrderModel(
 	d::Data,
@@ -261,12 +264,12 @@ function OrderModel(
 	metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
 	b2o = oversamp_interp_helper(d.log_λ_star_bounds, star.log_λ)
 	t2o = oversamp_interp_helper(d.log_λ_obs_bounds, tel.log_λ)
-	return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), b2o, t2o, metadata)
+	return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), b2o, t2o, metadata, n_obs)
 end
-Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.b2o, om.t2o, copy(om.metadata))
+Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.b2o, om.t2o, copy(om.metadata), om.n)
 (om::OrderModel)(inds::AbstractVecOrMat) =
 	OrderModel(om.tel(inds), om.star(inds), om.rv(inds), om.reg_tel,
-	om.reg_star, copy(om.metadata))
+		om.reg_star, view(om.b2o, inds), view(om.t2o, inds), copy(om.metadata), length(inds))
 function zero_regularization(om::OrderModel)
 	for (key, value) in om.reg_tel
 		om.reg_tel[key] = 0
@@ -276,32 +279,43 @@ function zero_regularization(om::OrderModel)
 	end
 end
 
+function _eval_lm_vec(om::OrderModel, v)
+	@assert 0 < length(v) < 4
+	if length(v)==1
+		return _eval_lm(v[1], om.n)
+	elseif length(v)==2
+		return _eval_lm(v[1], v[2])
+	elseif length(v)==3
+		return _eval_lm(v[1], v[2], v[3])
+	end
+end
+
 # I have no idea why the negative sign needs to be here
-rvs(model::OrderModel) = vec(Array((model.rv.lm.s .* -light_speed_nu)'))
+rvs(model::OrderModel) = vec(model.rv.lm.s .* -light_speed_nu)
 
 function downsize(lm::FullLinearModel, n_comp::Int)
 	if n_comp > 0
 		return FullLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :], lm.μ[:])
 	else
-		return TemplateModel(lm.μ[:], size(lm.M, 1))
+		return TemplateModel(lm.μ[:], size(lm.s, 2))
 	end
 end
 downsize(lm::BaseLinearModel, n_comp::Int) =
 	BaseLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :])
 downsize(sm::Submodel, n_comp::Int) =
-	Submodel(sm.log_λ[:], sm.λ[:], downsize(sm.lm, n_comp))
+	Submodel(copy(sm.log_λ), copy(sm.λ), downsize(sm.lm, n_comp))
 downsize(m::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
 	OrderModel(
 		downsize(m.tel, n_comp_tel),
 		downsize(m.star, n_comp_star),
-		m.rv, m.reg_tel, m.reg_star, m.metadata)
+		m.rv, m.reg_tel, m.reg_star, m.b2o, m.t2o, m.metadata, m.n)
 
 tel_prior(om::OrderModel) = model_prior(om.tel.lm, om.reg_tel)
 star_prior(om::OrderModel) = model_prior(om.star.lm, om.reg_star)
 
-spectra_interp(model::AbstractMatrix, interp_helper::Vector{<:_current_matrix_modifier}) =
+spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
 	hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
-spectra_interp(model, interp_helper::Vector{<:_current_matrix_modifier}) =
+spectra_interp(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
 	hcat([interp_helper[i] * model[:, i] for i in 1:size(model, 2)]...)
 
 tel_model(om::OrderModel; lm=om.tel.lm::LinearModel) = spectra_interp(lm(), om.t2o)
@@ -472,7 +486,7 @@ function model_prior(lm, reg::Dict{Symbol, <:Real})
 	end
 	return val
 end
-model_prior(lm::Union{FullLinearModel, TemplateModel}, reg) = model_prior(vec(lm), reg)
+model_prior(lm::Union{FullLinearModel, TemplateModel}, reg::Dict{Symbol, <:Real}) = model_prior(vec(lm), reg)
 
 total_model(tel, star, rv) = tel .* (star .+ rv)
 
@@ -509,6 +523,6 @@ function Output!(o::Output, om::OrderModel, d::Data)
 end
 
 function copy_reg!(from::OrderModel, to::OrderModel)
-	copy_dict!(from.reg_tel, to.reg_tel)
-	copy_dict!(from.reg_star, to.reg_star)
+	copy_dict!(to.reg_tel, from.reg_tel)
+	copy_dict!(to.reg_star, from.reg_star)
 end

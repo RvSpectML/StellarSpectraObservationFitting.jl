@@ -28,7 +28,7 @@ function calc_deriv_RVSKL_Flux(x::Vector{<:Real})
 		end
 	end
     @assert length(x)>=3
-	return [helper(x, i) for i in 1:length(x)]
+	return [helper(x, i) for i in eachindex(x)]
 end
 
 

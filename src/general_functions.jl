@@ -72,7 +72,7 @@ end
 observation_night_inds(times::Vector{<:Unitful.Time}) =
     observation_night_inds(ustrip.(uconvert.(u"d", times)))
 
-function copy_dict!(from::Dict, to::Dict)
+function copy_dict!(to::Dict, from::Dict)
     for (key, value) in from
 		to[key] = from[key]
 	end
@@ -127,7 +127,7 @@ general_lst_sq(dm, data) = ordinary_lst_sq(dm, data)
 
 "a generalized version of the built in append!() function"
 function multiple_append!(a::Vector{T}, b...) where {T<:Real}
-    for i in 1:length(b)
+    for i in eachindex(b)
         append!(a, b[i])
     end
     return a
@@ -227,3 +227,6 @@ end
 # converts wavelength (Å) to wavenumber (1/cm) (and vice versa)
 Å_to_wavenumber(λ::Real) = 1e8 / λ
 wavenumber_to_Å(wn::Real) = Å_to_wavenumber(wn)
+
+vector_zero(θ::AbstractVecOrMat) = zero(θ)
+vector_zero(θ::Vector{<:AbstractArray}) = [vector_zero(i) for i in θ]

@@ -75,7 +75,7 @@ likelihoods = zeros(amount_of_periods)
 unnorm_posteriors = zeros(amount_of_periods)
 
 # takes around minutes for 101501 data and 3000 periods
-@progress for i in 1:length(period_grid)
+@progress for i in eachindex(period_grid)
     likelihoods[i], unnorm_posteriors[i] = kep_unnormalized_posterior_distributed(period_grid[i])
 end
 @save star*"_periodogram.jld2" likelihoods unnorm_posteriors period_grid

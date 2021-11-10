@@ -16,6 +16,7 @@ save_plots = true
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 desired_order = SSOF.parse_args(2, Int, 68)  # 68 has a bunch of tels, 47 has very few
 use_reg = SSOF.parse_args(3, Bool, true)
+which_opt = SSOF.parse_args(4, Int, 3)
 
 ## Loading in data and initializing model
 save_path = expres_save_path * star * "/$(desired_order)/"
@@ -45,25 +46,31 @@ end
 
 
 ## Creating optimization workspace
-workspace, loss = SSOF.OptimWorkspace(model, data; return_loss_f=true)
+if which_opt == 1
+    mws = SSOF.OptimWorkspace(model, data)
+elseif which_opt == 2
+    mws = SSOF.TelStarWorkspace(model, data)
+else
+    mws = SSOF.TotalWorkspace(model, data)
+end
 
 ## Plotting
 
 SSOF_path = dirname(dirname(pathof(SSOF)))
 if interactive
     include(SSOF_path * "/src/_plot_functions.jl")
-    status_plot(workspace.o, workspace.d)
+    status_plot(mws)
 else
     ENV["GKSwstype"] = "100"  # setting the GR workstation type to 100/nul
 end
 
 ## Improving regularization
 
-if false#!model.metadata[:todo][:reg_improved]
-    @time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true, ignore_regularization=true)  # 16s
+if !model.metadata[:todo][:reg_improved]  # 20 mins
+    @time SSOF.train_OrderModel!(mws; print_stuff=true, ignore_regularization=true)  # 40s
     n_obs_train = Int(round(0.75 * n_obs))
     training_inds = sort(StatsBase.sample(1:n_obs, n_obs_train; replace=false))
-    @time SSOF.fit_regularization!(model, data, training_inds)
+    @time SSOF.fit_regularization!(mws, training_inds)
     model.metadata[:todo][:reg_improved] = true
     model.metadata[:todo][:optimized] = false
     @save save_path*"results.jld2" model rvs_naive rvs_notel
@@ -72,24 +79,23 @@ end
 ## Optimizing model
 
 if !model.metadata[:todo][:optimized]
-    @time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
+    @time results = SSOF.fine_train_OrderModel!(mws; print_stuff=true)  # 120s
     rvs_notel_opt = SSOF.rvs(model)
-    if interactive; status_plot(workspace.o, workspace.d) end
+    if interactive; status_plot(mws) end
     model.metadata[:todo][:optimized] = true
     @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
-status_plot(workspace.o, workspace.d)
 
 ## Downsizing model
 
-if !model.metadata[:todo][:downsized]
+@time if !model.metadata[:todo][:downsized]  # 1.5 hrs
     test_n_comp_tel = 0:8
     test_n_comp_star = 0:8
     ks = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
     comp_ls = zeros(length(test_n_comp_tel), length(test_n_comp_star))
     for (i, n_tel) in enumerate(test_n_comp_tel)
         for (j, n_star) in enumerate(test_n_comp_star)
-            comp_ls[i, j], ks[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star], model, data)
+            comp_ls[i, j], ks[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star], mws)
         end
     end
     n_comps_best, ℓ, aic, bic = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, data.var; return_inters=true)
@@ -99,16 +105,16 @@ if !model.metadata[:todo][:downsized]
     model = SSOF.downsize(model, n_comps_best[1], n_comps_best[2])
     model.metadata[:todo][:downsized] = true
     model.metadata[:todo][:reg_improved] = true
-    workspace, loss = SSOF.OptimWorkspace(model, data; return_loss_f=true)
-    SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
+    mws = typeof(mws)(model, data)
+    SSOF.fine_train_OrderModel!(mws; print_stuff=true)  # 16s
     model.metadata[:todo][:optimized] = true
-    @save save_path*"results.jld2" model rvs_naive rvs_notel # model_large
+    @save save_path*"results.jld2" model rvs_naive rvs_notel model_large
 end
 
 
 ## Getting RV error bars (only regularization held constant)
 
-if !model.metadata[:todo][:err_estimated]
+@time if !model.metadata[:todo][:err_estimated] # 20 mins
     data.var[data.var.==Inf] .= 0
     data_noise = sqrt.(data.var)
     data.var[data.var.==0] .= Inf
@@ -119,7 +125,7 @@ if !model.metadata[:todo][:err_estimated]
     rv_holder = Array{Float64}(undef, n, length(model.rv.lm.s))
     @time for i in 1:n
         data_holder.flux .= data.flux .+ (data_noise .* randn(size(data_holder.var)))
-        SSOF.train_OrderModel!(SSOF.OptimWorkspace(model_holder, data_holder), f_tol=1e-8)
+        SSOF.train_OrderModel!(typeof(mws)(model_holder, data_holder))
         rv_holder[i, :] = SSOF.rvs(model_holder)
     end
     rv_errors = vec(std(rv_holder; dims=1))
@@ -160,7 +166,7 @@ if save_plots
         png(plt, save_path * "model_tel_weights.png")
     end
 
-    plt = status_plot(workspace.o, workspace.d; display_plt=interactive);
+    plt = status_plot(mws; display_plt=interactive);
     png(plt, save_path * "status_plot.png")
 
     plt = component_test_plot(ℓ, test_n_comp_tel, test_n_comp_star);

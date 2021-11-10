@@ -39,14 +39,16 @@ if isfile(save_path*"results.jld2")
 end
 
 ## Creating optimization workspace
-workspace, loss = SSOF.OptimWorkspace(test_model, data; return_loss_f=true)
+workspace = SSOF.OptimWorkspace(test_model, data)
+workspace = SSOF.TotalWorkspace(test_model, data)
+workspace = SSOF.TelStarWorkspace(test_model, data)
 
 ## Plotting
 
 SSOF_path = dirname(dirname(pathof(SSOF)))
 if interactive
     include(SSOF_path * "/src/_plot_functions.jl")
-    status_plot(workspace.o, workspace.d)
+    status_plot(workspace)
 else
     ENV["GKSwstype"] = "100"  # setting the GR workstation type to 100/nul
 end

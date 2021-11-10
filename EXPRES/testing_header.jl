@@ -24,8 +24,8 @@ if !use_reg
     save_path *= "noreg_"
 end
 
-function reset_model()
-    if isfile(save_path*"results.jld2")
+function reset_model(; overrule::Bool=false)
+    if !overrule && isfile(save_path*"results.jld2")
         @load save_path*"results.jld2" model rvs_naive rvs_notel
         if model.metadata[:todo][:err_estimated]
             @load save_path*"results.jld2" rv_errors
@@ -49,4 +49,4 @@ end
 
 # SSOF_path = dirname(dirname(pathof(SSOF)))
 # include(SSOF_path * "/src/_plot_functions.jl")
-# status_plot(workspace.o, workspace.d)
+# status_plot(workspace)

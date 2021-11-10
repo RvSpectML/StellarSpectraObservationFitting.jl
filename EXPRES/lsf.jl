@@ -134,7 +134,7 @@ function EXPRES_lsf(λ::AbstractVector; safe::Bool=true)
     nwn = -wn
     holder = zeros(length(nwn), length(nwn))
     # max_w = 0
-    for i in 1:length(nwn)
+    for i in eachindex(nwn)
         lo, hi = SSOF.searchsortednearest(nwn, [nwn[i] - 3 * σs[i], nwn[i] + 3 * σs[i]])
         lsf = Normal(wn[i], σs[i])
         holder[i, lo:hi] = pdf.(lsf, wn[lo:hi])
