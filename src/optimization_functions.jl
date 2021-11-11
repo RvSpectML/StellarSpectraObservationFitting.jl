@@ -391,7 +391,7 @@ function optim_cb_f(; print_stuff::Bool=true)
     end
 end
 
-function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, train_telstar::Bool=true, ignore_regularization::Bool=false, kwargs...)
+function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, train_telstar::Bool=true, ignore_regularization::Bool=false, kwargs...)
     optim_cb = optim_cb_f(; print_stuff=print_stuff)
 
     if ignore_regularization
@@ -401,7 +401,7 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
     end
 
     if train_telstar
-        options = Optim.Options(;iterations=iterations, f_tol=f_tol, g_tol=g_tol, callback=optim_cb, kwargs...)
+        options = Optim.Options(;iterations=iter, f_tol=f_tol, g_tol=g_tol, callback=optim_cb, kwargs...)
         # optimize tellurics and star
         result_telstar = _OSW_optimize!(ow.telstar, options)
 		lm_vec = ow.telstar.unflatten(ow.telstar.p0)
