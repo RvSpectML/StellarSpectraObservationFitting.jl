@@ -229,34 +229,34 @@ TelStarWorkspace(om::OrderModel, d::Data; kwargs...) =
 	TelStarWorkspace(Output(om, d), om, d; kwargs...)
 
 _telstar_iters_per_loop = 50
-function train_OrderModel!(mw::TelStarWorkspace; train_telstar::Bool=true, ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, iters_per_loop::Int=_telstar_iters_per_loop, iter=_iter_def, kwargs...)
+function train_OrderModel!(mws::TelStarWorkspace; train_telstar::Bool=true, ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, iters_per_loop::Int=_telstar_iters_per_loop, iter=_iter_def, kwargs...)
 
     if ignore_regularization
-        reg_tel_holder = copy(mw.om.reg_tel)
-        reg_star_holder = copy(mw.om.reg_star)
-        zero_regularization(mw.om)
+        reg_tel_holder = copy(mws.om.reg_tel)
+        reg_star_holder = copy(mws.om.reg_star)
+        zero_regularization(mws.om)
     end
 	n_loop = Int(ceil(iter//iters_per_loop))
 	for i in 1:n_loop
 		i == n_loop ? current_iter = iter % iters_per_loop : current_iter = iters_per_loop
 	    if train_telstar
-			cb_telstar = default_cb(mw.telstar.as; print_stuff)
-			result_telstar = train_SubModel!(mw.telstar; cb=cb_telstar, iter=current_iter, kwargs...)
-			mw.telstar.as.iter = 0
-	        mw.o.star .= star_model(mw.om)
-	        mw.o.tel .= tel_model(mw.om)
+			cb_telstar = default_cb(mws.telstar.as; print_stuff)
+			result_telstar = train_SubModel!(mws.telstar; cb=cb_telstar, iter=current_iter, kwargs...)
+			mws.telstar.as.iter = 0
+	        mws.o.star .= star_model(mws.om)
+	        mws.o.tel .= tel_model(mws.om)
 	    end
-		mw.om.rv.lm.M .= calc_doppler_component_RVSKL(mw.om.star.λ, mw.om.star.lm.μ)
-		cb_rv = default_cb(mw.rv.as; print_stuff)
-		result_rv = train_SubModel!(mw.rv; cb=cb_rv, iter=current_iter, kwargs...)
-	    mw.rv.as.iter = 0
-		mw.o.rv .= rv_model(mw.om)
+		mws.om.rv.lm.M .= calc_doppler_component_RVSKL(mws.om.star.λ, mws.om.star.lm.μ)
+		cb_rv = default_cb(mws.rv.as; print_stuff)
+		result_rv = train_SubModel!(mws.rv; cb=cb_rv, iter=current_iter, kwargs...)
+	    mws.rv.as.iter = 0
+		mws.o.rv .= rv_model(mws.om)
 	end
-	recalc_total!(mw.o, mw.d)
+	recalc_total!(mws.o, mws.d)
 
     if ignore_regularization
-        copy_dict!(mw.om.reg_tel, reg_tel_holder)
-        copy_dict!(mw.om.reg_star, reg_star_holder)
+        copy_dict!(mws.om.reg_tel, reg_tel_holder)
+        copy_dict!(mws.om.reg_star, reg_star_holder)
     end
 	# return result_telstar, result_rv
 end
@@ -417,7 +417,7 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
     end
 
     # optimize RVs
-    options = Optim.Options(;callback=optim_cb, g_tol=1e-2, kwargs...)
+    options = Optim.Options(; callback=optim_cb, g_tol=1e-2, kwargs...)
     ow.om.rv.lm.M .= calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
     result_rv = _OSW_optimize!(ow.rv, options)
 	ow.om.rv.lm.s[:] = ow.rv.unflatten(ow.rv.p0)
@@ -426,7 +426,7 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
 
     if ignore_regularization
         copy_dict!(ow.om.reg_tel, reg_tel_holder)
-        copy_dict!(mw.om.reg_star, reg_star_holder)
+        copy_dict!(ow.om.reg_star, reg_star_holder)
     end
     return result_telstar, result_rv
 end
