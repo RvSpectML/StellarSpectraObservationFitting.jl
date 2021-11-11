@@ -140,15 +140,28 @@ _eval_lm(tlm::TemplateModel) = _eval_lm(tlm.μ, tlm.n)
 
 function copy_to_LinearModel!(to::LinearModel, from::LinearModel)
 	@assert typeof(to)==typeof(from)
-	for i in fieldnames(typeof(from))
-		getfield(to, i) .= getfield(from, i)
+	if typeof(to) <: TemplateModel
+		to.μ .= from.μ
+	else
+		for i in fieldnames(typeof(from))
+			getfield(to, i) .= getfield(from, i)
+		end
 	end
 end
 function copy_to_LinearModel!(to::LinearModel, from::Vector)
 	fns = fieldnames(typeof(to))
-	@assert length(from)==length(fns)
-	for i in eachindex(fns)
-		getfield(to, fns[i]) .= from[i]
+	if typeof(to) <: TemplateModel
+		if typeof(from) <: Vector{<:Real}
+			to.μ .= from
+		else
+			@assert length(from) == 1
+			to.μ .= from[1]
+		end
+	else
+		@assert length(from) == length(fns)
+		for i in eachindex(fns)
+			getfield(to, fns[i]) .= from[i]
+		end
 	end
 end
 
