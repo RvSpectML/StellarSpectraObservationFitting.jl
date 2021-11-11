@@ -310,7 +310,7 @@ Output!(mws::ModelWorkspace) = Output!(mws.o, mws.om, mws.d)
 
 ## Optim Versions
 
-possible_θ = Union{Vector{<:Vector{<:AbstractArray}}, Vector{<:Array}, AbstractMatrix}
+possible_θ = Union{Vector{<:Vector{<:AbstractArray}}, Vector{<:AbstractArray}, AbstractMatrix}
 
 function opt_funcs(loss::Function, pars::possible_θ)
     flat_initial_params, unflatten = flatten(pars)  # unflatten returns Vector of untransformed params
