@@ -383,7 +383,7 @@ function optim_print(x::OptimizationState)
 	return false
 end
 # ends optimization if true
-function optim_cb_f(x::OptimizationState; print_stuff::Bool=true)
+function optim_cb_f(; print_stuff::Bool=true)
     if print_stuff
 		return (x::OptimizationState) -> optim_print(x::OptimizationState)
     else
@@ -392,7 +392,7 @@ function optim_cb_f(x::OptimizationState; print_stuff::Bool=true)
 end
 
 function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_def, iterations::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, train_telstar::Bool=true, ignore_regularization::Bool=false, kwargs...)
-    optim_cb = optim_cb_f(x; print_stuff=print_stuff)
+    optim_cb = optim_cb_f(; print_stuff=print_stuff)
 
     if ignore_regularization
         reg_tel_holder = copy(ow.om.reg_tel)
