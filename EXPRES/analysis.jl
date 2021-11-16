@@ -24,6 +24,9 @@ save_path = expres_save_path * star * "/$(desired_order)/"
 if !use_reg
     save_path *= "noreg_"
 end
+if which_opt == 1
+    save_path *= "optim_"
+end
 
 if isfile(save_path*"results.jld2")
     @load save_path*"results.jld2" model rvs_naive rvs_notel

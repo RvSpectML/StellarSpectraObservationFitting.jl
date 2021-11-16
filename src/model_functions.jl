@@ -371,7 +371,7 @@ function build_gp(params::NamedTuple)
 	return to_sde(f_naive, SArrayStorage(Float64))
 end
 
-SOAP_gp_params = (var_kernel = 3.3270754364467443, λ = 1 / 9.021560480866474e-5)
+SOAP_gp_params = (var_kernel = 0.2188511770097717, λ = 26063.07237159581)
 SOAP_gp = build_gp(SOAP_gp_params)
 
 # ParameterHandling version
