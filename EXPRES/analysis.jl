@@ -17,12 +17,16 @@ include("data_locs.jl")  # defines expres_data_path and expres_save_path
 desired_order = SSOF.parse_args(2, Int, 68)  # 68 has a bunch of tels, 47 has very few
 use_reg = SSOF.parse_args(3, Bool, true)
 which_opt = SSOF.parse_args(4, Int, 3)
+use_lsf = SSOF.parse_args(5, Bool, true)
 
 ## Loading in data and initializing model
 save_path = expres_save_path * star * "/$(desired_order)/"
 @load save_path * "data.jld2" n_obs data times_nu airmasses
 if !use_reg
     save_path *= "noreg_"
+end
+if !use_lsf
+    data = SSOF.GenericData(data)
 end
 if which_opt == 1
     save_path *= "optim_"
