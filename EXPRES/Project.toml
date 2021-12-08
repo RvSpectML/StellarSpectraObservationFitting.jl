@@ -1,4 +1,5 @@
 [deps]
+AbstractGPs = "99985d1d-32ba-4be9-9821-2ec096f28918"
 BandedMatrices = "aae01518-5342-5314-be14-df237901396f"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
@@ -12,6 +13,7 @@ EchelleCCFs = "5d9f57b1-d7b5-417c-8d79-eedbcaad0187"
 EchelleInstruments = "533b6e3a-cbf4-4a92-8a96-bc27ebcb1598"
 FITSIO = "525bcba6-941b-5504-bd06-fd0dc1a4d2eb"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+KernelFunctions = "ec8451be-7e33-11e9-00cf-bbf324bd1392"
 MKLSparse = "0c723cd3-b8cd-5d40-b370-ba682dde9aae"
 Nabla = "49c96f43-aa6d-5a04-a506-44c7070ebe78"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
