@@ -205,9 +205,9 @@ function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 end
 
 default_reg_tel = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
-	(:L1_μ₊_factor, 6.), (:GP_μ, 1.), (:L2_M, 1e-1), (:L1_M, 1e3)])
+	(:L1_μ₊_factor, 6.), (:L2_M, 1e-1), (:L1_M, 1e3)])
 default_reg_star = Dict([(:L2_μ, 1e4), (:L1_μ, 1e3),
-	(:L1_μ₊_factor, 7.2), (:GP_μ, 1.), (:L2_M, 1e1), (:L1_M, 1e6)])
+	(:L1_μ₊_factor, 7.2), (:L2_M, 1e1), (:L1_M, 1e6)])
 # They need to be different or else the stellar μ will be surpressed
 # default_reg_star = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
 # 	(:L1_μ₊_factor, 6.), (:L2_M, 1e-1), (:L1_M, 1e3)])
@@ -322,6 +322,9 @@ downsize(m::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
 		downsize(m.tel, n_comp_tel),
 		downsize(m.star, n_comp_star),
 		m.rv, m.reg_tel, m.reg_star, m.b2o, m.t2o, m.metadata, m.n)
+
+tel_prior(om::OrderModel) = model_prior(om.tel.lm, om.reg_tel)
+star_prior(om::OrderModel) = model_prior(om.star.lm, om.reg_star)
 
 spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
 	hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
@@ -474,8 +477,8 @@ end
 
 
 
-function model_prior(lm, om::OrderModel, key::Symbol)
-	reg = getfield(om, Symbol(:reg_, key))
+function model_prior(lm, reg::Dict{Symbol, <:Real})
+
 	isFullLinearModel = length(lm) > 2
 	val = 0
 
@@ -487,7 +490,6 @@ function model_prior(lm, om::OrderModel, key::Symbol)
 			# For some reason dot() works but BLAS.dot() doesn't
 			if haskey(reg, :L1_μ₊_factor); val += dot(μ_mod, μ_mod .> 0) * reg[:L1_μ₊_factor] * reg[:L1_μ] end
 		end
-		if haskey(reg, :GP_μ); val -= logpdf(SOAP_gp(getfield(om, key).log_λ), μ_mod) * reg[:GP_μ] end
 	end
 	if isFullLinearModel
 		if haskey(reg, :shared_M); val += shared_attention(lm[1]) * reg[:shared_M] end
@@ -497,12 +499,7 @@ function model_prior(lm, om::OrderModel, key::Symbol)
 	end
 	return val
 end
-model_prior(lm::Union{FullLinearModel, TemplateModel}, om::OrderModel, key::Symbol) = model_prior(vec(lm), om, key)
-
-tel_prior(om::OrderModel) = tel_prior(om.tel.lm, om)
-tel_prior(lm, om::OrderModel) = model_prior(lm, om, :tel)
-star_prior(om::OrderModel) = star_prior(om.star.lm, om)
-star_prior(lm, om::OrderModel) = model_prior(lm, om, :star)
+model_prior(lm::Union{FullLinearModel, TemplateModel}, reg::Dict{Symbol, <:Real}) = model_prior(vec(lm), reg)
 
 total_model(tel, star, rv) = tel .* (star .+ rv)
 

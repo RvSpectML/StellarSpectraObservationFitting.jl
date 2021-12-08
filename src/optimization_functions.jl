@@ -40,12 +40,12 @@ end
 function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
     l_telstar(telstar; kwargs...) =
         _loss(o, om, d; tel=telstar[1], star=telstar[2], kwargs...) +
-			tel_prior(telstar[1], om) + star_prior(telstar[2], om)
+			model_prior(telstar[1], om.reg_tel) + model_prior(telstar[2], om.reg_star)
     function l_telstar_s(telstar_s)
 		!(typeof(om.tel.lm) <: TemplateModel) ? tel = [om.tel.lm.M, telstar_s[1], om.tel.lm.μ] : tel = nothing
 		!(typeof(om.tel.lm) <: TemplateModel) ? star = [om.star.lm.M, telstar_s[2], om.star.lm.μ] : star = nothing
 		return _loss(o, om, d; tel=tel, star=star) +
-			tel_prior(tel, om) + star_prior(star, om)
+			model_prior(tel, om.reg_tel) + model_prior(star, om.reg_star)
     end
 
     l_rv(rv_s) = _loss(o, om, d; rv=[om.rv.lm.M, rv_s])
@@ -56,13 +56,13 @@ loss_funcs_telstar(mws::ModelWorkspace) = loss_funcs_telstar(mws.o, mws.om, mws.
 function loss_funcs_total(o::Output, om::OrderModel, d::Data)
     l_total(total) =
 		_loss_recalc_rv_basis(om, d, total[1], total[2], total[3]) +
-		tel_prior(total[1], om) + star_prior(total[2], om)
+		model_prior(total[1], om.reg_tel) + model_prior(total[2], om.reg_star)
     function l_total_s(total_s)
 		!(typeof(om.tel.lm) <: TemplateModel) ? tel = [om.tel.lm.M, total_s[1], om.tel.lm.μ] : tel = nothing
 		!(typeof(om.star.lm) <: TemplateModel) ? star = [om.star.lm.M, total_s[2], om.star.lm.μ] : star = nothing
 		rv = [om.rv.lm.M, total_s[3]]
 		return _loss(o, om, d; tel=tel, star=star, rv=rv) +
-			tel_prior(tel, om) + star_prior(star, om)
+			model_prior(tel, om.reg_tel) + model_prior(star, om.reg_star)
     end
 
     return l_total, l_total_s
