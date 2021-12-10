@@ -10,5 +10,6 @@ include("continuum_functions.jl")
 include("model_selection_functions.jl")
 include("mask_functions.jl")
 include("Nabla_extension.jl")
+include("TemporalGPs_extension.jl")
 
 end # module
