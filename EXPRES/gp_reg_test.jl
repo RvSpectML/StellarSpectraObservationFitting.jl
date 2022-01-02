@@ -1,65 +1,65 @@
 ## Importing packages
 using Pkg
-Pkg.activate("EXPRES")
+    Pkg.activate("EXPRES")
 
-import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
-using JLD2
-using Statistics
-import StatsBase
+    import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
+    using JLD2
+    using Statistics
+    import StatsBase
 
-## Setting up necessary variables
+    ## Setting up necessary variables
 
-stars = ["10700", "26965", "34411"]
-star = stars[SSOF.parse_args(1, Int, 2)]
-interactive = length(ARGS) == 0
-save_plots = true
-include("data_locs.jl")  # defines expres_data_path and expres_save_path
-desired_order = SSOF.parse_args(2, Int, 68)  # 68 has a bunch of tels, 47 has very few
-use_reg = SSOF.parse_args(3, Bool, true)
-which_opt = SSOF.parse_args(4, Int, 3)
+    stars = ["10700", "26965", "34411"]
+    star = stars[SSOF.parse_args(1, Int, 2)]
+    interactive = length(ARGS) == 0
+    save_plots = true
+    include("data_locs.jl")  # defines expres_data_path and expres_save_path
+    desired_order = SSOF.parse_args(2, Int, 68)  # 68 has a bunch of tels, 47 has very few
+    use_reg = SSOF.parse_args(3, Bool, true)
+    which_opt = SSOF.parse_args(4, Int, 3)
 
-## Loading in data and initializing model
-save_path = expres_save_path * star * "/$(desired_order)/"
-@load save_path * "data.jld2" n_obs data times_nu airmasses
-if !use_reg
-    save_path *= "noreg_"
-end
-if which_opt == 1
-    save_path *= "optim_"
-end
-
-if isfile(save_path*"results.jld2")
-    @load save_path*"results.jld2" model rvs_naive rvs_notel
-    if model.metadata[:todo][:err_estimated]
-        @load save_path*"results.jld2" rv_errors
-    end
-    if model.metadata[:todo][:downsized]
-        @load save_path*"model_decision.jld2" comp_ls ℓ aic bic ks test_n_comp_tel test_n_comp_star
-    end
-else
-    model_upscale = 2 * sqrt(2)
-    @time model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8, upscale=model_upscale)
-    @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
+    ## Loading in data and initializing model
+    save_path = expres_save_path * star * "/$(desired_order)/"
+    @load save_path * "data.jld2" n_obs data times_nu airmasses
     if !use_reg
-        SSOF.zero_regularization(model)
-        model.metadata[:todo][:reg_improved] = true
+        save_path *= "noreg_"
     end
-    @save save_path*"results.jld2" model rvs_naive rvs_notel
-end
+    if which_opt == 1
+        save_path *= "optim_"
+    end
 
-using AbstractGPs, KernelFunctions, TemporalGPs
-import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
-using LinearAlgebra
-using SparseArrays
-using BenchmarkTools
+    if isfile(save_path*"results.jld2")
+        @load save_path*"results.jld2" model rvs_naive rvs_notel
+        if model.metadata[:todo][:err_estimated]
+            @load save_path*"results.jld2" rv_errors
+        end
+        if model.metadata[:todo][:downsized]
+            @load save_path*"model_decision.jld2" comp_ls ℓ aic bic ks test_n_comp_tel test_n_comp_star
+        end
+    else
+        model_upscale = 2 * sqrt(2)
+        @time model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8, upscale=model_upscale)
+        @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
+        if !use_reg
+            SSOF.zero_regularization(model)
+            model.metadata[:todo][:reg_improved] = true
+        end
+        @save save_path*"results.jld2" model rvs_naive rvs_notel
+    end
 
-## Looking into using sparse inverse of covariance
-x = model.tel.log_λ
-x2 = x[1:1000]
-y = model.tel.lm.μ
-y2 = y[1:1000]
-f2 = SSOF.SOAP_gp
-f3 = GP(SSOF.SOAP_gp_params.var_kernel * PiecewisePolynomialKernel(;degree=3, dim=1) ∘ ScaleTransform(SSOF.SOAP_gp_params.λ/4))
+    using AbstractGPs, KernelFunctions, TemporalGPs
+    import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
+    using LinearAlgebra
+    using SparseArrays
+    using BenchmarkTools
+
+    ## Looking into using sparse inverse of covariance
+    x = model.tel.log_λ
+    x2 = x[1:1000]
+    y = model.tel.lm.μ
+    y2 = y[1:1000]
+    f2 = SSOF.SOAP_gp
+    f3 = GP(SSOF.SOAP_gp_params.var_kernel * PiecewisePolynomialKernel(;degree=3, dim=1) ∘ ScaleTransform(SSOF.SOAP_gp_params.λ/4))
 
 # f = to_sde(f3, SArrayStorage(Float64))
 # Σ = cov(f3(x2)) + diagm(1e-3 .* ones(length(x2)))
@@ -90,7 +90,11 @@ f3 = GP(SSOF.SOAP_gp_params.var_kernel * PiecewisePolynomialKernel(;degree=3, di
 import TemporalGPs; TGP = TemporalGPs
 using Zygote
 
+x
+
 fx
+
+f2
 
 fx = f2(x)
 @time logpdf(fx, y)
@@ -107,6 +111,24 @@ TGP._logpdf(ft, y)
 model2 = TGP.build_lgssm(ft)
 @time logpdf(model2, y)
 
+
+
+P1 = model2.transitions.x0.P
+model2.transitions.As[1]
+model2.transitions.Qs[1]
+f2.f
+
+
+using MatrixEquations
+
+F = [0. 1 0;0 0 1;-1 -3 -3]
+L = [0;0;1]
+Q = L* 1.0 *L'
+
+@time P∞ = lyapc(F, Q)
+FT'*P∞ + P∞*FT + Q
+
+16 .* P∞
 #@enter function AbstractGPs.logpdf(model::LGSSM, y::AbstractVector{<:Union{AbstractVector, <:Real}})
 # sum(scan_emit(step_logpdf, zip(model, y), x0(model), eachindex(model))[1])
 sum(TGP.scan_emit(TGP.step_logpdf, zip(model2, y), model2.transitions.x0, eachindex(model2))[1])
@@ -182,41 +204,37 @@ import TemporalGPs; TGP = TemporalGPs
 using Zygote
 using LinearAlgebra
 fx = f2(x)
-@time logpdf(fx, y)
-my_logpdf2(ft::TGP.FiniteLTISDE, y::AbstractVector{<:Union{Missing, Real}}) =
-    my_logpdf2(TGP.build_lgssm(ft), y)
-@time my_logpdf2(fx, y)
+
+
+my_logpdf2(model::TGP.LGSSM, y::AbstractVector{<:Union{AbstractVector, <:Real}}) =
+    sum(TGP.scan_emit(TGP.step_logpdf, zip(model, y), model.transitions.x0, eachindex(model))[1])
+my_logpdf3(model::TGP.LGSSM, y::AbstractVector{<:Union{AbstractVector, <:Real}}) =
+    sum(tester2.my_scan_emit3(TGP.step_logpdf, zip(model, y), model.transitions.x0, eachindex(model))[1])
+
 
 lgssm = TGP.build_lgssm(fx)
 @time my_logpdf2(lgssm, y)
 @time my_logpdf3(lgssm, y)
 
-hmm = zip(lgssm, y)
-hmm.is[1][1]
-my_logpdf2(model::TGP.LGSSM, y::AbstractVector{<:Union{AbstractVector, <:Real}}) =
-    sum(TGP.scan_emit(TGP.step_logpdf, zip(model, y), model.transitions.x0, eachindex(model))[1])
-my_logpdf3(model::TGP.LGSSM, y::AbstractVector{<:Union{AbstractVector, <:Real}}) =
-    sum(my_scan_emit2(TGP.step_logpdf, zip(model, y), model.transitions.x0, eachindex(model))[1])
+module tester2
+    import TemporalGPs; TGP = TemporalGPs
+    function my_scan_emit3(f, xs, state, idx)
+        local (yy, state2) = f(state, TGP._getindex(xs, idx[1]))
+        local ys = Vector{typeof(yy)}(undef, length(idx))
+        ys[idx[1]] = yy
 
-@profiler for i in 1:10
-    my_logpdf3(lggsm, y)
-end
+        for t in idx[2:end]
+            # (yy, state2) = f(state2, TGP._getindex(xs, t))
+            # ys[t] = yy
+            ys[t]
+        end
 
-my_logpdf3(lggsm, y)
-length(y) * 7
-model2.transitions.x0
-function my_scan_emit2(f::Function, xs::Iterators.Zip, state::TGP.Gaussian, idx::UnitRange)
-    (yy, state) = f(state, TGP._getindex(xs, idx[1]))
-    ys = Vector{typeof(yy)}(undef, length(idx))
-    ys[idx[1]] = yy
-
-    for t in idx[2:end]
-        (yy, state) = f(state, TGP._getindex(xs, t))
-        ys[t] = yy
+        return (ys, state)
     end
+end  # module
 
-    return (ys, state)
-end
+
+
 
 function my_scan_emit2(f::Function, xs::Iterators.Zip, state::TGP.Gaussian, idx::UnitRange)
     (yy, state) = f(state, TGP._getindex(xs, idx[1]))
@@ -248,6 +266,9 @@ function my_scan_emit(f, model, y, state)
     end
     return lmls
 end
+
+
+
 function my_step_logpdf(x::TGP.Gaussian, (model_i, y_i))
     xp = my_predict(x, model_i.transition)
     xf, lml = my_posterior_and_lml(xp, model_i.emission, y_i)
@@ -452,3 +473,35 @@ end
 
 
 sum((data.flux .^ 2) ./ data.var)
+
+
+using LinearAlgebra
+x = ones(2,2)
+exp(x)
+
+
+using Pkg
+
+Pkg.add("MatrixEquations")
+
+using MatrixEquations
+
+FT = [0. 1 0;0 0 1;-1 -5 -25]'
+L = [0;0;1]
+Q = L* 1.0 *L'
+
+@time P∞, CLSEIG = arec(FT, 0, Q)
+FT'*P∞ + P∞*FT + Q
+
+arec(A, G, Q = 0; as = false, rtol::Real = nϵ)
+A'X + XA - XGX + Q = 0
+
+
+##
+
+function matern(x; σ=1., l=1.)
+    r = sqrt(5)*abs(x)/l
+    return σ*σ*(1+r+r*r)*exp(-r)
+end
+
+matern(1)
