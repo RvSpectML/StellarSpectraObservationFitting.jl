@@ -128,7 +128,7 @@ Q = L* 1.0 *L'
 @time P∞ = lyapc(F, Q)
 FT'*P∞ + P∞*FT + Q
 
-16 .* P∞
+
 #@enter function AbstractGPs.logpdf(model::LGSSM, y::AbstractVector{<:Union{AbstractVector, <:Real}})
 # sum(scan_emit(step_logpdf, zip(model, y), x0(model), eachindex(model))[1])
 sum(TGP.scan_emit(TGP.step_logpdf, zip(model2, y), model2.transitions.x0, eachindex(model2))[1])

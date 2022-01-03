@@ -7,7 +7,6 @@ using TemporalGPs
 using Optim # Standard optimisation algorithms.
 using ParameterHandling # Helper functionality for dealing with model parameters.
 using Zygote # Algorithmic Differentiation
-using ParameterHandling
 
 # Ingesting data
 hdf5_loc = "C:/Users/chris/Downloads/res-1000-1years_full_id1.h5"
@@ -25,7 +24,7 @@ std(y)
 # plot(λs, quiet)
 
 # Setting up kernel
-use_matern = false
+use_matern = true
 if use_matern
 	flat_initial_params, unflatten = value_flatten((
 		σ²_kernel = positive(0.1),
