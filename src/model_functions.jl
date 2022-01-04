@@ -11,6 +11,7 @@ import Base.setindex!
 # using BandedMatrices
 using SparseArrays
 using SpecialFunctions
+using StaticArrays
 
 abstract type Data end
 
@@ -169,6 +170,8 @@ struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}}
     log_λ::AV1
     λ::AV2
 	lm::LinearModel
+	A_sde::StaticMatrix
+	Σ_sde::StaticMatrix
 end
 function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=true, kwargs...)
 	n_obs = size(log_λ_obs, 2)
@@ -179,20 +182,22 @@ function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=
 	else
 		lm = BaseLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs))
 	end
-	return Submodel(log_λ, λ, lm)
+	A_sde, Σ_sde = SOAP_gp_sde_prediction_matrices(step(log_λ))
+	return Submodel(log_λ, λ, lm, A_sde, Σ_sde)
 end
-function Submodel(log_λ::AV1, λ::AV2, lm) where {T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}}
+function Submodel(log_λ::AV1, λ::AV2, lm, A_sde::StaticMatrix, Σ_sde::StaticMatrix) where {T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}}
 	if typeof(lm) <: TemplateModel
 		@assert length(log_λ) == length(λ) == length(lm.μ)
 	else
 		@assert length(log_λ) == length(λ) == size(lm.M, 1)
 	end
-	return Submodel{T, AV1, AV2}(log_λ, λ, lm)
+	@assert size(A_sde) == size(Σ_sde)
+	return Submodel{T, AV1, AV2}(log_λ, λ, lm, A_sde, Σ_sde)
 end
 (sm::Submodel)(inds::AbstractVecOrMat) =
-	Submodel(sm.log_λ, sm.λ, LinearModel(sm.lm, inds))
+	Submodel(sm.log_λ, sm.λ, LinearModel(sm.lm, inds), sm.A_sde, sm.Σ_sde)
 (sm::Submodel)() = sm.lm()
-Base.copy(sm::Submodel) = Submodel(sm.log_λ, sm.λ, copy(sm.lm))
+Base.copy(sm::Submodel) = Submodel(sm.log_λ, sm.λ, copy(sm.lm), sm.A_sde, sm.Σ_sde)
 
 function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 	n_obs = size(log_λ_obs_from, 2)
@@ -205,9 +210,9 @@ function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 end
 
 default_reg_tel = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
-	(:L1_μ₊_factor, 6.), (:GP_μ, 1.), (:L2_M, 1e-1), (:L1_M, 1e3)])
+	(:L1_μ₊_factor, 6.), (:GP_μ, 1e1), (:L2_M, 1e-1), (:L1_M, 1e3)])
 default_reg_star = Dict([(:L2_μ, 1e4), (:L1_μ, 1e3),
-	(:L1_μ₊_factor, 7.2), (:GP_μ, 1.), (:L2_M, 1e1), (:L1_M, 1e6)])
+	(:L1_μ₊_factor, 7.2), (:GP_μ, 1e1), (:L2_M, 1e1), (:L1_M, 1e6)])
 # They need to be different or else the stellar μ will be surpressed
 # default_reg_star = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
 # 	(:L1_μ₊_factor, 6.), (:L2_M, 1e-1), (:L1_M, 1e3)])
@@ -316,7 +321,7 @@ end
 downsize(lm::BaseLinearModel, n_comp::Int) =
 	BaseLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :])
 downsize(sm::Submodel, n_comp::Int) =
-	Submodel(copy(sm.log_λ), copy(sm.λ), downsize(sm.lm, n_comp))
+	Submodel(copy(sm.log_λ), copy(sm.λ), downsize(sm.lm, n_comp), copy(sm.A_sde), copy(sm.Σ_sde))
 downsize(m::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
 	OrderModel(
 		downsize(m.tel, n_comp_tel),
@@ -473,9 +478,9 @@ function shared_attention(M)
 end
 
 
-
 function model_prior(lm, om::OrderModel, key::Symbol)
 	reg = getfield(om, Symbol(:reg_, key))
+	sm = getfield(om, key)
 	isFullLinearModel = length(lm) > 2
 	val = 0
 
@@ -487,7 +492,8 @@ function model_prior(lm, om::OrderModel, key::Symbol)
 			# For some reason dot() works but BLAS.dot() doesn't
 			if haskey(reg, :L1_μ₊_factor); val += dot(μ_mod, μ_mod .> 0) * reg[:L1_μ₊_factor] * reg[:L1_μ] end
 		end
-		if haskey(reg, :GP_μ); val -= logpdf(SOAP_gp(getfield(om, key).log_λ), μ_mod) * reg[:GP_μ] end
+		# if haskey(reg, :GP_μ); val -= logpdf(SOAP_gp(getfield(om, key).log_λ), μ_mod) * reg[:GP_μ] end
+		if haskey(reg, :GP_μ); val -= SOAP_gp_ℓ_nabla(μ_mod, sm.A_sde, sm.Σ_sde) * reg[:GP_μ] end
 	end
 	if isFullLinearModel
 		if haskey(reg, :shared_M); val += shared_attention(lm[1]) * reg[:shared_M] end
