@@ -234,7 +234,7 @@ function train_OrderModel!(mws::TelStarWorkspace; train_telstar::Bool=true, igno
     if ignore_regularization
         reg_tel_holder = copy(mws.om.reg_tel)
         reg_star_holder = copy(mws.om.reg_star)
-        zero_regularization(mws.om)
+        rm_regularization(mws.om)
     end
 	n_loop = Int(ceil(iter//iters_per_loop))
 	for i in 1:n_loop
@@ -290,7 +290,7 @@ function train_OrderModel!(mws::TotalWorkspace; ignore_regularization::Bool=fals
     if ignore_regularization
         reg_tel_holder = copy(mws.om.reg_tel)
         reg_star_holder = copy(mws.om.reg_star)
-        zero_regularization(mws.om)
+        rm_regularization(mws.om)
     end
 
 	cb = default_cb(mws.total.as; print_stuff)
@@ -397,7 +397,7 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
     if ignore_regularization
         reg_tel_holder = copy(ow.om.reg_tel)
         reg_star_holder = copy(ow.om.reg_star)
-        zero_regularization(ow.om)
+        rm_regularization(ow.om)
     end
 
     if train_telstar

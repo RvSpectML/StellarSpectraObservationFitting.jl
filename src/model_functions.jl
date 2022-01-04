@@ -288,12 +288,14 @@ Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv),
 (om::OrderModel)(inds::AbstractVecOrMat) =
 	OrderModel(om.tel(inds), om.star(inds), om.rv(inds), om.reg_tel,
 		om.reg_star, view(om.b2o, inds), view(om.t2o, inds), copy(om.metadata), length(inds))
-function zero_regularization(om::OrderModel)
+function rm_regularization(om::OrderModel)
 	for (key, value) in om.reg_tel
-		om.reg_tel[key] = 0
+		delete!(om.reg_tel, key)
+		# om.reg_tel[key] = 0
 	end
 	for (key, value) in om.reg_star
-		om.reg_star[key] = 0
+		delete!(om.reg_star, key)
+		# om.reg_star[key] = 0
 	end
 end
 
