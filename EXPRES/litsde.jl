@@ -174,32 +174,6 @@ function Δℓ(y, A_k, Σ_k, H_k, P∞; kwargs...)
     return -dLdy
 end
 
-function Δℓ(y, A_k, Σ_k, H_k, P∞; kwargs...)
-    K, γ = Δℓ_helper(y, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
-    n = length(y)
-    # now that we have K and γ
-    α = H_k * A_k
-    dLdy = copy(γ)
-    δLδyk_inter = @MMatrix zeros(3, 1)
-
-    βs =
-    for i in 2:n-1
-        for j in 2:n-1
-            βs = (A_k - K[j] * α)
-        end
-    end
-        (A_k - K[j] * α)
-    for i in 1:(n-1)
-        δLδyk_inter .= K[i]
-        dLdy[i] -= γ[i+1] * only(α * δLδyk_inter)
-        for j in (i+1):(n-1)
-            δLδyk_inter .= (A_k - K[j] * α) * δLδyk_inter
-            dLdy[i] -= γ[j+1] * only(α * δLδyk_inter)
-        end
-    end
-    return -dLdy
-end
-
 # testing how close we are to numerical estimates
 function est_∇(f::Function, inputs; dif::Real=1e-7, inds::UnitRange=1:length(inputs))
     val = f(inputs)
