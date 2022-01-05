@@ -181,14 +181,6 @@ function Δℓ(y, A_k, Σ_k, H_k, P∞; kwargs...)
     α = H_k * A_k
     dLdy = copy(γ)
     δLδyk_inter = @MMatrix zeros(3, 1)
-
-    βs =
-    for i in 2:n-1
-        for j in 2:n-1
-            βs = (A_k - K[j] * α)
-        end
-    end
-        (A_k - K[j] * α)
     for i in 1:(n-1)
         δLδyk_inter .= K[i]
         dLdy[i] -= γ[i+1] * only(α * δLδyk_inter)
