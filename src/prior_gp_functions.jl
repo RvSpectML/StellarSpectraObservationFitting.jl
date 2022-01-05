@@ -38,6 +38,12 @@ function SOAP_gp_sde_prediction_matrices(Δx; Δx_scaler::Real=SOAP_gp_params.λ
     return A_k, Σ_k
 end
 
+function predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
+    m_kbar .= A_k * m_k  # state prediction
+    P_kbar .= A_k * P_k * A_k' + Σ_k  # covariance of state prediction
+end
+
+
 function SOAP_gp_ℓ(y, Δx::Real; kwargs...)
     A_k, Σ_k = SOAP_gp_sde_prediction_matrices(Δx; kwargs...)
     return SOAP_gp_ℓ(y, A_k, Σ_k; kwargs...)
@@ -56,8 +62,7 @@ function SOAP_gp_ℓ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_meas::Re
     K_k = @MMatrix zeros(n_state, 1)
     for k in 1:n
         # prediction step
-        m_kbar .= A_k * m_k  # state prediction
-        P_kbar .= A_k * P_k * A_k' + Σ_k  # covariance of state prediction, all of the allocations are here
+        predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
 
         # update step
         v_k = y[k] - only(H_k * m_kbar)  # difference btw meas and pred, scalar
@@ -89,8 +94,7 @@ function SOAP_gp_ℓ_nabla(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_me
     K_k = @MMatrix zeros(n_state, 1)
     for k in 1:n
         # prediction step
-        m_kbar = A_k * m_k  # state prediction
-        P_kbar .= A_k * P_k * A_k' + Σ_k  # covariance of state prediction, all of the allocations are here
+        predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
 
         # update step
         v_k = y[k] - (H_k * m_kbar)[1]  # difference btw meas and pred, scalar

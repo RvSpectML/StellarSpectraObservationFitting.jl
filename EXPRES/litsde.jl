@@ -104,9 +104,8 @@ function ℓ_basic(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
     K_k = @MMatrix zeros(n_state, 1)
     for k in 1:n
         # prediction step
-        m_kbar .= A_k * m_k  # state prediction
-        P_kbar .= A_k * P_k * A_k' + Σ_k  # covariance of state prediction, all of the allocations are here
-
+        predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
+        
         # update step
         v_k = y[k] - only(H_k * m_kbar)  # difference btw meas and pred, scalar
         S_k = only(H_k * P_kbar * H_k') + σ²_meas  # P_kbar[1,1] * σ²_kernel + σ²_meas, scalar
@@ -140,14 +139,12 @@ function Δℓ_helper(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
     γ = zeros(n)
     for k in 1:n
         # prediction step
-        m_kbar .= A_k * m_k  # state prediction
-        P_kbar .= A_k * P_k * A_k' + Σ_k  # covariance of state prediction, all of the allocations are here
+        SSOF.predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
 
         # update step
         v_k = y[k] - only(H_k * m_kbar)  # difference btw meas and pred, scalar
         S_k = only(H_k * P_kbar * H_k') + σ²_meas  # P_kbar[1,1] * σ²_kernel + σ²_meas, scalar
         K_k .= P_kbar * H_k' / S_k  # 3x1
-        K[k] .= P_kbar * H_k' / S_k  # 3x1
         m_k .= m_kbar + SVector{3}(K[k] * v_k)
         P_k .= P_kbar - K_k * S_k * K_k'
 
