@@ -124,3 +124,132 @@ A_k = SMatrix{3,3}(exp(SSOF.F * step(x) * SSOF.SOAP_gp.f.kernel.transform.s[1]))
 Σ_k = SMatrix{3,3}(Symmetric(P∞) - A_k * Symmetric(P∞) * A_k')  # eq. 6.71, the process noise
 @time SSOF.SOAP_gp_ℓ(y2, A_k, Σ_k; σ²_meas=σ²_meas)
 
+
+## Looking into gradient w.r.t. y
+
+#TODO only recalculate γ as K doesn't change with new y
+function Δℓ_helper(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
+
+    n_state = 3
+    n = length(y)
+    m_k = @MVector zeros(n_state)
+    P_k = MMatrix{3,3}(P∞)
+    m_kbar = @MVector zeros(n_state)
+    P_kbar = @MMatrix zeros(n_state, n_state)
+    K_k = @MMatrix zeros(3,1)
+    γ = zeros(n)
+    for k in 1:n
+        # prediction step
+        m_kbar .= A_k * m_k  # state prediction
+        P_kbar .= A_k * P_k * A_k' + Σ_k  # covariance of state prediction, all of the allocations are here
+
+        # update step
+        v_k = y[k] - only(H_k * m_kbar)  # difference btw meas and pred, scalar
+        S_k = only(H_k * P_kbar * H_k') + σ²_meas  # P_kbar[1,1] * σ²_kernel + σ²_meas, scalar
+        K_k .= P_kbar * H_k' / S_k  # 3x1
+        K[k] .= P_kbar * H_k' / S_k  # 3x1
+        m_k .= m_kbar + SVector{3}(K[k] * v_k)
+        P_k .= P_kbar - K_k * S_k * K_k'
+
+        γ[k] = v_k / S_k
+    end
+    return K, γ
+end
+
+function Δℓ(y, A_k, Σ_k, H_k, P∞; kwargs...)
+    K, γ = Δℓ_helper(y, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
+    n = length(y)
+    # now that we have K and γ
+    α = H_k * A_k
+    dLdy = copy(γ)
+    δLδyk_inter = @MMatrix zeros(3, 1)
+    for i in 1:(n-1)
+        δLδyk_inter .= K[i]
+        dLdy[i] -= γ[i+1] * only(α * δLδyk_inter)
+        for j in (i+1):(n-1)
+            δLδyk_inter .= (A_k - K[j] * α) * δLδyk_inter
+            dLdy[i] -= γ[j+1] * only(α * δLδyk_inter)
+        end
+    end
+    return -dLdy
+end
+
+function Δℓ(y, A_k, Σ_k, H_k, P∞; kwargs...)
+    K, γ = Δℓ_helper(y, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
+    n = length(y)
+    # now that we have K and γ
+    α = H_k * A_k
+    dLdy = copy(γ)
+    δLδyk_inter = @MMatrix zeros(3, 1)
+
+    βs =
+    for i in 2:n-1
+        for j in 2:n-1
+            βs = (A_k - K[j] * α)
+        end
+    end
+        (A_k - K[j] * α)
+    for i in 1:(n-1)
+        δLδyk_inter .= K[i]
+        dLdy[i] -= γ[i+1] * only(α * δLδyk_inter)
+        for j in (i+1):(n-1)
+            δLδyk_inter .= (A_k - K[j] * α) * δLδyk_inter
+            dLdy[i] -= γ[j+1] * only(α * δLδyk_inter)
+        end
+    end
+    return -dLdy
+end
+
+# testing how close we are to numerical estimates
+function est_∇(f::Function, inputs; dif::Real=1e-7, inds::UnitRange=1:length(inputs))
+    val = f(inputs)
+    grad = Array{Float64}(undef, length(inds))
+    for i in inds
+        hold = inputs[i]
+        inputs[i] += dif
+        grad[i] =  (f(inputs) - val) / dif
+        inputs[i] = hold
+    end
+    return grad
+end
+using Nabla
+
+f(y) = SSOF.SOAP_gp_ℓ_nabla(y, A_k, Σ_k; σ²_meas=σ²_meas)
+
+method_strs = ["Finite Differences", "Analytic", "Automatic (Nabla)"]
+# plots for gradients estimates for each method
+function plot_methods(n)
+    y_test = y[1:n]
+    numer = est_∇(f, y_test)
+    anal = Δℓ(y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+    auto = only(∇(f)(y_test))
+    plt = plot(; layout=grid(2, 1))
+    plot!(plt[1], numer, label=method_strs[1], title="N=1000")
+    plot!(plt[1], anal, label=method_strs[2])
+    plot!(plt[1], auto, label=method_strs[3])
+    plot!(plt[2], numer[1:50], label=method_strs[1], title="Zoomed", markershape=:circle)
+    plot!(plt[2], anal[1:50], label=method_strs[2], markershape=:circle)
+    plot!(plt[2], auto[1:50], label=method_strs[3], markershape=:circle)
+    return plt
+end
+plot_methods(1000)
+plot_methods(100)
+
+# how long each method takes
+ns = [10, 30, 100, 300, 1000, 3000, 10000, length(y)]
+# @btime est_∇(f, y[1:3000])
+t_numer = [8.7e-6, 42.5e-6, 345.5e-6, 2.89e-3, 30.9e-3, 316.4e-3]
+# @btime Δℓ(y[1:10], A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+@btime Δℓ_helper(y[1:10000], A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+t_anal = [1.3e-6, 4.17e-6, 26.8e-6, 198.3e-6, 2.07e-3, 18.3e-3, 5.5, 51.874] # 39802 allocations: 3.34 MiB for len(y)
+# @btime only(∇(f)(y))
+t_auto = [983.4e-6, 3.146e-3, 10.8e-3, 32.7e-3, 110e-3, 333.24e-3, 1.768, 2.853]  # 8552642 allocations: 326.58 MiB for len(y)
+
+ratios(ts) = round.(append!([0.], [ts[i+1] / ts[i] for i in 1:(length(ts)-1)]), digits=2)
+plot_f!(plt, ts, label) = plot!(plt, ns[1:length(ts)], ts, xaxis=:log, yaxis=:log,
+    series_annotations = text.(ratios(ts), 10, :white, :bottom), label=label)
+
+plt = _my_plot(;xlabel="N", ylabel="t (s)", title="Method timings", legend=:topleft)
+plot_f!(plt, t_numer, method_strs[1])
+plot_f!(plt, t_anal, method_strs[2])
+plot_f!(plt, t_auto, method_strs[3])
