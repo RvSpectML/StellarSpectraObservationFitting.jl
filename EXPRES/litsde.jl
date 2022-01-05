@@ -104,14 +104,11 @@ function ℓ_basic(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
     K_k = @MMatrix zeros(n_state, 1)
     for k in 1:n
         # prediction step
-        predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
-        
+        SSOF.predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
+
         # update step
-        v_k = y[k] - only(H_k * m_kbar)  # difference btw meas and pred, scalar
-        S_k = only(H_k * P_kbar * H_k') + σ²_meas  # P_kbar[1,1] * σ²_kernel + σ²_meas, scalar
-        K_k .= P_kbar * H_k' / S_k  # 3x1
-        m_k .= m_kbar + SVector{3}(K_k * v_k)
-        P_k .= P_kbar - K_k * S_k * K_k'
+        v_k, S_k = SSOF.update!(K_k, m_k, P_k, y[k], H_k, m_kbar, P_kbar, σ²_meas)
+
         ℓ -= log(S_k) + v_k^2/S_k  # 2*ℓ without normalization
     end
     return (ℓ - n*log(2π))/2
@@ -126,17 +123,12 @@ A_k = SMatrix{3,3}(exp(SSOF.F * step(x) * SSOF.SOAP_gp.f.kernel.transform.s[1]))
 
 ## Looking into gradient w.r.t. y
 
-#TODO only recalculate γ as K doesn't change with new y
-function Δℓ_helper(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
+function Δℓ_helper_K(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
 
     n_state = 3
     n = length(y)
-    m_k = @MVector zeros(n_state)
-    P_k = MMatrix{3,3}(P∞)
-    m_kbar = @MVector zeros(n_state)
-    P_kbar = @MMatrix zeros(n_state, n_state)
-    K_k = @MMatrix zeros(3,1)
-    γ = zeros(n)
+    m_k, P_k, m_kbar, P_kbar, _ = SSOF.init_states(n_state)
+    K = [MMatrix{3,1}(zeros(3,1)) for i in 1:n]
     for k in 1:n
         # prediction step
         SSOF.predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
@@ -144,13 +136,30 @@ function Δℓ_helper(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
         # update step
         v_k = y[k] - only(H_k * m_kbar)  # difference btw meas and pred, scalar
         S_k = only(H_k * P_kbar * H_k') + σ²_meas  # P_kbar[1,1] * σ²_kernel + σ²_meas, scalar
-        K_k .= P_kbar * H_k' / S_k  # 3x1
+        K[k] .= P_kbar * H_k' / S_k  # 3x1
         m_k .= m_kbar + SVector{3}(K[k] * v_k)
-        P_k .= P_kbar - K_k * S_k * K_k'
+        P_k .= P_kbar - K[k] * S_k * K[k]'
+    end
+    return K
+end
+
+Δℓ_helper_K(y2, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+
+function Δℓ_helper_γ(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
+    n_state = 3
+    n = length(y)
+    m_k, P_k, m_kbar, P_kbar, K_k = SSOF.init_states(n_state)
+    γ = zeros(n)
+    for k in 1:n
+        # prediction step
+        SSOF.predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
+
+        # update step
+        v_k, S_k = SSOF.update!(K_k, m_k, P_k, y[k], H_k, m_kbar, P_kbar, σ²_meas)
 
         γ[k] = v_k / S_k
     end
-    return K, γ
+    return γ
 end
 
 function Δℓ(y, A_k, Σ_k, H_k, P∞; kwargs...)
@@ -189,18 +198,19 @@ f(y) = SSOF.SOAP_gp_ℓ_nabla(y, A_k, Σ_k; σ²_meas=σ²_meas)
 
 method_strs = ["Finite Differences", "Analytic", "Automatic (Nabla)"]
 # plots for gradients estimates for each method
-function plot_methods(n)
+function plot_methods(n; n_zoom=50)
+    @assert length(y) > n > n_zoom
     y_test = y[1:n]
     numer = est_∇(f, y_test)
     anal = Δℓ(y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
     auto = only(∇(f)(y_test))
     plt = plot(; layout=grid(2, 1))
-    plot!(plt[1], numer, label=method_strs[1], title="N=1000")
+    plot!(plt[1], numer, label=method_strs[1], title="N=$n")
     plot!(plt[1], anal, label=method_strs[2])
     plot!(plt[1], auto, label=method_strs[3])
-    plot!(plt[2], numer[1:50], label=method_strs[1], title="Zoomed", markershape=:circle)
-    plot!(plt[2], anal[1:50], label=method_strs[2], markershape=:circle)
-    plot!(plt[2], auto[1:50], label=method_strs[3], markershape=:circle)
+    plot!(plt[2], numer[1:n_zoom], label=method_strs[1], title="Zoomed", markershape=:circle)
+    plot!(plt[2], anal[1:n_zoom], label=method_strs[2], markershape=:circle)
+    plot!(plt[2], auto[1:n_zoom], label=method_strs[3], markershape=:circle)
     return plt
 end
 plot_methods(1000)

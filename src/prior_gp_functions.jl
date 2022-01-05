@@ -42,7 +42,22 @@ function predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
     m_kbar .= A_k * m_k  # state prediction
     P_kbar .= A_k * P_k * A_k' + Σ_k  # covariance of state prediction
 end
-
+function update!(K_k, m_k, P_k, y, H_k, m_kbar, P_kbar, σ²_meas)
+    v_k = y - only(H_k * m_kbar)  # difference btw meas and pred, scalar
+    S_k = only(H_k * P_kbar * H_k') + σ²_meas  # P_kbar[1,1] * σ²_kernel + σ²_meas, scalar
+    K_k .= P_kbar * H_k' / S_k  # 3x1
+    m_k .= m_kbar + SVector{3}(K_k * v_k)
+    P_k .= P_kbar - K_k * S_k * K_k'
+    return v_k, S_k
+end
+function init_states(n_state)
+    m_k = @MVector zeros(n_state)
+    P_k = MMatrix{3,3}(P∞)
+    m_kbar = @MVector zeros(n_state)
+    P_kbar = @MMatrix zeros(n_state, n_state)
+    K_k = @MMatrix zeros(n_state, 1)
+    return m_k, P_k, m_kbar, P_kbar, K_k
+end
 
 function SOAP_gp_ℓ(y, Δx::Real; kwargs...)
     A_k, Σ_k = SOAP_gp_sde_prediction_matrices(Δx; kwargs...)
@@ -55,21 +70,15 @@ function SOAP_gp_ℓ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_meas::Re
     n = length(y)
     n_state = 3
     ℓ = 0
-    m_k = @MVector zeros(n_state)
-    P_k = MMatrix{3,3}(P∞)
-    m_kbar = @MVector zeros(n_state)
-    P_kbar = @MMatrix zeros(n_state, n_state)
-    K_k = @MMatrix zeros(n_state, 1)
+    m_k, P_k, m_kbar, P_kbar, K_k = init_states(n_state)
+    
     for k in 1:n
         # prediction step
         predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
 
         # update step
-        v_k = y[k] - only(H_k * m_kbar)  # difference btw meas and pred, scalar
-        S_k = only(H_k * P_kbar * H_k') + σ²_meas  # P_kbar[1,1] * σ²_kernel + σ²_meas, scalar
-        K_k .= P_kbar * H_k' / S_k  # 3x1
-        m_k .= m_kbar + SVector{3}(K_k * v_k)
-        P_k .= P_kbar - K_k * S_k * K_k'
+        v_k, S_k = update!(K_k, m_k, P_k, y[k], H_k, m_kbar, P_kbar, σ²_meas)
+
         ℓ -= log(S_k) + v_k^2/S_k  # 2*ℓ without normalization
     end
     return (ℓ - n*log(2π))/2
@@ -94,7 +103,8 @@ function SOAP_gp_ℓ_nabla(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_me
     K_k = @MMatrix zeros(n_state, 1)
     for k in 1:n
         # prediction step
-        predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
+        m_kbar = A_k * m_k  # state prediction
+        P_kbar .= A_k * P_k * A_k' + Σ_k  # covariance of state prediction, all of the allocations are here
 
         # update step
         v_k = y[k] - (H_k * m_kbar)[1]  # difference btw meas and pred, scalar
