@@ -11,22 +11,12 @@ using Pkg
 
     stars = ["10700", "26965", "34411"]
     star = stars[SSOF.parse_args(1, Int, 2)]
-    interactive = length(ARGS) == 0
-    save_plots = true
     include("data_locs.jl")  # defines expres_data_path and expres_save_path
     desired_order = SSOF.parse_args(2, Int, 68)  # 68 has a bunch of tels, 47 has very few
-    use_reg = SSOF.parse_args(3, Bool, true)
-    which_opt = SSOF.parse_args(4, Int, 3)
 
     ## Loading in data and initializing model
     save_path = expres_save_path * star * "/$(desired_order)/"
     @load save_path * "data.jld2" n_obs data times_nu airmasses
-    if !use_reg
-        save_path *= "noreg_"
-    end
-    if which_opt == 1
-        save_path *= "optim_"
-    end
 
     if isfile(save_path*"results.jld2")
         @load save_path*"results.jld2" model rvs_naive rvs_notel
@@ -59,8 +49,6 @@ using Pkg
     y = model.tel.lm.μ
     y .-= 1
     y2 = y[1:1000]
-    f2 = SSOF.SOAP_gp
-    f3 = GP(SSOF.SOAP_gp_params.var_kernel * PiecewisePolynomialKernel(;degree=3, dim=1) ∘ ScaleTransform(SSOF.SOAP_gp_params.λ/4))
 
 ## Looking into using a gutted version of TemporalGPs attempt 2
 # LTI SDE : Linear Time Invariant Stochastic differential equation
@@ -69,7 +57,7 @@ using Pkg
 import TemporalGPs; TGP = TemporalGPs
 using Zygote
 
-fx = ft = f2(x2, 8e-5)
+fx = ft = SSOF.SOAP_gp(x2, 8e-5)
 @time TGP._logpdf(fx, y2)
 
 n = length(x2)
@@ -107,12 +95,13 @@ H_k = SMatrix{1,3}(H .* sqrt(σ²_kernel))
 function ℓ_basic(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
 
     n = length(y)
+    n_state = 3
     ℓ = 0
-    m_k = MVector{3}(zeros(size(P∞, 1)))
+    m_k = @MVector zeros(n_state)
     P_k = MMatrix{3,3}(P∞)
-    m_kbar = @MVector zeros(3)
-    P_kbar = @MMatrix zeros(3,3)
-    K_k = @MMatrix zeros(3,1)
+    m_kbar = @MVector zeros(n_state)
+    P_kbar = @MMatrix zeros(n_state, n_state)
+    K_k = @MMatrix zeros(n_state, 1)
     for k in 1:n
         # prediction step
         m_kbar .= A_k * m_k  # state prediction
