@@ -92,20 +92,15 @@ H_k = SMatrix{1,3}(H .* sqrt(σ²_kernel))
 
 ## kalman filter update (alg 10.18 in ASDE) for constant Ak and Qk
 
-function ℓ_basic(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
+function SOAP_gp_ℓ(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
 
     n = length(y)
     n_state = 3
     ℓ = 0
-    m_k = @MVector zeros(n_state)
-    P_k = MMatrix{3,3}(P∞)
-    m_kbar = @MVector zeros(n_state)
-    P_kbar = @MMatrix zeros(n_state, n_state)
-    K_k = @MMatrix zeros(n_state, 1)
+    m_k, P_k, m_kbar, P_kbar, K_k = SSOF.init_states(n_state)
     for k in 1:n
         # prediction step
         SSOF.predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
-
         # update step
         v_k, S_k = SSOF.update!(K_k, m_k, P_k, y[k], H_k, m_kbar, P_kbar, σ²_meas)
 
@@ -114,7 +109,7 @@ function ℓ_basic(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
     return (ℓ - n*log(2π))/2
 end
 
-@time ℓ_basic(y2, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+@time SOAP_gp_ℓ(y2, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
 @time SSOF.SOAP_gp_ℓ(y2, step(x2); σ²_meas=σ²_meas)
 A_k = SMatrix{3,3}(exp(SSOF.F * step(x) * SSOF.SOAP_gp.f.kernel.transform.s[1]))  # State transition matrix
 Σ_k = SMatrix{3,3}(Symmetric(P∞) - A_k * Symmetric(P∞) * A_k')  # eq. 6.71, the process noise
@@ -127,23 +122,19 @@ function Δℓ_helper_K(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
 
     n_state = 3
     n = length(y)
-    m_k, P_k, m_kbar, P_kbar, _ = SSOF.init_states(n_state)
+    _, P_k, _, P_kbar, _ = SSOF.init_states(n_state)
     K = [MMatrix{3,1}(zeros(3,1)) for i in 1:n]
     for k in 1:n
         # prediction step
-        SSOF.predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
+        P_kbar .= A_k * P_k * A_k' + Σ_k
 
         # update step
-        v_k = y[k] - only(H_k * m_kbar)  # difference btw meas and pred, scalar
         S_k = only(H_k * P_kbar * H_k') + σ²_meas  # P_kbar[1,1] * σ²_kernel + σ²_meas, scalar
         K[k] .= P_kbar * H_k' / S_k  # 3x1
-        m_k .= m_kbar + SVector{3}(K[k] * v_k)
         P_k .= P_kbar - K[k] * S_k * K[k]'
     end
     return K
 end
-
-Δℓ_helper_K(y2, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
 
 function Δℓ_helper_γ(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
     n_state = 3
@@ -162,8 +153,53 @@ function Δℓ_helper_γ(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
     return γ
 end
 
+using SparseArrays
+function Δℓ_coefficients(y, A_k, Σ_k, H_k, P∞; sparsity::Int=0, kwargs...)
+    n = length(y)
+    @assert 0 <= sparsity <= n/10
+    use_sparse = sparsity != 0
+
+    K = Δℓ_helper_K(y, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
+
+    α = H_k * A_k
+    dLdy_coeffs = diagm(-ones(n))
+    δLδyk_inter = @MMatrix zeros(3, 1)
+    for i in 1:(n-1)
+        δLδyk_inter .= K[i]
+        dLdy_coeffs[i, i+1] = only(α * δLδyk_inter)
+        use_sparse ? ceiling = min(i+1+sparsity, n-1) : ceiling = n-1
+        for j in (i+1):ceiling
+            δLδyk_inter .= (A_k - K[j] * α) * δLδyk_inter
+            dLdy_coeffs[i, j+1] = only(α * δLδyk_inter)
+        end
+    end
+    if use_sparse
+        dLdy_coeffs = sparse(dLdy_coeffs)
+        dropzeros!(dLdy_coeffs)
+    end
+    return dLdy_coeffs
+end
+
+Δℓ_coe = Δℓ_coefficients(y, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+Δℓ_coe_s = Δℓ_coefficients(y, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas, sparsity=100)
+
+y_test = y[1:3000]
+@time xx = Δℓ_coefficients(y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+@time Δℓ_coefficients(y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas) * Δℓ_helper_γ(y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+@time Δℓ(y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+
+function heatmap_Δℓ_coe(Δℓ_coe)
+    Δℓ_coe[diagind(Δℓ_coe)] .= 0
+    plt = heatmap(log.(abs.(Δℓ_coe)))
+    Δℓ_coe[diagind(Δℓ_coe)] .= -1
+    return plt
+end
+
+heatmap_Δℓ_coe(Δℓ_coe[1:1000, 1:1000])
+
 function Δℓ(y, A_k, Σ_k, H_k, P∞; kwargs...)
-    K, γ = Δℓ_helper(y, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
+    K = Δℓ_helper_K(y, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
+    γ = Δℓ_helper_γ(y, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
     n = length(y)
     # now that we have K and γ
     α = H_k * A_k
@@ -179,6 +215,8 @@ function Δℓ(y, A_k, Σ_k, H_k, P∞; kwargs...)
     end
     return -dLdy
 end
+
+Δℓ_precalc(Δℓ_coe, y, A_k, Σ_k, H_k, P∞; kwargs...) = Δℓ_coe * Δℓ_helper_γ(y, A_k, Σ_k, H_k, P∞; kwargs...)
 
 # testing how close we are to numerical estimates
 function est_∇(f::Function, inputs; dif::Real=1e-7, inds::UnitRange=1:length(inputs))
@@ -196,21 +234,22 @@ using Nabla
 
 f(y) = SSOF.SOAP_gp_ℓ_nabla(y, A_k, Σ_k; σ²_meas=σ²_meas)
 
-method_strs = ["Finite Differences", "Analytic", "Automatic (Nabla)"]
+method_strs = ["Finite Differences", "Analytic", "Analytic (w/ precalc)", "Analytic (w/ sparse precalc)", "Automatic (Nabla)"]
 # plots for gradients estimates for each method
 function plot_methods(n; n_zoom=50)
     @assert length(y) > n > n_zoom
     y_test = y[1:n]
     numer = est_∇(f, y_test)
     anal = Δℓ(y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+    anal_p = Δℓ_precalc(Δℓ_coe[1:n, 1:n], y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+    anal_p_s = Δℓ_precalc(Δℓ_coe_s[1:n, 1:n], y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
     auto = only(∇(f)(y_test))
-    plt = plot(; layout=grid(2, 1))
-    plot!(plt[1], numer, label=method_strs[1], title="N=$n")
-    plot!(plt[1], anal, label=method_strs[2])
-    plot!(plt[1], auto, label=method_strs[3])
-    plot!(plt[2], numer[1:n_zoom], label=method_strs[1], title="Zoomed", markershape=:circle)
-    plot!(plt[2], anal[1:n_zoom], label=method_strs[2], markershape=:circle)
-    plot!(plt[2], auto[1:n_zoom], label=method_strs[3], markershape=:circle)
+    ∇_vec = [numer, anal, anal_p, anal_p_s, auto]
+    plt = _my_plot(; layout=grid(2, 1))
+    for i in 1:length(method_strs)
+        plot!(plt[1], ∇_vec[i], label=method_strs[i], title="N=$n", markershape=:circle)
+        plot!(plt[2], ∇_vec[i][1:n_zoom], label=method_strs[i], title="Zoomed", markershape=:circle)
+    end
     return plt
 end
 plot_methods(1000)
@@ -218,19 +257,25 @@ plot_methods(100)
 
 # how long each method takes
 ns = [10, 30, 100, 300, 1000, 3000, 10000, length(y)]
+# n_test = ns[8]
 # @btime est_∇(f, y[1:3000])
 t_numer = [8.7e-6, 42.5e-6, 345.5e-6, 2.89e-3, 30.9e-3, 316.4e-3]
 # @btime Δℓ(y[1:10], A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
-@btime Δℓ_helper(y[1:10000], A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
 t_anal = [1.3e-6, 4.17e-6, 26.8e-6, 198.3e-6, 2.07e-3, 18.3e-3, 5.5, 51.874] # 39802 allocations: 3.34 MiB for len(y)
-# @btime only(∇(f)(y))
+# @btime Δℓ_precalc(Δℓ_coe[1:n_test, 1:n_test], y[1:n_test], A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+t_anal_p = [9.9e-6, 16.9e-6, 106.4e-6, 260.2e-6, 3.9e-3, 36.8e-3, 386.74e-3, 1.605] # 39802 allocations: 3.34 MiB for len(y)
+# @btime Δℓ_precalc(Δℓ_coe_s[1:n_test, 1:n_test], y[1:n_test], A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+t_anal_p_s = [10.1e-6, 18.2e-6, 60.5e-6, 214.3e-6, 729e-6, 3.647e-3, 12.565e-3, 22.36e-3] # 39802 allocations: 3.34 MiB for len(y)
+# @btime only(∇(f)(y[1:1000]))
 t_auto = [983.4e-6, 3.146e-3, 10.8e-3, 32.7e-3, 110e-3, 333.24e-3, 1.768, 2.853]  # 8552642 allocations: 326.58 MiB for len(y)
 
-ratios(ts) = round.(append!([0.], [ts[i+1] / ts[i] for i in 1:(length(ts)-1)]), digits=2)
-plot_f!(plt, ts, label) = plot!(plt, ns[1:length(ts)], ts, xaxis=:log, yaxis=:log,
-    series_annotations = text.(ratios(ts), 10, :white, :bottom), label=label)
 
+# ratios(ts) = round.(append!([0.], [ts[i+1] / ts[i] for i in 1:(length(ts)-1)]), digits=2)
+plot_f!(plt, ts, label) =
+    plot!(plt, ns[1:length(ts)], ts, xaxis=:log, yaxis=:log, label="~n^$(round(log(ts[end] / ts[3]) / log(ns[end]/ns[3]), digits=2)) " * label)
+t_vec = [t_numer, t_anal, t_anal_p, t_anal_p_s, t_auto]
 plt = _my_plot(;xlabel="N", ylabel="t (s)", title="Method timings", legend=:topleft)
-plot_f!(plt, t_numer, method_strs[1])
-plot_f!(plt, t_anal, method_strs[2])
-plot_f!(plt, t_auto, method_strs[3])
+for i in 1:length(method_strs)
+    plot_f!(plt, t_vec[i], method_strs[i])
+end
+plt

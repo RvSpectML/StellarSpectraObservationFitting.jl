@@ -65,13 +65,15 @@ function SOAP_gp_ℓ(y, Δx::Real; kwargs...)
 end
 
 # Based on Kalman filter update (alg 10.18 in ASDE) for constant Ak and Qk
+# changing y only changes m_kbar, v_k, and m_k. Could be faster if
+# P_kbar, S_k, K_k, and P_k were saved?
 function SOAP_gp_ℓ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_meas::Real=1e-12, H_k::AbstractMatrix=H_k, P∞::AbstractMatrix=P∞, F::AbstractMatrix=F)
 
     n = length(y)
     n_state = 3
     ℓ = 0
     m_k, P_k, m_kbar, P_kbar, K_k = init_states(n_state)
-    
+
     for k in 1:n
         # prediction step
         predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
@@ -99,6 +101,7 @@ function SOAP_gp_ℓ_nabla(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_me
     n_state = 3
     m_k = @MMatrix zeros(n_state, 1)
     P_k = MMatrix{3,3}(P∞)
+    # m_kbar = @MVector zeros(n_state)
     P_kbar = @MMatrix zeros(n_state, n_state)
     K_k = @MMatrix zeros(n_state, 1)
     for k in 1:n
