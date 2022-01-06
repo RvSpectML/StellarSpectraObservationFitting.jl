@@ -60,9 +60,12 @@ using Zygote
 fx = ft = SSOF.SOAP_gp(x2, 8e-5)
 @time TGP._logpdf(fx, y2)
 
-n = length(x2)
-@time Σ = cholesky(cov(fx))
-    ℓ = -(n * log(2*π) + logdet(Σ) + y2' * (Σ \ y2)) / 2
+function ℓ_naive(fx, y)
+    n = length(x2)
+    @time Σ = cholesky(cov(fx))
+    return -(n * log(2*π) + logdet(Σ) + y2' * (Σ \ y2)) / 2
+end
+@time ℓ_naive(fx, y2)
 
 ## my version from scratch
 using StaticArrays
@@ -109,12 +112,19 @@ function SOAP_gp_ℓ(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
     return (ℓ - n*log(2π))/2
 end
 
+# @time ℓ_naive(fx, y2)
+# @time TGP._logpdf(fx, y2)
 @time SOAP_gp_ℓ(y2, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
 @time SSOF.SOAP_gp_ℓ(y2, step(x2); σ²_meas=σ²_meas)
 A_k = SMatrix{3,3}(exp(SSOF.F * step(x) * SSOF.SOAP_gp.f.kernel.transform.s[1]))  # State transition matrix
 Σ_k = SMatrix{3,3}(Symmetric(P∞) - A_k * Symmetric(P∞) * A_k')  # eq. 6.71, the process noise
 @time SSOF.SOAP_gp_ℓ(y2, A_k, Σ_k; σ²_meas=σ²_meas)
 
+# fx = ft = SSOF.SOAP_gp(x, 8e-5)
+# @time TGP._logpdf(fx, y)
+# @time SOAP_gp_ℓ(y, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+# @time SSOF.SOAP_gp_ℓ(y, step(x); σ²_meas=σ²_meas)
+# @time SSOF.SOAP_gp_ℓ(y, A_k, Σ_k; σ²_meas=σ²_meas)
 
 ## Looking into gradient w.r.t. y
 
@@ -180,23 +190,23 @@ function Δℓ_coefficients(y, A_k, Σ_k, H_k, P∞; sparsity::Int=0, kwargs...)
     return dLdy_coeffs
 end
 
-Δℓ_coe = Δℓ_coefficients(y, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
-Δℓ_coe_s = Δℓ_coefficients(y, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas, sparsity=100)
+@time Δℓ_coe = Δℓ_coefficients(y, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+@time Δℓ_coe_s = Δℓ_coefficients(y, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas, sparsity=100)
 
 y_test = y[1:3000]
 @time xx = Δℓ_coefficients(y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
 @time Δℓ_coefficients(y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas) * Δℓ_helper_γ(y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
 @time Δℓ(y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
 
-function heatmap_Δℓ_coe(Δℓ_coe)
+function heatmap_Δℓ_coe(Δℓ_coe; kwargs...)
     Δℓ_coe[diagind(Δℓ_coe)] .= 0
-    plt = heatmap(log.(abs.(Δℓ_coe)))
+    plt = heatmap(log.(abs.(Δℓ_coe)); kwargs...)
     Δℓ_coe[diagind(Δℓ_coe)] .= -1
     return plt
 end
 
-heatmap_Δℓ_coe(Δℓ_coe[1:1000, 1:1000])
-
+plt = heatmap_Δℓ_coe(Matrix(Δℓ_coe_s[1:1000, 1:1000]), title="log(abs(Δℓ coefficients))")
+png(plt, "dl_coefficients_s")
 function Δℓ(y, A_k, Σ_k, H_k, P∞; kwargs...)
     K = Δℓ_helper_K(y, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
     γ = Δℓ_helper_γ(y, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
@@ -234,9 +244,10 @@ using Nabla
 
 f(y) = SSOF.SOAP_gp_ℓ_nabla(y, A_k, Σ_k; σ²_meas=σ²_meas)
 
-method_strs = ["Finite Differences", "Analytic", "Analytic (w/ precalc)", "Analytic (w/ sparse precalc)", "Automatic (Nabla)"]
+method_strs = ["Finite Differences", "Automatic (Nabla)", "Analytic", "Analytic (w/ precalc)", "Analytic (w/ sparse precalc)"]
+method_strs = method_strs[1:3]
 # plots for gradients estimates for each method
-function plot_methods(n; n_zoom=50)
+function plot_methods(n; n_zoom=30)
     @assert length(y) > n > n_zoom
     y_test = y[1:n]
     numer = est_∇(f, y_test)
@@ -244,7 +255,7 @@ function plot_methods(n; n_zoom=50)
     anal_p = Δℓ_precalc(Δℓ_coe[1:n, 1:n], y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
     anal_p_s = Δℓ_precalc(Δℓ_coe_s[1:n, 1:n], y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
     auto = only(∇(f)(y_test))
-    ∇_vec = [numer, anal, anal_p, anal_p_s, auto]
+    ∇_vec = [numer, auto, anal, anal_p, anal_p_s]
     plt = _my_plot(; layout=grid(2, 1))
     for i in 1:length(method_strs)
         plot!(plt[1], ∇_vec[i], label=method_strs[i], title="N=$n", markershape=:circle)
@@ -252,9 +263,10 @@ function plot_methods(n; n_zoom=50)
     end
     return plt
 end
-plot_methods(1000)
-plot_methods(100)
-
+plt = plot_methods(1000)
+png(plt, "dl_methods_1000")
+plt = plot_methods(100)
+png(plt, "dl_methods_100")
 # how long each method takes
 ns = [10, 30, 100, 300, 1000, 3000, 10000, length(y)]
 # n_test = ns[8]
@@ -273,9 +285,10 @@ t_auto = [983.4e-6, 3.146e-3, 10.8e-3, 32.7e-3, 110e-3, 333.24e-3, 1.768, 2.853]
 # ratios(ts) = round.(append!([0.], [ts[i+1] / ts[i] for i in 1:(length(ts)-1)]), digits=2)
 plot_f!(plt, ts, label) =
     plot!(plt, ns[1:length(ts)], ts, xaxis=:log, yaxis=:log, label="~n^$(round(log(ts[end] / ts[3]) / log(ns[end]/ns[3]), digits=2)) " * label)
-t_vec = [t_numer, t_anal, t_anal_p, t_anal_p_s, t_auto]
-plt = _my_plot(;xlabel="N", ylabel="t (s)", title="Method timings", legend=:topleft)
+t_vec = [t_numer, t_auto, t_anal, t_anal_p, t_anal_p_s]
+plt = _my_plot(;xlabel="N", ylabel="t (s)", title="Time to Δℓ", legend=:topleft)
 for i in 1:length(method_strs)
     plot_f!(plt, t_vec[i], method_strs[i])
 end
 plt
+png(plt, "dl_methods_t")
