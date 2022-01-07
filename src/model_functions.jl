@@ -223,8 +223,10 @@ function oversamp_interp_helper(to_bounds::AbstractVector, from_x::AbstractVecto
 	ans = spzeros(length(to_bounds)-1, length(from_x))
 	bounds_inds = searchsortednearest(from_x, to_bounds)
 	for i in 1:size(ans, 1)
-		x_lo, x_hi = to_bounds[i], to_bounds[i+1]
-		lo_ind, hi_ind = bounds_inds[i], bounds_inds[i+1]
+		x_lo, x_hi = to_bounds[i], to_bounds[i+1]  # values of bounds
+		lo_ind, hi_ind = bounds_inds[i], bounds_inds[i+1]  # indices of points in model closest to the bounds
+
+		# if necessary, shrink so that so from_x[lo_ind] and from_x[hi_ind] are in the bounds
 		if from_x[lo_ind] < x_lo; lo_ind += 1 end
 		if from_x[hi_ind] > x_hi; hi_ind -= 1 end
 
@@ -249,6 +251,21 @@ end
 oversamp_interp_helper(to_bounds::AbstractMatrix, from_x::AbstractVector) =
 	[oversamp_interp_helper(view(to_bounds, :, i), from_x) for i in 1:size(to_bounds, 2)]
 
+function undersamp_interp_helper(to_x::AbstractVector, from_x::AbstractVector)
+	ans = spzeros(length(to_x), length(from_x))
+	to_inds = searchsortednearest(from_x, to_x; lower=true)
+	for i in 1:size(ans, 1)
+		x_new = to_x[i]
+		ind = to_inds[i]  # index of point in model below to_x[i]
+		dif = (x_new-from_x[ind]) / (from_x[ind+1] - from_x[ind])
+		ans[i, ind] = 1 - dif
+		ans[i, ind + 1] = dif
+	end
+	dropzeros!(ans)
+	return ans
+end
+undersamp_interp_helper(to_x::AbstractMatrix, from_x::AbstractVector) =
+	[undersamp_interp_helper(view(to_x, :, i), from_x) for i in 1:size(to_x, 2)]
 
 struct OrderModel{T<:Number}
     tel::Submodel
@@ -268,6 +285,7 @@ function OrderModel(
 	star::String;
 	n_comp_tel::Int=2,
 	n_comp_star::Int=2,
+	oversamp::Bool=false,
 	kwargs...)
 
 	tel = Submodel(d.log_λ_obs, n_comp_tel; kwargs...)
@@ -282,8 +300,13 @@ function OrderModel(
 	end
 	todo = Dict([(:reg_improved, false), (:downsized, false), (:optimized, false), (:err_estimated, false)])
 	metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
-	b2o = oversamp_interp_helper(d.log_λ_star_bounds, star.log_λ)
-	t2o = oversamp_interp_helper(d.log_λ_obs_bounds, tel.log_λ)
+	if oversamp
+		b2o = oversamp_interp_helper(d.log_λ_star_bounds, star.log_λ)
+		t2o = oversamp_interp_helper(d.log_λ_obs_bounds, tel.log_λ)
+	else
+		b2o = undersamp_interp_helper(d.log_λ_star, star.log_λ)
+		t2o = undersamp_interp_helper(d.log_λ_obs, tel.log_λ)
+	end
 	return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), b2o, t2o, metadata, n_obs)
 end
 Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.b2o, om.t2o, copy(om.metadata), om.n)
