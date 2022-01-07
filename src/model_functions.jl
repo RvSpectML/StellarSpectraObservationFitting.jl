@@ -285,7 +285,7 @@ function OrderModel(
 	star::String;
 	n_comp_tel::Int=2,
 	n_comp_star::Int=2,
-	oversamp::Bool=false,
+	oversamp::Bool=true,
 	kwargs...)
 
 	tel = Submodel(d.log_λ_obs, n_comp_tel; kwargs...)

@@ -39,7 +39,7 @@ if isfile(save_path*"results.jld2")
     end
 else
     model_upscale = 2 * sqrt(2)
-    @time model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8, upscale=model_upscale)
+    @time model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8, upscale=model_upscale, oversamp=true)
     @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
     if !use_reg
         SSOF.rm_regularization(model)
@@ -106,8 +106,8 @@ end
     @save save_path*"model_decision.jld2" comp_ls ℓ aic bic ks test_n_comp_tel test_n_comp_star
 
     model_large = copy(model)
-    # model = SSOF.downsize(model, 1, 0)
     model = SSOF.downsize(model, n_comps_best[1], n_comps_best[2])
+    # model = SSOF.downsize(model, 1, 0)
     model.metadata[:todo][:downsized] = true
     model.metadata[:todo][:reg_improved] = true
     mws = typeof(mws)(model, data)
