@@ -166,14 +166,15 @@ function copy_to_LinearModel!(to::LinearModel, from::Vector)
 	end
 end
 
-struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}}
+struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:AbstractArray{T}}
     log_λ::AV1
     λ::AV2
 	lm::LinearModel
 	A_sde::StaticMatrix
 	Σ_sde::StaticMatrix
+	Δℓ_coeff::AA
 end
-function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=true, kwargs...)
+function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=true, sparsity::Int=100, kwargs...)
 	n_obs = size(log_λ_obs, 2)
 	log_λ, λ = create_λ_template(log_λ_obs; kwargs...)
 	len = length(log_λ)
@@ -183,21 +184,22 @@ function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=
 		lm = BaseLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs))
 	end
 	A_sde, Σ_sde = SOAP_gp_sde_prediction_matrices(step(log_λ))
-	return Submodel(log_λ, λ, lm, A_sde, Σ_sde)
+	Δℓ_coeff = SOAP_gp_Δℓ_coefficients(length(log_λ), A_sde, Σ_sde; sparsity=sparsity)
+	return Submodel(log_λ, λ, lm, A_sde, Σ_sde, Δℓ_coeff)
 end
-function Submodel(log_λ::AV1, λ::AV2, lm, A_sde::StaticMatrix, Σ_sde::StaticMatrix) where {T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}}
+function Submodel(log_λ::AV1, λ::AV2, lm, A_sde::StaticMatrix, Σ_sde::StaticMatrix, Δℓ_coeff::AA) where {T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:AbstractArray{T}}
 	if typeof(lm) <: TemplateModel
-		@assert length(log_λ) == length(λ) == length(lm.μ)
+		@assert length(log_λ) == length(λ) == length(lm.μ) == size(Δℓ_coeff, 1) == size(Δℓ_coeff, 2)
 	else
-		@assert length(log_λ) == length(λ) == size(lm.M, 1)
+		@assert length(log_λ) == length(λ) == size(lm.M, 1) == size(Δℓ_coeff, 1) == size(Δℓ_coeff, 2)
 	end
 	@assert size(A_sde) == size(Σ_sde)
-	return Submodel{T, AV1, AV2}(log_λ, λ, lm, A_sde, Σ_sde)
+	return Submodel{T, AV1, AV2}(log_λ, λ, lm, A_sde, Σ_sde, Δℓ_coeff)
 end
 (sm::Submodel)(inds::AbstractVecOrMat) =
-	Submodel(sm.log_λ, sm.λ, LinearModel(sm.lm, inds), sm.A_sde, sm.Σ_sde)
+	Submodel(sm.log_λ, sm.λ, LinearModel(sm.lm, inds), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff)
 (sm::Submodel)() = sm.lm()
-Base.copy(sm::Submodel) = Submodel(sm.log_λ, sm.λ, copy(sm.lm), sm.A_sde, sm.Σ_sde)
+Base.copy(sm::Submodel) = Submodel(sm.log_λ, sm.λ, copy(sm.lm), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff)
 
 function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 	n_obs = size(log_λ_obs_from, 2)
@@ -323,7 +325,7 @@ end
 downsize(lm::BaseLinearModel, n_comp::Int) =
 	BaseLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :])
 downsize(sm::Submodel, n_comp::Int) =
-	Submodel(copy(sm.log_λ), copy(sm.λ), downsize(sm.lm, n_comp), copy(sm.A_sde), copy(sm.Σ_sde))
+	Submodel(copy(sm.log_λ), copy(sm.λ), downsize(sm.lm, n_comp), copy(sm.A_sde), copy(sm.Σ_sde), copy(sm.Δℓ_coeff))
 downsize(m::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
 	OrderModel(
 		downsize(m.tel, n_comp_tel),
@@ -495,7 +497,8 @@ function model_prior(lm, om::OrderModel, key::Symbol)
 			if haskey(reg, :L1_μ₊_factor); val += dot(μ_mod, μ_mod .> 0) * reg[:L1_μ₊_factor] * reg[:L1_μ] end
 		end
 		# if haskey(reg, :GP_μ); val -= logpdf(SOAP_gp(getfield(om, key).log_λ), μ_mod) * reg[:GP_μ] end
-		if haskey(reg, :GP_μ); val -= SOAP_gp_ℓ_nabla(μ_mod, sm.A_sde, sm.Σ_sde) * reg[:GP_μ] end
+		# if haskey(reg, :GP_μ); val -= SOAP_gp_ℓ_nabla(μ_mod, sm.A_sde, sm.Σ_sde) * reg[:GP_μ] end
+		if haskey(reg, :GP_μ); val -= SOAP_gp_ℓ_precalc(sm.Δℓ_coeff, μ_mod, sm.A_sde, sm.Σ_sde) * reg[:GP_μ] end
 	end
 	if isFullLinearModel
 		if haskey(reg, :shared_M); val += shared_attention(lm[1]) * reg[:shared_M] end
