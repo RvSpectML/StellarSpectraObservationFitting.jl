@@ -28,6 +28,7 @@ if which_opt == 1
     save_path *= "optim_"
 end
 
+# takes a couple mins now
 if isfile(save_path*"results.jld2")
     @load save_path*"results.jld2" model rvs_naive rvs_notel
     if model.metadata[:todo][:err_estimated]
@@ -69,8 +70,8 @@ end
 
 ## Improving regularization
 
-if !model.metadata[:todo][:reg_improved]  # 20 mins
-    @time SSOF.train_OrderModel!(mws; print_stuff=true, ignore_regularization=true)  # 40s
+if !model.metadata[:todo][:reg_improved]  # 27 mins
+    @time SSOF.train_OrderModel!(mws; print_stuff=true, ignore_regularization=true)  # 45s
     n_obs_train = Int(round(0.75 * n_obs))
     training_inds = sort(StatsBase.sample(1:n_obs, n_obs_train; replace=false))
     @time SSOF.fit_regularization!(mws, training_inds)
@@ -91,7 +92,7 @@ end
 
 ## Downsizing model
 
-@time if !model.metadata[:todo][:downsized]  # 1.5 hrs
+@time if !model.metadata[:todo][:downsized]  # 1.5 hrs (for 9x9)
     test_n_comp_tel = 0:8
     test_n_comp_star = 0:8
     ks = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
@@ -105,11 +106,12 @@ end
     @save save_path*"model_decision.jld2" comp_ls ℓ aic bic ks test_n_comp_tel test_n_comp_star
 
     model_large = copy(model)
+    # model = SSOF.downsize(model, 1, 0)
     model = SSOF.downsize(model, n_comps_best[1], n_comps_best[2])
     model.metadata[:todo][:downsized] = true
     model.metadata[:todo][:reg_improved] = true
     mws = typeof(mws)(model, data)
-    SSOF.fine_train_OrderModel!(mws; print_stuff=true)  # 16s
+    SSOF.fine_train_OrderModel!(mws; print_stuff=true)  # 120s
     model.metadata[:todo][:optimized] = true
     @save save_path*"results.jld2" model rvs_naive rvs_notel model_large
 end
@@ -117,7 +119,7 @@ end
 
 ## Getting RV error bars (only regularization held constant)
 
-@time if !model.metadata[:todo][:err_estimated] # 20 mins
+@time if !model.metadata[:todo][:err_estimated] # 25 mins
     data.var[data.var.==Inf] .= 0
     data_noise = sqrt.(data.var)
     data.var[data.var.==0] .= Inf
