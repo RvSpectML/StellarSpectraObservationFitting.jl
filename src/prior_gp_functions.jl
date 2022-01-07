@@ -165,25 +165,6 @@ function SOAP_gp_Δℓ_helper_γ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H
     return γ
 end
 
-function SOAP_gp_Δℓ_helper_ℓγ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; σ²_meas::Real=_σ²_meas_def)
-    n_state = 3
-    n = length(y)
-    m_k, P_k, m_kbar, P_kbar, K_k = init_states(n_state)
-    γ = zeros(n)
-    ℓ = 0
-    for k in 1:n
-        # prediction step
-        predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
-
-        # update step
-        v_k, S_k = update_sde!(K_k, m_k, P_k, y[k], H_k, m_kbar, P_kbar, σ²_meas)
-
-        γ[k] = v_k / S_k
-        ℓ -= log(S_k) + v_k^2/S_k  # 2*ℓ without normalization
-    end
-    return (ℓ - n*log(2π))/2, γ
-end
-
 function SOAP_gp_Δℓ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; kwargs...)
     n = length(y)
     K = SOAP_gp_Δℓ_helper_K(n, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
@@ -212,6 +193,7 @@ function SOAP_gp_Δℓ_coefficients(n::Int, A_k::AbstractMatrix, Σ_k::AbstractM
     K = SOAP_gp_Δℓ_helper_K(n, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
 
     α = H_k * A_k
+    # dLdy_coeffs = spdiagm(-ones(n))  # it's faster to start as dense and convert to sparse after
     dLdy_coeffs = diagm(-ones(n))
     δLδyk_inter = @MMatrix zeros(3, 1)
     for i in 1:(n-1)
@@ -247,6 +229,42 @@ using Nabla
 @explicit_intercepts SOAP_gp_ℓ_precalc Tuple{AbstractMatrix, AbstractVector, AbstractMatrix, AbstractMatrix}
 Nabla.∇(::typeof(SOAP_gp_ℓ_precalc), ::Type{Arg{2}}, _, y, ȳ, Δℓ_coeff, x, A_k, Σ_k) =
     ȳ .* Δℓ_precalc(Δℓ_coeff, x, A_k, Σ_k, H_k, P∞)
+
+
+# sm = mws.om.tel
+# μ_mod = sm.lm.μ .- 1
+# SSOF.SOAP_gp_ℓ_precalc(sm.Δℓ_coeff, μ_mod, sm.A_sde, sm.Σ_sde)
+# import TemporalGPs; TGP = TemporalGPs
+# TGP._logpdf(SSOF.SOAP_gp(sm.log_λ), μ_mod)
+
+# n_test=1000
+# using Nabla
+# f1(y) = SSOF.SOAP_gp_ℓ_precalc(sm.Δℓ_coeff[1:length(y), 1:length(y)], y, sm.A_sde, sm.Σ_sde)
+# f2(y) = SSOF.SOAP_gp_ℓ_nabla(y, sm.A_sde, sm.Σ_sde)
+# only(∇(f1)(μ_mod[1:n_test]))
+# only(∇(f2)(μ_mod[1:n_test]))
+# est_∇(f1, μ_mod[1:n_test])
+# SSOF.Δℓ_precalc(sm.Δℓ_coeff[1:n_test, 1:n_test], μ_mod[1:n_test], sm.A_sde, sm.Σ_sde, SSOF.H_k, SSOF.P∞)
+
+
+# function SOAP_gp_Δℓ_helper_ℓγ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; σ²_meas::Real=_σ²_meas_def)
+#     n_state = 3
+#     n = length(y)
+#     m_k, P_k, m_kbar, P_kbar, K_k = init_states(n_state)
+#     γ = zeros(n)
+#     ℓ = 0
+#     for k in 1:n
+#         # prediction step
+#         predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
+#
+#         # update step
+#         v_k, S_k = update_sde!(K_k, m_k, P_k, y[k], H_k, m_kbar, P_kbar, σ²_meas)
+#
+#         γ[k] = v_k / S_k
+#         ℓ -= log(S_k) + v_k^2/S_k  # 2*ℓ without normalization
+#     end
+#     return (ℓ - n*log(2π))/2, γ
+# end
 
 # using ChainRulesCore
 # function ChainRulesCore.rrule(::typeof(SOAP_gp_ℓ_precalc), Δℓ_coeff::AbstractMatrix, yy::Vector, A_k::AbstractMatrix, Σ_k::AbstractMatrix; kwargs...)
