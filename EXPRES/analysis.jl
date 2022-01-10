@@ -17,6 +17,7 @@ include("data_locs.jl")  # defines expres_data_path and expres_save_path
 desired_order = SSOF.parse_args(2, Int, 68)  # 68 has a bunch of tels, 47 has very few
 use_reg = SSOF.parse_args(3, Bool, true)
 which_opt = SSOF.parse_args(4, Int, 3)
+oversamp = SSOF.parse_args(5, Bool, false)
 
 ## Loading in data and initializing model
 save_path = expres_save_path * star * "/$(desired_order)/"
@@ -39,7 +40,7 @@ if isfile(save_path*"results.jld2")
     end
 else
     model_upscale = 2 * sqrt(2)
-    @time model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8, upscale=model_upscale, oversamp=true)
+    @time model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8, upscale=model_upscale, oversamp=oversamp)
     @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
     if !use_reg
         SSOF.rm_regularization(model)
