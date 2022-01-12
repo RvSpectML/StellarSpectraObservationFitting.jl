@@ -16,8 +16,11 @@ save_plots = true
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 desired_order = SSOF.parse_args(2, Int, 68)  # 68 has a bunch of tels, 47 has very few
 use_reg = SSOF.parse_args(3, Bool, true)
-which_opt = SSOF.parse_args(4, Int, 3)
-oversamp = SSOF.parse_args(5, Bool, false)
+which_opt = SSOF.parse_args(4, Int, 1)
+recalc = SSOF.parse_args(5, Bool, false)
+oversamp = SSOF.parse_args(6, Bool, false)
+use_lsf = SSOF.parse_args(7, Bool, false)
+use_gp_prior = SSOF.parse_args(8, Bool, true)
 
 ## Loading in data and initializing model
 save_path = expres_save_path * star * "/$(desired_order)/"
@@ -25,12 +28,22 @@ save_path = expres_save_path * star * "/$(desired_order)/"
 if !use_reg
     save_path *= "noreg_"
 end
-if which_opt == 1
-    save_path *= "optim_"
+if which_opt != 1
+    save_path *= "adam_"
+end
+if !use_gp_prior
+    save_path *= "nogpprior_"
+end
+if !oversamp
+    save_path *= "undersamp_"
+end
+if !use_lsf
+    data = SSOF.GenericData(data)
+    save_path *= "nolsf_"
 end
 
 # takes a couple mins now
-if isfile(save_path*"results.jld2")
+if isfile(save_path*"results.jld2") && !recalc
     @load save_path*"results.jld2" model rvs_naive rvs_notel
     if model.metadata[:todo][:err_estimated]
         @load save_path*"results.jld2" rv_errors
@@ -48,7 +61,10 @@ else
     end
     @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
-
+if !use_gp_prior
+    delete!(model.reg_tel, :GP_μ)
+    delete!(model.reg_star, :GP_μ)
+end
 
 ## Creating optimization workspace
 if which_opt == 1
@@ -153,7 +169,7 @@ if save_plots
 
     # Compare RV differences to actual RVs from activity
     rvs_notel_opt = SSOF.rvs(model)
-    plt = plot_model_rvs_new(times_nu, rvs_notel_opt, vec(rv_errors), eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1);
+    plt = plot_model_rvs_new(times_nu, rvs_notel_opt, vec(rv_errors), eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
     png(plt, save_path * "model_rvs.png")
 
     if !(typeof(model.star.lm) <: SSOF.TemplateModel)
