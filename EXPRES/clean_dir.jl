@@ -15,8 +15,10 @@ include("data_locs.jl")  # defines expres_data_path and expres_save_path
 # prep_str = "noreg_"
 prep_str = ""
 cutoff = now() - Week(1)
+input_ind = SSOF.parse_args(1, Int, 0)
+delete = SSOF.parse_args(2, Bool, false)
 
-function clean(order::Int, star::String; delete::Bool=SSOF.parse_args(1, Bool, false))
+function clean(order::Int, star::String)
     dir = expres_save_path*star*"/$(order)/"
     ls = readdir(dir)
     println(order)
@@ -28,7 +30,6 @@ function clean(order::Int, star::String; delete::Bool=SSOF.parse_args(1, Bool, f
     end
 end
 
-input_ind = SSOF.parse_args(1, Int, 2)
 input_ind == 0 ? star_inds = (1:3) : star_inds = input_ind
 for star_ind in star_inds
     star = stars[star_ind]
