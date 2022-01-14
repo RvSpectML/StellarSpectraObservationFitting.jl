@@ -21,6 +21,7 @@ recalc = SSOF.parse_args(5, Bool, false)
 oversamp = SSOF.parse_args(6, Bool, false)
 use_lsf = SSOF.parse_args(7, Bool, false)
 use_gp_prior = SSOF.parse_args(8, Bool, true)
+max_components = 5
 
 ## Loading in data and initializing model
 save_path = expres_save_path * star * "/$(desired_order)/"
@@ -53,7 +54,7 @@ if isfile(save_path*"results.jld2") && !recalc
     end
 else
     model_upscale = 2 * sqrt(2)
-    @time model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8, upscale=model_upscale, oversamp=oversamp)
+    @time model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, upscale=model_upscale, oversamp=oversamp)
     @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
     if !use_reg
         SSOF.rm_regularization(model)
