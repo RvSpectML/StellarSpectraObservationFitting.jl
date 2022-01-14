@@ -16,7 +16,7 @@ include("data_locs.jl")  # defines expres_data_path and expres_save_path
 prep_str = ""
 cutoff = now() - Week(1)
 
-function clean(order::Int, star::String; delete::Bool=false)
+function clean(order::Int, star::String; delete::Bool=SSOF.parse_args(1, Bool, false))
     dir = expres_save_path*star*"/$(order)/"
     ls = readdir(dir)
     println(order)
