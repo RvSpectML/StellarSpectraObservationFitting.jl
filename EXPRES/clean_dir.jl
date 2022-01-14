@@ -36,6 +36,6 @@ for star_ind in star_inds
     orders = orders_list[star_ind]
     n_ord = length(orders)
     for i in 1:n_ord
-        clean(orders[i], star; delete=false)
+        clean(orders[i], star)
     end
 end
