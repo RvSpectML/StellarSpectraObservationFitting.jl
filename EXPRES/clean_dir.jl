@@ -10,7 +10,7 @@ using Dates
 
 stars = ["10700", "26965", "34411"]
 # orders_list = [1:85, 1:85, 1:85]
-orders_list = [1:85, 67:69, 1:85]
+orders_list = [1:85, 1:85, 1:85]
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 # prep_str = "noreg_"
 prep_str = ""
