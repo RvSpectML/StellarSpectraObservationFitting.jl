@@ -13,12 +13,17 @@ SSOF_path = dirname(dirname(pathof(SSOF)))
 include(SSOF_path * "/src/_plot_functions.jl")
 stars = ["10700", "26965", "34411"]
 orders2inds(selected_orders::AbstractVector) = [searchsortedfirst(orders, order) for order in selected_orders]
-orders_list = [1:85, 35:78, 1:85]
 # prep_str = "noreg_"
 prep_str = ""
 
 # for star_ind in 1:2
 star_ind = SSOF.parse_args(1, Int, 2)
+only_excalibur = SSOF.parse_args(2, Bool, true)
+if only_excalibur
+    orders_list = [42:77, 40:77, 38:77]
+else
+    orders_list = [1:85, 1:85, 1:85]
+end
 star = stars[star_ind]
 orders = orders_list[star_ind]
 
@@ -26,7 +31,7 @@ orders = orders_list[star_ind]
 
 @load "$(prep_str)$(star)_md.jld2" n_comps n_comps_bic robust
 
-n_robust = [!i for i in robust]
+n_robust = .!robust
 x = orders_list[star_ind]
 annot=text.(x, :top, :white, 5)
 α = 1
@@ -104,7 +109,8 @@ plt = my_scatter(1:length(χ²), sort(χ²); label="χ²", series_annotations=an
 png(plt, prep_str * star * "_χ²")
 
 χ²_orders = sortperm(χ²)[1:end-5]
-inds = [orders[i] for i in eachindex(orders) if (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders)]
+χ²_orders = [orders[χ²_order] for χ²_order in χ²_orders]
+inds = orders2inds([orders[i] for i in eachindex(orders) if (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders)])
 
 rvs_red = collect(Iterators.flatten((sum(rvs[inds, :] ./ (rvs_σ[inds, :] .^ 2); dims=1) ./ sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1))'))
 rvs_red .-= median(rvs_red)
