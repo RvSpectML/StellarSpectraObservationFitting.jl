@@ -93,7 +93,7 @@ function mask_bad_edges!(y::AbstractVector, σ²::AbstractVector; window_width::
 	n_pix = length(y)
 	for window_start in 1:Int(floor(window_width/10)):(n_pix - window_width)
 		window_end = window_start + window_width
-		mean_snr = sqrt(mean((y[window_start:window_end] .^2) ./ σ²[window_start:window_end]))
+		mean_snr = sqrt(mean((y[window_start:window_end] .^2) ./ abs.(σ²[window_start:window_end])))
 		if mean_snr > min_snr
 			σ²[1:window_start] .= Inf # trim everything to left of window
 			break
@@ -101,7 +101,7 @@ function mask_bad_edges!(y::AbstractVector, σ²::AbstractVector; window_width::
 	end
 	for window_end in n_pix:-Int(floor(window_width/10)):(window_width + 1)
 		window_start = window_end - window_width
-		mean_snr = sqrt(mean((y[window_start:window_end] .^2) ./ σ²[window_start:window_end]))
+		mean_snr = sqrt(mean((y[window_start:window_end] .^2) ./ abs.(σ²[window_start:window_end])))
 		if mean_snr > min_snr
 			σ²[window_end:end] .= Inf # trim everything to right of window
 			break

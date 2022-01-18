@@ -1,6 +1,6 @@
 ## Importing packages
 using Pkg
-Pkg.activate("EXPRES")
+Pkg.activate("NEID")
 
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 using JLD2
@@ -9,22 +9,22 @@ import StatsBase
 
 ## Setting up necessary variables
 
-stars = ["10700", "26965", "34411"]
-star = stars[SSOF.parse_args(1, Int, 2)]
+stars = ["10700"]
+star = stars[SSOF.parse_args(1, Int, 1)]
 interactive = length(ARGS) == 0
 save_plots = true
-include("data_locs.jl")  # defines expres_data_path and expres_save_path
-desired_order = SSOF.parse_args(2, Int, 68)  # 68 has a bunch of tels, 47 has very few
+include("data_locs.jl")  # defines neid_data_path and neid_save_path
+desired_order = SSOF.parse_args(2, Int, 67)
 use_reg = SSOF.parse_args(3, Bool, true)
 which_opt = SSOF.parse_args(4, Int, 1)
 recalc = SSOF.parse_args(5, Bool, false)
-oversamp = SSOF.parse_args(6, Bool, false)
+oversamp = SSOF.parse_args(6, Bool, true)
 use_lsf = SSOF.parse_args(7, Bool, false)
 use_gp_prior = SSOF.parse_args(8, Bool, true)
 max_components = 5
 
 ## Loading in data and initializing model
-save_path = expres_save_path * star * "/$(desired_order)/"
+save_path = neid_save_path * star * "/$(desired_order)/"
 @load save_path * "data.jld2" n_obs data times_nu airmasses
 if !use_reg
     save_path *= "noreg_"
@@ -54,7 +54,7 @@ if isfile(save_path*"results.jld2") && !recalc
     end
 else
     model_upscale = 2 * sqrt(2)
-    @time model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, upscale=model_upscale, oversamp=oversamp)
+    @time model = SSOF.OrderModel(data, "NEID", desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, upscale=model_upscale, oversamp=oversamp)
     @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
     if !use_reg
         SSOF.rm_regularization(model)
@@ -111,8 +111,8 @@ end
 ## Downsizing model
 
 @time if !model.metadata[:todo][:downsized]  # 1.5 hrs (for 9x9)
-    test_n_comp_tel = 0:8
-    test_n_comp_star = 0:8
+    test_n_comp_tel = 0:max_components
+    test_n_comp_star = 0:max_components
     ks = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
     comp_ls = zeros(length(test_n_comp_tel), length(test_n_comp_star))
     for (i, n_tel) in enumerate(test_n_comp_tel)
@@ -162,15 +162,11 @@ if save_plots
 
     include(SSOF_path * "/src/_plot_functions.jl")
 
-    using CSV, DataFrames
-    expres_output = CSV.read(SSOF_path * "/EXPRES/" * star * "_activity.csv", DataFrame)
-    eo_rv = expres_output."CBC RV [m/s]"
-    eo_rv_σ = expres_output."CBC RV Err. [m/s]"
-    eo_time = expres_output."Time [MJD]"
+    @load SSOF_path * "/NEID/" * star * "_neid_pipeline.jld2" neid_time neid_rv neid_rv_σ
 
     # Compare RV differences to actual RVs from activity
     rvs_notel_opt = SSOF.rvs(model)
-    plt = plot_model_rvs_new(times_nu, rvs_notel_opt, vec(rv_errors), eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+    plt = plot_model_rvs_new(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
     png(plt, save_path * "model_rvs.png")
 
     if !(typeof(model.star.lm) <: SSOF.TemplateModel)

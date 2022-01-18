@@ -106,6 +106,7 @@ function plot_telluric_model_scores(om::StellarSpectraObservationFitting.OrderMo
 end
 
 function status_plot(o::StellarSpectraObservationFitting.Output, d::StellarSpectraObservationFitting.Data; plot_epoch::Int=10, tracker::Int=0, display_plt::Bool=true, kwargs...)
+    obs_mask = .!(isinf.(d.var[:, plot_epoch]))
     obs_λ = exp.(d.log_λ_obs[:, plot_epoch])
     plot_star_λs = exp.(d.log_λ_star[:, plot_epoch])
     plt = plot_spectrum(; legend = :bottomright, layout = grid(2, 1, heights=[0.85, 0.15]), kwargs...)
@@ -117,11 +118,11 @@ function status_plot(o::StellarSpectraObservationFitting.Output, d::StellarSpect
     plot!(plt[1], obs_λ, star_model .- shift, label="Stellar Model")
 
     shift += 1.1 - minimum(star_model)
-    my_scatter!(plt[1], obs_λ, d.flux[:, plot_epoch] .- shift, label="Observed Data", color=:white, alpha=0.1, xlabel="")
+    my_scatter!(plt[1], obs_λ[obs_mask], d.flux[obs_mask, plot_epoch] .- shift, label="Observed Data", color=:white, alpha=0.1, xlabel="")
     plot!(plt[1], obs_λ, o.total[:, plot_epoch] .- shift, label="Full Model", ls=:dash, color=:white)
     # plot!(plt[1], obs_λ, o.tel[:, plot_epoch] .* star_model .- shift, label="Full Model", ls=:dash, color=:white)
 
-    my_scatter!(plt[2], obs_λ, d.flux[:, plot_epoch] - o.total[:, plot_epoch], ylabel="Residuals", label="", alpha=0.1, color=:white)
+    my_scatter!(plt[2], obs_λ[obs_mask], d.flux[obs_mask, plot_epoch] - o.total[obs_mask, plot_epoch], ylabel="Residuals", label="", alpha=0.1, color=:white)
     # my_scatter!(plt[2], obs_λ, d.flux[:, plot_epoch] - (o.tel[:, plot_epoch] .* star_model), ylabel="Residuals", label="", alpha=0.1, color=:white)
     if display_plt; display(plt) end
     return plt

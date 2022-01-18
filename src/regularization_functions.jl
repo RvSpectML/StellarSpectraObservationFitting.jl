@@ -18,15 +18,15 @@ function _fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol
     @assert 0 < reg_min < reg_max < Inf
     ℓs = Array{Float64}(undef, 2)
     reg_hold = [1, test_factor] .* getfield(om, reg_fields[1])[reg_key]
-    println("initial regularization eval")
+    # println("initial regularization eval")
     ℓs[1] = eval_regularization(reg_fields, reg_key, reg_hold[1], mws, training_inds, testing_inds)
-    println("$(test_factor)x regularization eval")
+    # println("$(test_factor)x regularization eval")
     ℓs[2] = eval_regularization(reg_fields, reg_key, reg_hold[2], mws, training_inds, testing_inds)
-    println()
+    # println()
     # need to try decreasing regularization
     if ℓs[2] > ℓs[1]
         while (ℓs[2] > ℓs[1]) && (reg_min < reg_hold[1] < reg_max)
-            println("trying a lower regularization")
+            # println("trying a lower regularization")
             ℓs[2] = ℓs[1]
             reg_hold ./= test_factor
             ℓs[1] = eval_regularization(reg_fields, reg_key, reg_hold[1], mws, training_inds, testing_inds)
@@ -37,7 +37,7 @@ function _fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol
     # need to try increasing regularization
     else
         while (ℓs[1] > ℓs[2]) && (reg_min < reg_hold[2] < reg_max)
-            println("trying a higher regularization")
+            # println("trying a higher regularization")
             ℓs[1] = ℓs[2]
             reg_hold .*= test_factor
             ℓs[2] = eval_regularization(reg_fields, reg_key, reg_hold[2], mws, training_inds, testing_inds)
@@ -50,13 +50,14 @@ end
 function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; kwargs...)
     if haskey(getfield(mws.om, reg_fields[1]), reg_key)
         before = getfield(mws.om, reg_fields[1])[reg_key]
-        _fit_regularization_helper!(_reg_fields, reg_key, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
+        # println("working on $(reg_fields[1])[:$reg_key]")
+        _fit_regularization_helper!(reg_fields, reg_key, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
         println("$(reg_fields[1])[:$reg_key] : $before -> $(getfield(mws.om, reg_fields[1])[reg_key])")
     end
 end
 
 
-_key_list = [:L2_μ, :L1_μ, :L1_μ₊_factor, :L2_M, :L1_M, :shared_M]
+_key_list = [:GP_μ, :L2_μ, :L1_μ, :L1_μ₊_factor, :L2_M, :L1_M, :shared_M]
 function check_for_valid_regularization(reg::Dict{Symbol, <:Real})
     for i in keys(reg)
         @assert i in _key_list "The requested regularization isn't valid"

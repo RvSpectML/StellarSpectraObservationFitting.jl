@@ -44,7 +44,7 @@ else
     @time model = SSOF.OrderModel(data_small, "EXPRES", desired_order, star; n_comp_tel=3, n_comp_star=3, upscale=model_upscale)
     @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data_small; use_gp=true)
     if !use_reg
-        SSOF.zero_regularization(model)
+        SSOF.rm_regularization(model)
         model.metadata[:todo][:reg_improved] = true
     end
     # @save save_path*"results.jld2" model rvs_naive rvs_notel

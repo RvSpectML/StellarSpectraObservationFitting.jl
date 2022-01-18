@@ -11,6 +11,7 @@ import Base.setindex!
 # using BandedMatrices
 using SparseArrays
 using SpecialFunctions
+using StaticArrays
 
 abstract type Data end
 
@@ -56,6 +57,7 @@ end
 	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds))
 Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star))
 GenericData(d::LSFData) = GenericData(d.flux, d.var, d.log_λ_obs, d.log_λ_star)
+GenericData(d::GenericData) = d
 
 function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=2*sqrt(2))
     log_min_wav, log_max_wav = extrema(log_λ_obs)
@@ -165,12 +167,15 @@ function copy_to_LinearModel!(to::LinearModel, from::Vector)
 	end
 end
 
-struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}}
+struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:AbstractArray{T}}
     log_λ::AV1
     λ::AV2
 	lm::LinearModel
+	A_sde::StaticMatrix
+	Σ_sde::StaticMatrix
+	Δℓ_coeff::AA
 end
-function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=true, kwargs...)
+function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=true, sparsity::Int=100, kwargs...)
 	n_obs = size(log_λ_obs, 2)
 	log_λ, λ = create_λ_template(log_λ_obs; kwargs...)
 	len = length(log_λ)
@@ -179,20 +184,23 @@ function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=
 	else
 		lm = BaseLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs))
 	end
-	return Submodel(log_λ, λ, lm)
+	A_sde, Σ_sde = SOAP_gp_sde_prediction_matrices(step(log_λ))
+	Δℓ_coeff = SOAP_gp_Δℓ_coefficients(length(log_λ), A_sde, Σ_sde; sparsity=sparsity)
+	return Submodel(log_λ, λ, lm, A_sde, Σ_sde, Δℓ_coeff)
 end
-function Submodel(log_λ::AV1, λ::AV2, lm) where {T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}}
+function Submodel(log_λ::AV1, λ::AV2, lm, A_sde::StaticMatrix, Σ_sde::StaticMatrix, Δℓ_coeff::AA) where {T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:AbstractArray{T}}
 	if typeof(lm) <: TemplateModel
-		@assert length(log_λ) == length(λ) == length(lm.μ)
+		@assert length(log_λ) == length(λ) == length(lm.μ) == size(Δℓ_coeff, 1) == size(Δℓ_coeff, 2)
 	else
-		@assert length(log_λ) == length(λ) == size(lm.M, 1)
+		@assert length(log_λ) == length(λ) == size(lm.M, 1) == size(Δℓ_coeff, 1) == size(Δℓ_coeff, 2)
 	end
-	return Submodel{T, AV1, AV2}(log_λ, λ, lm)
+	@assert size(A_sde) == size(Σ_sde)
+	return Submodel{T, AV1, AV2}(log_λ, λ, lm, A_sde, Σ_sde, Δℓ_coeff)
 end
 (sm::Submodel)(inds::AbstractVecOrMat) =
-	Submodel(sm.log_λ, sm.λ, LinearModel(sm.lm, inds))
+	Submodel(sm.log_λ, sm.λ, LinearModel(sm.lm, inds), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff)
 (sm::Submodel)() = sm.lm()
-Base.copy(sm::Submodel) = Submodel(sm.log_λ, sm.λ, copy(sm.lm))
+Base.copy(sm::Submodel) = Submodel(sm.log_λ, sm.λ, copy(sm.lm), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff)
 
 function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 	n_obs = size(log_λ_obs_from, 2)
@@ -205,9 +213,9 @@ function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 end
 
 default_reg_tel = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
-	(:L1_μ₊_factor, 6.), (:L2_M, 1e-1), (:L1_M, 1e3)])
+	(:L1_μ₊_factor, 6.), (:GP_μ, 1e1), (:L2_M, 1e-1), (:L1_M, 1e3)])
 default_reg_star = Dict([(:L2_μ, 1e4), (:L1_μ, 1e3),
-	(:L1_μ₊_factor, 7.2), (:L2_M, 1e1), (:L1_M, 1e6)])
+	(:L1_μ₊_factor, 7.2), (:GP_μ, 1e1), (:L2_M, 1e1), (:L1_M, 1e6)])
 # They need to be different or else the stellar μ will be surpressed
 # default_reg_star = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
 # 	(:L1_μ₊_factor, 6.), (:L2_M, 1e-1), (:L1_M, 1e3)])
@@ -216,8 +224,10 @@ function oversamp_interp_helper(to_bounds::AbstractVector, from_x::AbstractVecto
 	ans = spzeros(length(to_bounds)-1, length(from_x))
 	bounds_inds = searchsortednearest(from_x, to_bounds)
 	for i in 1:size(ans, 1)
-		x_lo, x_hi = to_bounds[i], to_bounds[i+1]
-		lo_ind, hi_ind = bounds_inds[i], bounds_inds[i+1]
+		x_lo, x_hi = to_bounds[i], to_bounds[i+1]  # values of bounds
+		lo_ind, hi_ind = bounds_inds[i], bounds_inds[i+1]  # indices of points in model closest to the bounds
+
+		# if necessary, shrink so that so from_x[lo_ind] and from_x[hi_ind] are in the bounds
 		if from_x[lo_ind] < x_lo; lo_ind += 1 end
 		if from_x[hi_ind] > x_hi; hi_ind -= 1 end
 
@@ -242,6 +252,21 @@ end
 oversamp_interp_helper(to_bounds::AbstractMatrix, from_x::AbstractVector) =
 	[oversamp_interp_helper(view(to_bounds, :, i), from_x) for i in 1:size(to_bounds, 2)]
 
+function undersamp_interp_helper(to_x::AbstractVector, from_x::AbstractVector)
+	ans = spzeros(length(to_x), length(from_x))
+	to_inds = searchsortednearest(from_x, to_x; lower=true)
+	for i in 1:size(ans, 1)
+		x_new = to_x[i]
+		ind = to_inds[i]  # index of point in model below to_x[i]
+		dif = (x_new-from_x[ind]) / (from_x[ind+1] - from_x[ind])
+		ans[i, ind] = 1 - dif
+		ans[i, ind + 1] = dif
+	end
+	dropzeros!(ans)
+	return ans
+end
+undersamp_interp_helper(to_x::AbstractMatrix, from_x::AbstractVector) =
+	[undersamp_interp_helper(view(to_x, :, i), from_x) for i in 1:size(to_x, 2)]
 
 struct OrderModel{T<:Number}
     tel::Submodel
@@ -261,6 +286,7 @@ function OrderModel(
 	star::String;
 	n_comp_tel::Int=2,
 	n_comp_star::Int=2,
+	oversamp::Bool=true,
 	kwargs...)
 
 	tel = Submodel(d.log_λ_obs, n_comp_tel; kwargs...)
@@ -275,20 +301,27 @@ function OrderModel(
 	end
 	todo = Dict([(:reg_improved, false), (:downsized, false), (:optimized, false), (:err_estimated, false)])
 	metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
-	b2o = oversamp_interp_helper(d.log_λ_star_bounds, star.log_λ)
-	t2o = oversamp_interp_helper(d.log_λ_obs_bounds, tel.log_λ)
+	if oversamp
+		b2o = oversamp_interp_helper(d.log_λ_star_bounds, star.log_λ)
+		t2o = oversamp_interp_helper(d.log_λ_obs_bounds, tel.log_λ)
+	else
+		b2o = undersamp_interp_helper(d.log_λ_star, star.log_λ)
+		t2o = undersamp_interp_helper(d.log_λ_obs, tel.log_λ)
+	end
 	return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), b2o, t2o, metadata, n_obs)
 end
 Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.b2o, om.t2o, copy(om.metadata), om.n)
 (om::OrderModel)(inds::AbstractVecOrMat) =
 	OrderModel(om.tel(inds), om.star(inds), om.rv(inds), om.reg_tel,
 		om.reg_star, view(om.b2o, inds), view(om.t2o, inds), copy(om.metadata), length(inds))
-function zero_regularization(om::OrderModel)
+function rm_regularization(om::OrderModel)
 	for (key, value) in om.reg_tel
-		om.reg_tel[key] = 0
+		delete!(om.reg_tel, key)
+		# om.reg_tel[key] = 0
 	end
 	for (key, value) in om.reg_star
-		om.reg_star[key] = 0
+		delete!(om.reg_star, key)
+		# om.reg_star[key] = 0
 	end
 end
 
@@ -316,15 +349,12 @@ end
 downsize(lm::BaseLinearModel, n_comp::Int) =
 	BaseLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :])
 downsize(sm::Submodel, n_comp::Int) =
-	Submodel(copy(sm.log_λ), copy(sm.λ), downsize(sm.lm, n_comp))
+	Submodel(copy(sm.log_λ), copy(sm.λ), downsize(sm.lm, n_comp), copy(sm.A_sde), copy(sm.Σ_sde), copy(sm.Δℓ_coeff))
 downsize(m::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
 	OrderModel(
 		downsize(m.tel, n_comp_tel),
 		downsize(m.star, n_comp_star),
 		m.rv, m.reg_tel, m.reg_star, m.b2o, m.t2o, m.metadata, m.n)
-
-tel_prior(om::OrderModel) = model_prior(om.tel.lm, om.reg_tel)
-star_prior(om::OrderModel) = model_prior(om.star.lm, om.reg_star)
 
 spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
 	hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
@@ -476,9 +506,9 @@ function shared_attention(M)
 end
 
 
-
-function model_prior(lm, reg::Dict{Symbol, <:Real})
-
+function model_prior(lm, om::OrderModel, key::Symbol)
+	reg = getfield(om, Symbol(:reg_, key))
+	sm = getfield(om, key)
 	isFullLinearModel = length(lm) > 2
 	val = 0
 
@@ -490,6 +520,9 @@ function model_prior(lm, reg::Dict{Symbol, <:Real})
 			# For some reason dot() works but BLAS.dot() doesn't
 			if haskey(reg, :L1_μ₊_factor); val += dot(μ_mod, μ_mod .> 0) * reg[:L1_μ₊_factor] * reg[:L1_μ] end
 		end
+		# if haskey(reg, :GP_μ); val -= logpdf(SOAP_gp(getfield(om, key).log_λ), μ_mod) * reg[:GP_μ] end
+		# if haskey(reg, :GP_μ); val -= SOAP_gp_ℓ_nabla(μ_mod, sm.A_sde, sm.Σ_sde) * reg[:GP_μ] end
+		if haskey(reg, :GP_μ); val -= SOAP_gp_ℓ_precalc(sm.Δℓ_coeff, μ_mod, sm.A_sde, sm.Σ_sde) * reg[:GP_μ] end
 	end
 	if isFullLinearModel
 		if haskey(reg, :shared_M); val += shared_attention(lm[1]) * reg[:shared_M] end
@@ -499,7 +532,12 @@ function model_prior(lm, reg::Dict{Symbol, <:Real})
 	end
 	return val
 end
-model_prior(lm::Union{FullLinearModel, TemplateModel}, reg::Dict{Symbol, <:Real}) = model_prior(vec(lm), reg)
+model_prior(lm::Union{FullLinearModel, TemplateModel}, om::OrderModel, key::Symbol) = model_prior(vec(lm), om, key)
+
+tel_prior(om::OrderModel) = tel_prior(om.tel.lm, om)
+tel_prior(lm, om::OrderModel) = model_prior(lm, om, :tel)
+star_prior(om::OrderModel) = star_prior(om.star.lm, om)
+star_prior(lm, om::OrderModel) = model_prior(lm, om, :star)
 
 total_model(tel, star, rv) = tel .* (star .+ rv)
 
