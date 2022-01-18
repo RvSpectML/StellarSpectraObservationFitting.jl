@@ -8,7 +8,7 @@ Pkg.instantiate()
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 using JLD2
 using RvSpectMLBase, RvSpectML
-using EchelleInstruments, EchelleInstruments.EXPRES
+using EchelleInstruments, EchelleInstruments.NEID
 using CSV, DataFrames, Query, StatsBase, Statistics, Dates
 
 stars = ["10700"]
