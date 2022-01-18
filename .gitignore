@@ -7,7 +7,7 @@ old
 examples/generate_example_data.jl
 *.png
 *.gif
-EXPRES/data_locs.jl
+*data_locs.jl
 Manifest.toml
 *.csv
 test.jl
