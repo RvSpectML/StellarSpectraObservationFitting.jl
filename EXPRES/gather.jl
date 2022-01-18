@@ -8,8 +8,22 @@ import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 
 ## Setting up necessary variables
 
+input_ind = SSOF.parse_args(1, Int, 0)
+only_excalibur = SSOF.parse_args(2, Bool, false)
+
 stars = ["10700", "26965", "34411"]
-orders_list = [1:85, 1:85, 1:85]
+input_ind == 0 ? star_inds = (1:3) : star_inds = input_ind
+if only_excalibur
+    # excals = Bool.(zeros(85))
+    # for order in 1:85
+    #     @load expres_save_path * star * "/$(order)/data.jld2" used_excal
+    #     excals[order] = used_excal
+    # end
+    # findfirst(excals):findlast(excals)
+    orders_list = [42:77, 40:77, 38:77]
+else
+    orders_list = [1:85, 1:85, 1:85]
+end
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 # prep_str = "noreg_"
 prep_str = ""
@@ -40,8 +54,6 @@ function retrieve_reg(order::Int, star::String)
     return [model.reg_tel[k] for k in keys], [model.reg_star[k] for k in keys]
 end
 
-input_ind = SSOF.parse_args(1, Int, 0)
-input_ind == 0 ? star_inds = (1:3) : star_inds = input_ind
 for star_ind in star_inds
     star = stars[star_ind]
     orders = orders_list[star_ind]
