@@ -29,7 +29,7 @@ orders = orders_list[star_ind]
 
 ## Looking at model components
 
-@load "$(prep_str)$(star)_md.jld2" n_comps n_comps_bic robust
+@load "expres_$(prep_str)$(star)_md.jld2" n_comps n_comps_bic robust
 
 n_robust = .!robust
 x = orders_list[star_ind]
@@ -77,9 +77,9 @@ png(plt, "expres_$(prep_str)md_$star.png")
 
 ## RV reduction
 
-@load "$(prep_str)$(star)_lcrvs.jld2" rvs rvs_σ
+@load "expres_$(prep_str)$(star)_lcrvs.jld2" rvs rvs_σ
 lc_rvs = rvs .- median(rvs; dims=4); lc_rvs_σ = copy(rvs_σ)
-@load "$(prep_str)$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
+@load "expres_$(prep_str)$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 # # plotting order means which don't matter because the are constant shifts for the reduced rv
 # my_scatter(orders, mean(rvs; dims=2); series_annotations=annot, legend=:topleft)
 rvs .-= median(rvs; dims=2)
@@ -158,33 +158,34 @@ use_mad ? png(plt, "expres_" * prep_str * star * "_lc_mad") : png(plt, "expres_"
 
 ## regularization by order
 
-@load "$(prep_str)$(star)_regs.jld2" reg_tels reg_stars
-keys = SSOF._key_list[1:5]
+@load "expres_$(prep_str)$(star)_regs.jld2" reg_tels reg_stars
+reg_keys = SSOF._key_list[1:end-1]
+mask = [reg_tels[i, 1]!=0 for i in 1:length(orders)]
 
 plt = _my_plot(;xlabel="Order", ylabel="Regularization", title="Regularizations per order (HD$star)", yaxis=:log)
-for i in eachindex(keys)
-    plot!(plt, orders, reg_tels[:, i], label="reg_$(keys[i])", markershape=:circle, markerstrokewidth=0)
+for i in eachindex(reg_keys)
+    plot!(plt, orders[mask], reg_tels[mask, i], label="reg_$(reg_keys[i])", markershape=:circle, markerstrokewidth=0)
 end
-# for i in eachindex(keys)
-#     plot!(plt, orders, reg_stars[:, i], label="star_$(keys[i])", markershape=:circle, markerstrokewidth=0)
+# for i in eachindex(reg_keys)
+#     plot!(plt, orders, reg_stars[:, i], label="star_$(reg_keys[i])", markershape=:circle, markerstrokewidth=0)
 # end
-for i in eachindex(keys)
-    hline!(plt, [SSOF.default_reg_tel[keys[i]]], c=plt_colors[i], label="")
-    # hline!(plt, [SSOF.default_reg_star[keys[i]]], c=plt_colors[i+length(keys)], label="")
+for i in eachindex(reg_keys)
+    hline!(plt, [SSOF.default_reg_tel[reg_keys[i]]], c=plt_colors[i], label="")
+    # hline!(plt, [SSOF.default_reg_star[reg_keys[i]]], c=plt_colors[i+length(reg_keys)], label="")
 end
 display(plt)
 png(plt, "expres_" * prep_str * star * "_reg_tel")
 
 plt = _my_plot(;xlabel="Order", ylabel="Regularization", title="Regularizations per order (HD$star)", yaxis=:log)
-# for i in eachindex(keys)
-#     plot!(plt, orders, reg_tels[:, i], label="reg_$(keys[i])", markershape=:circle, markerstrokewidth=0)
+# for i in eachindex(reg_keys)
+#     plot!(plt, orders, reg_tels[:, i], label="reg_$(reg_keys[i])", markershape=:circle, markerstrokewidth=0)
 # end
-for i in eachindex(keys)
-    plot!(plt, orders, reg_stars[:, i], label="star_$(keys[i])", markershape=:circle, markerstrokewidth=0)
+for i in eachindex(reg_keys)
+    plot!(plt, orders[mask], reg_stars[mask, i], label="star_$(reg_keys[i])", markershape=:circle, markerstrokewidth=0)
 end
-for i in eachindex(keys)
-    # hline!(plt, [SSOF.default_reg_tel[keys[i]]], c=plt_colors[i], label="")
-    hline!(plt, [SSOF.default_reg_star[keys[i]]], c=plt_colors[i], label="")
+for i in eachindex(reg_keys)
+    # hline!(plt, [SSOF.default_reg_tel[reg_keys[i]]], c=plt_colors[i], label="")
+    hline!(plt, [SSOF.default_reg_star[reg_keys[i]]], c=plt_colors[i], label="")
 end
 display(plt)
 png(plt, "expres_" * prep_str * star * "_reg_star")
