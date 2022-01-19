@@ -12,7 +12,7 @@ input_ind = SSOF.parse_args(1, Int, 0)
 
 stars = ["10700"]
 input_ind == 0 ? star_inds = (1:1) : star_inds = input_ind
-orders_list = [1:85, 1:85, 1:85]
+orders_list = [4:122]
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
 # prep_str = "noreg_"
 prep_str = ""
@@ -37,10 +37,10 @@ function retrieve_lcrvs(order::Int, star::String)
     return rvs, rvs_σ
 end
 
-keys = SSOF._key_list[1:5]
+reg_keys = SSOF._key_list[1:end-1]
 function retrieve_reg(order::Int, star::String)
     @load neid_save_path*star*"/$(order)/$(prep_str)results.jld2" model
-    return [model.reg_tel[k] for k in keys], [model.reg_star[k] for k in keys]
+    return [model.reg_tel[k] for k in reg_keys], [model.reg_star[k] for k in reg_keys]
 end
 
 for star_ind in star_inds
@@ -87,8 +87,8 @@ for star_ind in star_inds
     # end
     # @save "neid_$(prep_str)$(star)_lcrvs.jld2" rvs rvs_σ
 
-    reg_tels = zeros(n_ord, length(keys))
-    reg_stars = zeros(n_ord, length(keys))
+    reg_tels = zeros(n_ord, length(reg_keys))
+    reg_stars = zeros(n_ord, length(reg_keys))
     for i in 1:n_ord
         try
             reg_tels[i, :], reg_stars[i, :] = retrieve_reg(orders[i], star)
