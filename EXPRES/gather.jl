@@ -60,31 +60,31 @@ for star_ind in star_inds
     n_ord = length(orders)
     @load expres_save_path*star*"/$(orders[1])/data.jld2" n_obs times_nu airmasses
 
-    # rvs = zeros(n_ord,  n_obs)
-    # rvs_σ = zeros(n_ord, n_obs)
-    # for i in 1:n_ord
-    #     try
-    #         rvs[i, :], rvs_σ[i, :] = retrieve(orders[i], star)
-    #     catch
-    #         rvs_σ[i, :] .= Inf
-    #         println("order $(orders[i]) is missing")
-    #     end
-    # end
-    # @save "expres_$(prep_str)$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
+    rvs = zeros(n_ord,  n_obs)
+    rvs_σ = zeros(n_ord, n_obs)
+    for i in 1:n_ord
+        try
+            rvs[i, :], rvs_σ[i, :] = retrieve(orders[i], star)
+        catch
+            rvs_σ[i, :] .= Inf
+            println("order $(orders[i]) is missing")
+        end
+    end
+    @save "expres_$(prep_str)$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 
-    # @load expres_save_path*star*"/$(orders[1])/data.jld2" n_obs times_nu airmasses
-    # n_comps = zeros(Int, n_ord, 2)
-    # n_comps_bic = zeros(Int, n_ord, 2)
-    # robust = zeros(Bool, n_ord)
-    # for i in 1:n_ord
-    #     try
-    #         n_comps[i, :], n_comps_bic[i, :], robust[i] = retrieve_md(orders[i], star)
-    #     catch
-    #         n_comps[i, :] .= -1
-    #         println("order $(orders[i]) is missing")
-    #     end
-    # end
-    # @save "expres_$(prep_str)$(star)_md.jld2" n_comps n_comps_bic robust
+    @load expres_save_path*star*"/$(orders[1])/data.jld2" n_obs times_nu airmasses
+    n_comps = zeros(Int, n_ord, 2)
+    n_comps_bic = zeros(Int, n_ord, 2)
+    robust = zeros(Bool, n_ord)
+    for i in 1:n_ord
+        try
+            n_comps[i, :], n_comps_bic[i, :], robust[i] = retrieve_md(orders[i], star)
+        catch
+            n_comps[i, :] .= -1
+            println("order $(orders[i]) is missing")
+        end
+    end
+    @save "expres_$(prep_str)$(star)_md.jld2" n_comps n_comps_bic robust
 
     # rvs = zeros(n_ord, 3, 3, n_obs)
     # rvs_σ = zeros(n_ord, 3, 3, n_obs)
