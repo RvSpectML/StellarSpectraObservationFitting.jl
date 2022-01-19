@@ -30,7 +30,7 @@ function plot_model_rvs(times_nu::AbstractVector{T}, rvs_naive::AbstractVector{T
     plt = plot_rv()
     my_scatter!(plt, times_nu, rvs_naive, label="Naive, std: $(round(std(rvs_naive), digits=3))", alpha = 0.2)
     my_scatter!(plt, times_nu, rvs_notel, label="Before optimization, std: $(round(std(rvs_notel), digits=3))", alpha = 0.2)
-    my_scatter!(plt, inst_time, inst_rvs; yerror=inst_rvs_σ, label="EXPRES RVs, std: $(round(std(inst_rvs), digits=3))")
+    my_scatter!(plt, inst_time, inst_rvs; yerror=inst_rvs_σ, label="Instrument RVs, std: $(round(std(inst_rvs), digits=3))")
     my_scatter!(plt, times_nu, rvs_notel_opt, label="After optimization, std: $(round(std(rvs_notel_opt), digits=3))", alpha = 0.7)
     if display_plt; display(plt) end
     return plt
@@ -40,10 +40,10 @@ function plot_model_rvs_new(times_nu::AbstractVector{T}, model_rvs::AbstractVecO
     plt = plot_rv(; legend=:bottomleft, layout=grid(2, 1, heights=[0.7, 0.3]))
     ervs = inst_rvs .- median(inst_rvs)
     mrvs = model_rvs .- median(model_rvs)
-    my_scatter!(plt[1], inst_times, ervs; yerror=inst_rvs_σ, label="EXPRES RVs, std: $(round(std(inst_rvs), digits=3)), intra night std: $(round(intra_night_std(inst_rvs, inst_times), digits=3))", xlabel="", kwargs...)
+    my_scatter!(plt[1], inst_times, ervs; yerror=inst_rvs_σ, label="Instrument RVs, std: $(round(std(inst_rvs), digits=3)), intra night std: $(round(intra_night_std(inst_rvs, inst_times), digits=3))", xlabel="", kwargs...)
     my_scatter!(plt[1], times_nu, mrvs; yerror=model_rvs_σ, label="Model RVs,    std: $(round(std(model_rvs), digits=3)), intra night std: $(round(intra_night_std(model_rvs, inst_times), digits=3))", alpha = 0.7, kwargs...)
     resids = mrvs - ervs
-    my_scatter!(plt[2], times_nu, resids, ylabel="model - EXPRES (m/s)", yerror=sqrt.(model_rvs_σ .^ 2 + inst_rvs_σ .^ 2), alpha = 0.5, label="std: $(round(std(resids), digits=3))", markerstrokewidth=1)
+    my_scatter!(plt[2], times_nu, resids, ylabel="model - Instrument (m/s)", yerror=sqrt.(model_rvs_σ .^ 2 + inst_rvs_σ .^ 2), alpha = 0.5, label="std: $(round(std(resids), digits=3))", markerstrokewidth=1)
     if display_plt; display(plt) end
     return plt
 end
