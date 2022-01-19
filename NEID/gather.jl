@@ -59,7 +59,7 @@ for star_ind in star_inds
             println("order $(orders[i]) is missing")
         end
     end
-    @save "$(prep_str)$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
+    @save "neid_$(prep_str)$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 
     @load neid_save_path*star*"/$(orders[1])/data.jld2" n_obs times_nu airmasses
     n_comps = zeros(Int, n_ord, 2)
@@ -73,7 +73,7 @@ for star_ind in star_inds
             println("order $(orders[i]) is missing")
         end
     end
-    @save "$(prep_str)$(star)_md.jld2" n_comps n_comps_bic robust
+    @save "neid_$(prep_str)$(star)_md.jld2" n_comps n_comps_bic robust
 
     # rvs = zeros(n_ord, 3, 3, n_obs)
     # rvs_σ = zeros(n_ord, 3, 3, n_obs)
@@ -85,7 +85,7 @@ for star_ind in star_inds
     #         println("order $(orders[i]) is missing")
     #     end
     # end
-    # @save "$(prep_str)$(star)_lcrvs.jld2" rvs rvs_σ
+    # @save "neid_$(prep_str)$(star)_lcrvs.jld2" rvs rvs_σ
 
     reg_tels = zeros(n_ord, length(keys))
     reg_stars = zeros(n_ord, length(keys))
@@ -96,5 +96,5 @@ for star_ind in star_inds
             println("order $(orders[i]) is missing")
         end
     end
-    @save "$(prep_str)$(star)_regs.jld2" reg_tels reg_stars
+    @save "neid_$(prep_str)$(star)_regs.jld2" reg_tels reg_stars
 end
