@@ -111,8 +111,8 @@ end
 ## Downsizing model
 
 @time if !model.metadata[:todo][:downsized]  # 1.5 hrs (for 9x9)
-    test_n_comp_tel = 0:8
-    test_n_comp_star = 0:8
+    test_n_comp_tel = 0:max_components
+    test_n_comp_star = 0:max_components
     ks = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
     comp_ls = zeros(length(test_n_comp_tel), length(test_n_comp_star))
     for (i, n_tel) in enumerate(test_n_comp_tel)
