@@ -109,14 +109,26 @@ end
 
 
 # saving NEID pipeline results
+function n2s(i)
+	@assert -1 < i < 1000
+	ans = string(i)
+	return "0"^(3-length(ans))*ans
+end
+rv_ords = 57:122
+
 neid_time = zeros(n_obs)
 neid_rv = zeros(n_obs)
 neid_rv_σ = zeros(n_obs)
+neid_order_rv = zeros(n_obs, orders_to_read[end])
 for i in 1:n_obs # at every time
 	ccf_header = read_header(FITS(df_files_use.Filename[i])[13])
 	neid_time[i] = ccf_header["CCFJDMOD"]
 	neid_rv[i] = ccf_header["CCFRVMOD"] * 1000  # m/s
 	neid_rv_σ[i] = ccf_header["DVRMSMOD"] * 1000  # m/s
+	for j in rv_ords
+		neid_order_rv[i, j] = ccf_header["CCFRV"*n2s(j)] * 1000  # m/s
+	end
 end
+ord_has_rvs = vec(all(.!iszero.(neid_order_rv); dims=2))
 SSOF_path = dirname(dirname(pathof(SSOF)))
-@save SSOF_path * "/NEID/" * star * "_neid_pipeline.jld2" neid_time neid_rv neid_rv_σ
+@save SSOF_path * "/NEID/" * star * "_neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs

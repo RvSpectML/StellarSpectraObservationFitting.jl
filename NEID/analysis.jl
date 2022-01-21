@@ -165,12 +165,17 @@ if save_plots
 
     include(SSOF_path * "/src/_plot_functions.jl")
 
-    @load SSOF_path * "/NEID/" * star * "_neid_pipeline.jld2" neid_time neid_rv neid_rv_σ
+    @load SSOF_path * "/NEID/" * star * "_neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs
 
     # Compare RV differences to actual RVs from activity
     rvs_notel_opt = SSOF.rvs(model)
     plt = plot_model_rvs_new(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
     png(plt, save_path * "model_rvs.png")
+
+    if ord_has_rvs[desired_order]
+        plt = plot_model_rvs_new(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_order_rv[:, desired_order], zeros(n_obs); display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+        png(plt, save_path * "model_rvs_order.png")
+    end
 
     if !(typeof(model.star.lm) <: SSOF.TemplateModel)
         plt = plot_stellar_model_bases(model; display_plt=interactive);
