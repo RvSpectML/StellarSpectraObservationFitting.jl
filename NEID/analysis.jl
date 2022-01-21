@@ -62,7 +62,10 @@ else
     end
     @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
-if !use_gp_prior
+if use_gp_prior
+    delete!(model.reg_tel, :L2_μ)
+    delete!(model.reg_star, :L2_μ)
+else
     delete!(model.reg_tel, :GP_μ)
     delete!(model.reg_star, :GP_μ)
 end
