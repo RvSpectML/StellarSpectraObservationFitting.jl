@@ -92,8 +92,8 @@ rvs_σ2_red = rvs_σ_red .^ 2
 neid_rv .-= median(neid_rv)
 
 # Compare RV differences to actual RVs from activity
-plt = plot_model_rvs_new(times_nu, rvs_red, rvs_σ_red, neid_time, neid_rv, neid_rv_σ; markerstrokewidth=1, title="HD$star (median σ: $(round(median(rvs_σ_red), digits=3)))")
-png(plt, "neid_" * prep_str * star * "_model_rvs.png")
+plt = plot_model_rvs(times_nu[mask], rvs_red[mask], rvs_σ_red[mask], neid_time[mask], neid_rv[mask], neid_rv_σ[mask]; markerstrokewidth=1, title="HD$star (median σ: $(round(median(rvs_σ_red), digits=3)))")
+png(plt, "neid_" * prep_str * star * "_model_rvs_mask.png")
 # end
 
 ## regularization by order

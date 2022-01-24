@@ -173,7 +173,7 @@ if save_plots
 
     # Compare RV differences to actual RVs from activity
     rvs_notel_opt = SSOF.rvs(model)
-    plt = plot_model_rvs_new(times_nu, rvs_notel_opt, vec(rv_errors), eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+    plt = plot_model_rvs(times_nu, rvs_notel_opt, vec(rv_errors), eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
     png(plt, save_path * "model_rvs.png")
 
     if !(typeof(model.star.lm) <: SSOF.TemplateModel)

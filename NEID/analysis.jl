@@ -169,11 +169,11 @@ if save_plots
 
     # Compare RV differences to actual RVs from activity
     rvs_notel_opt = SSOF.rvs(model)
-    plt = plot_model_rvs_new(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+    plt = plot_model_rvs(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
     png(plt, save_path * "model_rvs.png")
 
     if ord_has_rvs[desired_order]
-        plt = plot_model_rvs_new(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_order_rv[:, desired_order], zeros(n_obs); display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+        plt = plot_model_rvs(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_order_rv[:, desired_order], zeros(n_obs); display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
         png(plt, save_path * "model_rvs_order.png")
     end
 
