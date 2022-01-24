@@ -35,9 +35,9 @@ function retrieve(order::Int, star::String)
 end
 
 function retrieve_md(order::Int, star::String)
-    @load expres_save_path*star*"/$(order)/$(prep_str)model_decision.jld2" comp_ls ℓ aic bic ks test_n_comp_tel test_n_comp_star
-    ans_aic = argmin(aic)
-    ans_bic = argmin(bic)
+    @load expres_save_path*star*"/$(order)/$(prep_str)model_decision.jld2" comp_ls ℓ aics bics ks test_n_comp_tel test_n_comp_star
+    ans_aic = argmin(aics)
+    ans_bic = argmin(bics)
     n_comps = [test_n_comp_tel[ans_aic[1]], test_n_comp_star[ans_aic[2]]]
     n_comps_bic = [test_n_comp_tel[ans_bic[1]], test_n_comp_star[ans_bic[2]]]
     return n_comps, n_comps_bic, ans_aic==ans_bic
