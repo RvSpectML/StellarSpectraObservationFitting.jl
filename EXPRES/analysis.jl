@@ -118,13 +118,14 @@ end
     test_n_comp_star = 0:max_components
     ks = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
     comp_ls = zeros(length(test_n_comp_tel), length(test_n_comp_star))
+    comp_stds = zeros(length(test_n_comp_tel), length(test_n_comp_star))
     for (i, n_tel) in enumerate(test_n_comp_tel)
         for (j, n_star) in enumerate(test_n_comp_star)
-            comp_ls[i, j], ks[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star], mws)
+            comp_ls[i, j], ks[i, j], comp_stds[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star], mws)
         end
     end
     n_comps_best, ℓ, aics, bics = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, data.var; return_inters=true)
-    @save save_path*"model_decision.jld2" comp_ls ℓ aics bics ks test_n_comp_tel test_n_comp_star
+    @save save_path*"model_decision.jld2" comp_ls ℓ aics bics ks test_n_comp_tel test_n_comp_star comp_stds
 
     model_large = copy(model)
     model = SSOF.downsize(model, n_comps_best[1], n_comps_best[2])

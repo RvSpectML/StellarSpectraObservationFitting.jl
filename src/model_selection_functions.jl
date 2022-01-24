@@ -9,9 +9,9 @@ function test_ℓ_for_n_comps(n_comps::Vector, mws_inp::ModelWorkspace; return_i
     l = loss_func(mws)
     fine_train_OrderModel!(mws; kwargs...)  # 16s
     if return_inters
-        return ws, l, l(), total_length(mws)
+        return mws, l, l(), total_length(mws), std(rvs(mws.om))
     else
-        return l(), total_length(mws)
+        return l(), total_length(mws), std(rvs(mws.om))
     end
 end
 
