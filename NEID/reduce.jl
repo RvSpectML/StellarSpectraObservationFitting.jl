@@ -91,6 +91,9 @@ rvs_σ2_red = rvs_σ_red .^ 2
 @load SSOF_path * "/NEID/" * star * "_neid_pipeline.jld2" neid_time neid_rv neid_rv_σ
 neid_rv .-= median(neid_rv)
 
+
+mask = .!(2459525 .< times_nu .< 2459530)
+
 # Compare RV differences to actual RVs from activity
 plt = plot_model_rvs(times_nu[mask], rvs_red[mask], rvs_σ_red[mask], neid_time[mask], neid_rv[mask], neid_rv_σ[mask]; markerstrokewidth=1, title="HD$star (median σ: $(round(median(rvs_σ_red), digits=3)))")
 png(plt, "neid_" * prep_str * star * "_model_rvs_mask.png")
