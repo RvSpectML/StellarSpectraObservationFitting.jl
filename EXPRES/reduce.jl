@@ -77,8 +77,8 @@ png(plt, "expres_$(prep_str)md_$star.png")
 
 ## RV reduction
 
-@load "expres_$(prep_str)$(star)_lcrvs.jld2" rvs rvs_σ
-lc_rvs = rvs .- median(rvs; dims=4); lc_rvs_σ = copy(rvs_σ)
+# @load "expres_$(prep_str)$(star)_lcrvs.jld2" rvs rvs_σ
+# lc_rvs = rvs .- median(rvs; dims=4); lc_rvs_σ = copy(rvs_σ)
 @load "expres_$(prep_str)$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 # # plotting order means which don't matter because the are constant shifts for the reduced rv
 # my_scatter(orders, mean(rvs; dims=2); series_annotations=annot, legend=:topleft)
@@ -108,14 +108,15 @@ annot = text.(orders[sortperm(χ²)], :center, :black, 4)
 plt = my_scatter(1:length(χ²), sort(χ²); label="χ²", series_annotations=annot, legend=:topleft, title=prep_str * star * "_χ²") #, yaxis=:log)
 png(plt, "expres_" * prep_str * star * "_χ²")
 
-χ²_orders = sortperm(χ²)[1:end-5]
+χ²_orders = sortperm(χ²)[1:end-6]
 χ²_orders = [orders[χ²_order] for χ²_order in χ²_orders]
-inds = orders2inds([orders[i] for i in eachindex(orders) if (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders)])
+orders_to_use = [orders[i] for i in eachindex(orders) if (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders)]
+inds = orders2inds(orders_to_use)
 
 rvs_red = collect(Iterators.flatten((sum(rvs[inds, :] ./ (rvs_σ[inds, :] .^ 2); dims=1) ./ sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1))'))
 rvs_red .-= median(rvs_red)
 rvs_σ_red = collect(Iterators.flatten(1 ./ sqrt.(sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1)')))
-rvs_σ2_red = rvs_σ_red .^ 2
+# rvs_σ2_red = rvs_σ_red .^ 2
 
 expres_output = CSV.read(SSOF_path * "/EXPRES/" * star * "_activity.csv", DataFrame)
 eo_rv = expres_output."CBC RV [m/s]"
@@ -124,9 +125,25 @@ eo_rv_σ = expres_output."CBC RV Err. [m/s]"
 eo_time = expres_output."Time [MJD]"
 
 # Compare RV differences to actual RVs from activity
-plt = plot_model_rvs_new(times_nu, rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ; markerstrokewidth=1, title="HD$star (median σ: $(round(median(rvs_σ_red), digits=3)))")
+plt = plot_model_rvs(times_nu, rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ; markerstrokewidth=1, title="HD$star (median σ: $(round(median(rvs_σ_red), digits=3)))")
 png(plt, "expres_" * prep_str * star * "_model_rvs.png")
 # end
+
+n_chrom_bins = 5
+chrom_orders = [orders_to_use[Int(round((i-1)*length(orders_to_use)/n_chrom_bins+1)):Int(round(i*length(orders_to_use)/n_chrom_bins))] for i in 1:n_chrom_bins]
+chrom_inds = orders2inds.(chrom_orders)
+pal = palette(:redblue)
+pal_inds = reverse([Int(round((i-1)*(length(pal)-1)/(n_chrom_bins-1)))+1 for i in 1:n_chrom_bins])
+shift = round(8 * std(rvs_red))
+plt = plot_rv(; legend=:bottomleft, ylabel = "RV + shift (m/s)")
+for i in 1:length(chrom_inds)
+    c_inds = chrom_inds[i]
+    c_rvs_red = collect(Iterators.flatten((sum(rvs[c_inds, :] ./ (rvs_σ[c_inds, :] .^ 2); dims=1) ./ sum(1 ./ (rvs_σ[c_inds, :] .^ 2); dims=1))'))
+    c_rvs_red .-= median(c_rvs_red)
+    c_rvs_σ_red = collect(Iterators.flatten(1 ./ sqrt.(sum(1 ./ (rvs_σ[c_inds, :] .^ 2); dims=1)')))
+    plot_model_rvs!(plt[1], times_nu, c_rvs_red .- (shift * (i-1)), c_rvs_σ_red; label="Chrom $i", c=pal[pal_inds[i]])
+end
+png(plt, "expres_" * prep_str * star * "_model_rvs_chrom.png")
 
 ## low component testing plot
 using StatsBase
