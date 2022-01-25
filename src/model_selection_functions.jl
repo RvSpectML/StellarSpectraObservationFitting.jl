@@ -3,6 +3,14 @@ total_length(x::AbstractArray) = length(x)
 total_length(mws::TelStarWorkspace) = total_length(mws.telstar.θ) + total_length(mws.rv.θ)
 total_length(mws::TotalWorkspace) = total_length(mws.total.θ)
 total_length(mws::OptimWorkspace) = length(mws.telstar.p0) + length(mws.rv.p0)
+function effective_length(x; return_mask::Bool=false, masked_val::Real = Inf)
+    mask = x .!= masked_val
+    if return_mask
+        return sum(mask), mask
+    else
+        return sum(mask)
+    end
+end
 
 function test_ℓ_for_n_comps(n_comps::Vector, mws_inp::ModelWorkspace; return_inters::Bool=false, kwargs...)
     mws = typeof(mws_inp)(downsize(mws_inp.om, n_comps[1], n_comps[2]), mws_inp.d)
@@ -20,8 +28,7 @@ function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector,
     ## max likelihood
     # ans_ml = argmin(ls)
 
-    mask = var .!= Inf
-    n = sum(mask)
+    n, mask = effective_length(var; return_mask=true)
     ℓ = -1/2 .* (ls .+ (sum(log.(var[mask])) + (n * log(2 * π))))
     aic = 2 .* (ks - ℓ)
     ans_aic = argmin(aic)

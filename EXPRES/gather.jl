@@ -40,7 +40,14 @@ function retrieve_md(order::Int, star::String)
     ans_bic = argmin(bics)
     n_comps = [test_n_comp_tel[ans_aic[1]], test_n_comp_star[ans_aic[2]]]
     n_comps_bic = [test_n_comp_tel[ans_bic[1]], test_n_comp_star[ans_bic[2]]]
-    return n_comps, n_comps_bic, ans_aic==ans_bic
+
+    @load expres_save_path*star*"/$(order)/data.jld2" data
+    n = SSOF.effective_length(data.var)
+    k_dif_aic = ℓ .- ℓ[ans_aic]
+    k_dif_bic = (2 / log(n)) .* k_dif_aic
+    ks = (aics ./ 2) + ℓ
+
+    return n_comps, n_comps_bic, ans_aic==ans_bic, k_dif_aic, k_dif_bic, ks
 end
 
 function retrieve_lcrvs(order::Int, star::String)
@@ -76,15 +83,18 @@ for star_ind in star_inds
     n_comps = zeros(Int, n_ord, 2)
     n_comps_bic = zeros(Int, n_ord, 2)
     robust = zeros(Bool, n_ord)
+    k_dif_aic = zeros(n_ord, 6, 6)
+    k_dif_bic = zeros(n_ord, 6, 6)
+    ks = zeros(n_ord, 6, 6)
     for i in 1:n_ord
         try
-            n_comps[i, :], n_comps_bic[i, :], robust[i] = retrieve_md(orders[i], star)
+            n_comps[i, :], n_comps_bic[i, :], robust[i], k_dif_aic[i, :, :], k_dif_bic[i, :, :], ks[i, :, :] = retrieve_md(orders[i], star)
         catch
             n_comps[i, :] .= -1
             println("order $(orders[i]) is missing")
         end
     end
-    @save "expres_$(prep_str)$(star)_md.jld2" n_comps n_comps_bic robust
+    @save "expres_$(prep_str)$(star)_md.jld2" n_comps n_comps_bic robust k_dif_aic k_dif_bic ks
 
     # rvs = zeros(n_ord, 3, 3, n_obs)
     # rvs_σ = zeros(n_ord, 3, 3, n_obs)
