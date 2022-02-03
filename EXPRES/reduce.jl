@@ -87,29 +87,32 @@ med_rvs_σ = vec(median(rvs_σ; dims=2))
 rvs_std = vec(std(rvs; dims=2))
 σ_floor = 50
 
-annot = text.(orders[rvs_std .< σ_floor], :center, :black, 3)
-plt = my_scatter(orders[rvs_std .< σ_floor], rvs_std[rvs_std .< σ_floor]; legend=:topleft, label="", title="$star RV std", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor])
-annot = text.(orders[rvs_std .> σ_floor], :center, :black, 3)
-my_scatter!(plt, orders[rvs_std .> σ_floor], ones(sum(rvs_std .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=plt_colors[1])
-png(plt, "expres_" * prep_str * star * "_order_rv_std")
-
-annot = text.(orders[med_rvs_σ .< σ_floor], :center, :black, 3)
-plt = my_scatter(orders[med_rvs_σ .< σ_floor], med_rvs_σ[med_rvs_σ .< σ_floor]; legend=:topleft, label="", title="$star Median σ", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor])
-annot = text.(orders[med_rvs_σ .> σ_floor], :center, :black, 3)
-my_scatter!(plt, orders[med_rvs_σ .> σ_floor], ones(sum(med_rvs_σ .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=plt_colors[1])
-png(plt, "expres_" * prep_str * star * "_order_rv_σ")
-
-annot = text.(orders, :center, :black, 3)
-plt = my_scatter(orders, std(rvs; dims=2) ./ med_rvs_σ; legend=:topleft, label="", title="$star (RV std) / (Median σ)", xlabel="Order", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot)
-png(plt, "expres_" * prep_str * star * "_order_rv_ratio")
-
+# annot = text.(orders[rvs_std .< σ_floor], :center, :black, 3)
+# plt = my_scatter(orders[rvs_std .< σ_floor], rvs_std[rvs_std .< σ_floor]; legend=:topleft, label="", title="$star RV std", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor])
+# annot = text.(orders[rvs_std .> σ_floor], :center, :black, 3)
+# my_scatter!(plt, orders[rvs_std .> σ_floor], ones(sum(rvs_std .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=plt_colors[1])
+# png(plt, "expres_" * prep_str * star * "_order_rv_std")
+#
+# annot = text.(orders[med_rvs_σ .< σ_floor], :center, :black, 3)
+# plt = my_scatter(orders[med_rvs_σ .< σ_floor], med_rvs_σ[med_rvs_σ .< σ_floor]; legend=:topleft, label="", title="$star Median σ", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor])
+# annot = text.(orders[med_rvs_σ .> σ_floor], :center, :black, 3)
+# my_scatter!(plt, orders[med_rvs_σ .> σ_floor], ones(sum(med_rvs_σ .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=plt_colors[1])
+# png(plt, "expres_" * prep_str * star * "_order_rv_σ")
+#
+# annot = text.(orders, :center, :black, 3)
+# plt = my_scatter(orders, std(rvs; dims=2) ./ med_rvs_σ; legend=:topleft, label="", title="$star (RV std) / (Median σ)", xlabel="Order", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot)
+# png(plt, "expres_" * prep_str * star * "_order_rv_ratio")
 χ² = vec(sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2))
-annot = text.(orders[sortperm(χ²)], :center, :black, 4)
-plt = my_scatter(1:length(χ²), sort(χ²); label="χ²", series_annotations=annot, legend=:topleft, title=prep_str * star * "_χ²") #, yaxis=:log)
+non_missing_inds = (sum(iszero.(χ²))+1):length(χ²)  # take out missing χ²_orders
+no_cut_χ²_order_inds = sortperm(χ²)[non_missing_inds]
+annot = text.(orders[no_cut_χ²_order_inds], :center, :black, 4)
+
+# plt = my_scatter(non_missing_inds, χ²[no_cut_χ²_order_inds]; ylabel="χ²", label="", series_annotations=annot, legend=:topleft, title=prep_str * star * "_χ²") #, yaxis=:log)
+plt = my_scatter(non_missing_inds, χ²[no_cut_χ²_order_inds]; ylabel="χ²", label="", series_annotations=annot, legend=:topleft, title=prep_str * star * "_χ²", yaxis=:log)
 png(plt, "expres_" * prep_str * star * "_χ²")
 
-χ²_orders = sortperm(χ²)[1:end-6]
-χ²_orders = [orders[χ²_order] for χ²_order in χ²_orders]
+χ²_order_inds = no_cut_χ²_order_inds[1:end-5]
+χ²_orders = [orders[χ²_order_ind] for χ²_order_ind in χ²_order_inds]
 orders_to_use = [orders[i] for i in eachindex(orders) if (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders)]
 inds = orders2inds(orders_to_use)
 
