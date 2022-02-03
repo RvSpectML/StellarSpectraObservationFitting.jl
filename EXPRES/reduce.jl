@@ -135,13 +135,14 @@ chrom_inds = orders2inds.(chrom_orders)
 pal = palette(:redblue)
 pal_inds = reverse([Int(round((i-1)*(length(pal)-1)/(n_chrom_bins-1)))+1 for i in 1:n_chrom_bins])
 shift = round(8 * std(rvs_red))
-plt = plot_rv(; legend=:bottomleft, ylabel = "RV + shift (m/s)")
+plt = plot_rv(; legend=:bottomleft, ylabel = "RV + shift (m/s)", ylim=[minimum(rvs_red)-5-(n_chrom_bins+2)*shift, maximum(rvs_red)+1], title="HD$star Chromatic RVs")
+plot_model_rvs!(plt, times_nu, rvs_red, rvs_σ_red; label="All orders")
 for i in 1:length(chrom_inds)
     c_inds = chrom_inds[i]
     c_rvs_red = collect(Iterators.flatten((sum(rvs[c_inds, :] ./ (rvs_σ[c_inds, :] .^ 2); dims=1) ./ sum(1 ./ (rvs_σ[c_inds, :] .^ 2); dims=1))'))
     c_rvs_red .-= median(c_rvs_red)
     c_rvs_σ_red = collect(Iterators.flatten(1 ./ sqrt.(sum(1 ./ (rvs_σ[c_inds, :] .^ 2); dims=1)')))
-    plot_model_rvs!(plt[1], times_nu, c_rvs_red .- (shift * (i-1)), c_rvs_σ_red; label="Chrom $i", c=pal[pal_inds[i]])
+    plot_model_rvs!(plt, times_nu, c_rvs_red .- (shift * i), c_rvs_σ_red; label="Chrom $i", c=pal[pal_inds[i]])
 end
 png(plt, "expres_" * prep_str * star * "_model_rvs_chrom.png")
 
