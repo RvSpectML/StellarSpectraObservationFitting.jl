@@ -132,6 +132,36 @@ plt = plot_model_rvs(times_nu, rvs_red, rvs_σ_red, eo_time, eo_rv, eo_rv_σ; ma
 png(plt, "expres_" * prep_str * star * "_model_rvs.png")
 # end
 
+
+
+# chromatic RVs
+rvs_chrom = rvs[inds, :] .- rvs_red'
+rvs_σ_chrom = rvs_σ[inds, :]
+# dif as a function of order
+my_scatter(orders_to_use, rvs_chrom, label="", xlabel="Order", ylabel="m/s", yerror=rvs_σ_chrom)
+
+# dif as a function of time, order colored
+# plt = _my_plot(;xlabel="Observations", ylabel="m/s")
+# cs = cgrad(:redsblues)
+# for i in 1:size(rvs_chrom, 1)
+#     scatter!(plt, 1:length(times_nu), rvs_chrom[i, :], label="", c=get(cs, (i-1)/(length(inds)-1)))
+# end
+# plt
+
+dm = SSOF.vander(orders_to_use, 1)
+plt = _my_plot(;xlabel="Order", ylabel="m/s", layout = grid(2, 1, heights=[0.7, 0.3]), size=(1920, 1920), title="HD$star Chromatic RVs")
+lin_terms = zeros(length(times_nu))
+for t in 1:size(rvs_chrom, 2)
+    w = SSOF.general_lst_sq(dm, rvs_chrom[:, t], rvs_σ_chrom[:, t])
+    lin_terms[t] = w[1]
+    f = lst_sq_poly_f(w)
+    c_ind = c_ind_f(t)
+    plot!(plt[1], orders_to_use, f.(float.(orders_to_use)); label="", color=plt_colors[c_ind], alpha=0.7)
+    scatter!(plt[1], orders_to_use, rvs_chrom[:, t]; yerror=rvs_σ_chrom[:,t], label="", color=plt_colors[c_ind], alpha=0.2)
+end
+histogram!(plt[2], lin_terms, label="", bins=20, xlabel="Linear Term Value", ylabel="N", title="")
+png(plt, "expres_" * prep_str * star * "_chrom.png")
+
 n_chrom_bins = 5
 chrom_orders = [orders_to_use[Int(round((i-1)*length(orders_to_use)/n_chrom_bins+1)):Int(round(i*length(orders_to_use)/n_chrom_bins))] for i in 1:n_chrom_bins]
 chrom_inds = orders2inds.(chrom_orders)

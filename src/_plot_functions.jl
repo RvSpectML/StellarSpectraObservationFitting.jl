@@ -47,13 +47,14 @@ function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat
     return plt
 end
 
+c_ind_f(i) = ((i + 3) % 19) + 1
 function plot_stellar_model_bases(om::StellarSpectraObservationFitting.OrderModel; inds::UnitRange=1:size(om.star.lm.M, 2), display_plt::Bool=true, kwargs...)
     plt = plot_spectrum(; title="Stellar Model Bases", legend=:outerright, kwargs...)
     plot!(om.tel.λ, om.tel.lm.μ; label="μₜₑₗ", alpha=0.3, color=:white)
     plot!(om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ")
     shift = 0.2
     for i in reverse(inds)
-        c_ind = ((i - inds[1] + 3) % 19) + 1
+        c_ind = c_ind_f(i - inds[1])
         plot!(om.star.λ, (om.star.lm.M[:, i] ./ norm(om.star.lm.M[:, i])) .- shift * (i - 1); label="Basis $i", color=plt_colors[c_ind])
     end
     if display_plt; display(plt) end
@@ -63,7 +64,7 @@ function plot_stellar_model_scores(om::StellarSpectraObservationFitting.OrderMod
     plt = plot_scores(; title="Stellar Model Weights", legend=:outerright, kwargs...)
     shift = ceil(10 * maximum([std(om.star.lm.s[inds[i], :] .* norm(om.star.lm.M[:, inds[i]])) for i in inds])) / 2
     for i in reverse(inds)
-        c_ind = ((i - inds[1] + 3) % 19) + 1
+        c_ind = c_ind_f(i - inds[1])
         my_scatter!(plt, times_nu, (om.star.lm.s[i, :] .* norm(om.star.lm.M[:, i])) .- shift * (i - 1); label="Weights $i", color=plt_colors[c_ind])
         hline!([-shift * (i - 1)]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
     end
@@ -77,7 +78,7 @@ function plot_telluric_model_bases(om::StellarSpectraObservationFitting.OrderMod
     plot!(om.tel.λ, om.tel.lm.μ; label="μₜₑₗ")
     shift = 0.2
     for i in reverse(inds)
-        c_ind = ((i - inds[1] + 3) % 19) + 1
+        c_ind = c_ind_f(i - inds[1])
         plot!(om.tel.λ, (om.tel.lm.M[:, i] ./ norm(om.tel.lm.M[:, i])) .- shift * (i - 1); label="Basis $i", color=plt_colors[c_ind])
     end
     if display_plt; display(plt) end
@@ -90,7 +91,7 @@ function plot_telluric_model_scores(om::StellarSpectraObservationFitting.OrderMo
     shift = ceil(10 * maximum([std(om.tel.lm.s[inds[i], :] .* norm(om.tel.lm.M[:, inds[i]])) for i in inds])) / 2
     half_shift = ceil(shift) / 2
     for i in reverse(inds)
-        c_ind = ((i - inds[1] + 3) % 19) + 1
+        c_ind = c_ind_f(i - inds[1])
         my_scatter!(plt, times_nu, (om.tel.lm.s[i, :] .* norm(om.tel.lm.M[:, i])) .- (shift * (i - 1) + half_shift); label="Weights $i", color=plt_colors[c_ind])
         hline!([-(shift * (i - 1) + half_shift)]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
     end

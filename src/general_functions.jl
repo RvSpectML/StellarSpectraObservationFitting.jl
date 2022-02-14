@@ -140,14 +140,25 @@ ordinary_lst_sq(
     data::AbstractVector,
     order::Int;
 	x::AbstractVector=1:length(data)) = ordinary_lst_sq(vander(x, order), data)
+general_lst_sq(
+    data::AbstractVector,
+	Σ,
+    order::Int;
+	x::AbstractVector=1:length(data)) = general_lst_sq(vander(x, order), data, Σ)
+
+lst_sq_poly_f(w) = x -> LinearAlgebra.BLAS.dot([x ^ i for i in 0:(length(w)-1)], w)
+# fastest of the following
+# x -> ([x ^ i for i in 0:order]' * w)
+# x -> mapreduce(i -> w[i+1] * x ^ i , +, 0:order)
+# x -> sum([x ^ i for i in 0:order] .* w)
 
 function ordinary_lst_sq_f(data::AbstractVector, order::Int; kwargs...)
 	w = ordinary_lst_sq(data, order; kwargs...)
-	return x -> LinearAlgebra.BLAS.dot([x ^ i for i in 0:order], w)
-	# faster than the following
-	# return x -> ([x ^ i for i in 0:order]' * w)
-	# return x -> mapreduce(i -> w[i+1] * x ^ i , +, 0:order)
-	# return x -> sum([x ^ i for i in 0:order] .* w)
+	return lst_sq_poly_f(w)
+end
+function general_lst_sq_f(data::AbstractVector, Σ, order::Int; kwargs...)
+	w = general_lst_sq(data, Σ, order; kwargs...)
+	return lst_sq_poly_f(w)
 end
 
 _trapzx2(x1::Real, x2::Real, y1::Real, y2::Real) = (x2 - x1) * (y1 + y2)
