@@ -18,8 +18,8 @@ desired_order = SSOF.parse_args(2, Int, 68)  # 68 has a bunch of tels, 47 has ve
 use_reg = SSOF.parse_args(3, Bool, true)
 which_opt = SSOF.parse_args(4, Int, 1)
 recalc = SSOF.parse_args(5, Bool, false)
-oversamp = SSOF.parse_args(6, Bool, false)
-use_lsf = SSOF.parse_args(7, Bool, false)
+oversamp = SSOF.parse_args(6, Bool, true)
+use_lsf = SSOF.parse_args(7, Bool, true)
 use_gp_prior = SSOF.parse_args(8, Bool, true)
 max_components = 5
 
