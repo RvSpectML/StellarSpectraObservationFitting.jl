@@ -218,10 +218,10 @@ function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 	return log_λ_model_to
 end
 
-default_reg_tel = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
-	(:L1_μ₊_factor, 6.), (:GP_μ, 1e1), (:L2_M, 1e-1), (:L1_M, 1e3)])
-default_reg_star = Dict([(:L2_μ, 1e4), (:L1_μ, 1e3),
-	(:L1_μ₊_factor, 7.2), (:GP_μ, 1e1), (:L2_M, 1e1), (:L1_M, 1e6)])
+default_reg_tel = Dict([(:GP_μ, 1e1), (:L2_μ, 1e6), (:L1_μ, 1e2),
+	(:L1_μ₊_factor, 6.), (:GP_M, 1e1), (:L2_M, 1e-1), (:L1_M, 1e3)])
+default_reg_star = Dict([(:GP_μ, 1e1), (:L2_μ, 1e4), (:L1_μ, 1e3),
+	(:L1_μ₊_factor, 7.2), (:GP_M, 1e1), (:L2_M, 1e1), (:L1_M, 1e6)])
 # They need to be different or else the stellar μ will be surpressed
 # default_reg_star = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
 # 	(:L1_μ₊_factor, 6.), (:L2_M, 1e-1), (:L1_M, 1e3)])
@@ -537,6 +537,11 @@ function model_prior(lm, om::OrderModel, key::Symbol)
 		if haskey(reg, :L2_M); val += L2(lm[1]) * reg[:L2_M] end
 		if haskey(reg, :L1_M); val += L1(lm[1]) * reg[:L1_M] end
 		if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0); val += L1(lm[2]) end
+		if haskey(reg, :GP_M)
+			for i in 1:size(lm[1], 2)
+				val -= gp_ℓ_precalc(sm.Δℓ_coeff, view(lm[1], :, i), sm.A_sde, sm.Σ_sde) * reg[:GP_μ]
+			end
+		end
 	end
 	return val
 end

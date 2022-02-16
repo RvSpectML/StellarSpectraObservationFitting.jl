@@ -65,9 +65,13 @@ end
 if use_gp_prior
     delete!(model.reg_tel, :L2_μ)
     delete!(model.reg_star, :L2_μ)
+    delete!(model.reg_tel, :L2_M)
+    delete!(model.reg_star, :L2_M)
 else
     delete!(model.reg_tel, :GP_μ)
     delete!(model.reg_star, :GP_μ)
+    delete!(model.reg_tel, :GP_M)
+    delete!(model.reg_star, :GP_M)
 end
 
 ## Creating optimization workspace
