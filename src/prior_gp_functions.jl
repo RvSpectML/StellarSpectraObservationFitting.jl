@@ -39,6 +39,8 @@ function SOAP_gp_sde_prediction_matrices(Δx; Δx_scaler::Real=SOAP_gp_params.λ
     Σ_k = SMatrix{3,3}(Symmetric(P∞) - A_k * Symmetric(P∞) * A_k')  # eq. 6.71 in [2], the process noise
     return A_k, Σ_k
 end
+LSF_gp_sde_prediction_matrices(Δx; Δx_scaler::Real=LSF_gp_params.λ, kwargs...) =
+    SOAP_gp_sde_prediction_matrices(Δx; Δx_scaler=Δx_scaler, kwargs...)
 
 function predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
     m_kbar .= A_k * m_k  # state prediction
@@ -63,13 +65,17 @@ end
 
 function SOAP_gp_ℓ(y, Δx::Real; kwargs...)
     A_k, Σ_k = SOAP_gp_sde_prediction_matrices(Δx; kwargs...)
-    return SOAP_gp_ℓ(y, A_k, Σ_k; kwargs...)
+    return gp_ℓ(y, A_k, Σ_k; kwargs...)
+end
+function LSF_gp_ℓ(y, Δx::Real; kwargs...)
+    A_k, Σ_k = LSF_gp_sde_prediction_matrices(Δx; kwargs...)
+    return gp_ℓ(y, A_k, Σ_k; kwargs...)
 end
 
 # Based on Kalman filter update (alg 10.18 in ASDE) for constant Ak and Qk
 # changing y only changes m_kbar, v_k, and m_k. Could be faster if
 # P_kbar, S_k, K_k, and P_k were saved?
-function SOAP_gp_ℓ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_meas::Real=_σ²_meas_def, H_k::AbstractMatrix=H_k, P∞::AbstractMatrix=P∞)
+function gp_ℓ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_meas::Real=_σ²_meas_def, H_k::AbstractMatrix=H_k, P∞::AbstractMatrix=P∞)
 
     n = length(y)
     n_state = 3
@@ -91,12 +97,16 @@ end
 
 function SOAP_gp_ℓ_nabla(y, Δx::Real; kwargs...)
     A_k, Σ_k = SOAP_gp_sde_prediction_matrices(Δx; kwargs...)
-    return SOAP_gp_ℓ_nabla(y, A_k, Σ_k; kwargs...)
+    return gp_ℓ_nabla(y, A_k, Σ_k; kwargs...)
+end
+function LSF_gp_ℓ_nabla(y, Δx::Real; kwargs...)
+    A_k, Σ_k = LSF_gp_sde_prediction_matrices(Δx; kwargs...)
+    return gp_ℓ_nabla(y, A_k, Σ_k; kwargs...)
 end
 
 
 # removing things that Nabla doesn't like from SOAP_gp_ℓ
-function SOAP_gp_ℓ_nabla(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_meas::Real=_σ²_meas_def, H_k::AbstractMatrix=H_k, P∞::AbstractMatrix=P∞)
+function gp_ℓ_nabla(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_meas::Real=_σ²_meas_def, H_k::AbstractMatrix=H_k, P∞::AbstractMatrix=P∞)
 
     n = length(y)
     ℓ = 0
@@ -131,7 +141,7 @@ y = rand(fx)
 @assert isapprox(TGP.logpdf(fx, y), SOAP_gp_ℓ_nabla(y, step(x_test)))
 
 # for calculating gradients w.r.t. y
-function SOAP_gp_Δℓ_helper_K(n::Int, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; σ²_meas::Real=_σ²_meas_def)
+function gp_Δℓ_helper_K(n::Int, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; σ²_meas::Real=_σ²_meas_def)
 
     n_state = 3
     _, P_k, _, P_kbar, _ = init_states(n_state)
@@ -148,7 +158,7 @@ function SOAP_gp_Δℓ_helper_K(n::Int, A_k::AbstractMatrix, Σ_k::AbstractMatri
     return K
 end
 
-function SOAP_gp_Δℓ_helper_γ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; σ²_meas::Real=_σ²_meas_def)
+function gp_Δℓ_helper_γ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; σ²_meas::Real=_σ²_meas_def)
     n_state = 3
     n = length(y)
     m_k, P_k, m_kbar, P_kbar, K_k = init_states(n_state)
@@ -165,10 +175,10 @@ function SOAP_gp_Δℓ_helper_γ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H
     return γ
 end
 
-function SOAP_gp_Δℓ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; kwargs...)
+function gp_Δℓ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; kwargs...)
     n = length(y)
-    K = SOAP_gp_Δℓ_helper_K(n, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
-    γ = SOAP_gp_Δℓ_helper_γ(y, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
+    K = gp_Δℓ_helper_K(n, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
+    γ = gp_Δℓ_helper_γ(y, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
     # now that we have K and γ
     α = H_k * A_k
     dLdy = copy(γ)
@@ -186,11 +196,11 @@ end
 
 
 using SparseArrays
-function SOAP_gp_Δℓ_coefficients(n::Int, A_k::AbstractMatrix, Σ_k::AbstractMatrix; H_k::AbstractMatrix=H_k, P∞::AbstractMatrix=P∞, sparsity::Int=0, kwargs...)
+function gp_Δℓ_coefficients(n::Int, A_k::AbstractMatrix, Σ_k::AbstractMatrix; H_k::AbstractMatrix=H_k, P∞::AbstractMatrix=P∞, sparsity::Int=0, kwargs...)
     @assert 0 <= sparsity <= n/10
     use_sparse = sparsity != 0
 
-    K = SOAP_gp_Δℓ_helper_K(n, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
+    K = gp_Δℓ_helper_K(n, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
 
     α = H_k * A_k
     # dLdy_coeffs = spdiagm(-ones(n))  # it's faster to start as dense and convert to sparse after
@@ -217,17 +227,17 @@ end
 
 # only to allow Nabla to know that we should use the faster gradient
 # calculations using the precalcuated coefficients
-SOAP_gp_ℓ_precalc(Δℓ_coeff::AbstractMatrix, y::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix; kwargs...) =
-    SOAP_gp_ℓ(y, A_k, Σ_k; kwargs...)
+gp_ℓ_precalc(Δℓ_coeff::AbstractMatrix, y::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix; kwargs...) =
+    gp_ℓ(y, A_k, Σ_k; kwargs...)
 
 Δℓ_precalc(Δℓ_coeff::AbstractMatrix, y::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; kwargs...) =
-    Δℓ_coeff * SOAP_gp_Δℓ_helper_γ(y, A_k, Σ_k, H_k, P∞; kwargs...)
+    Δℓ_coeff * gp_Δℓ_helper_γ(y, A_k, Σ_k, H_k, P∞; kwargs...)
 
 
 using Nabla
 # BE EXTREMELY CAREFUL! AS WE CANT PASS kwargs... THIS WILL ONLY WORK FOR THE DEFAULT VALUES OF H_k, P∞, F, AND σ²_meas
-@explicit_intercepts SOAP_gp_ℓ_precalc Tuple{AbstractMatrix, AbstractVector, AbstractMatrix, AbstractMatrix}
-Nabla.∇(::typeof(SOAP_gp_ℓ_precalc), ::Type{Arg{2}}, _, y, ȳ, Δℓ_coeff, x, A_k, Σ_k) =
+@explicit_intercepts gp_ℓ_precalc Tuple{AbstractMatrix, AbstractVector, AbstractMatrix, AbstractMatrix}
+Nabla.∇(::typeof(gp_ℓ_precalc), ::Type{Arg{2}}, _, y, ȳ, Δℓ_coeff, x, A_k, Σ_k) =
     ȳ .* Δℓ_precalc(Δℓ_coeff, x, A_k, Σ_k, H_k, P∞)
 
 

@@ -175,7 +175,9 @@ struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:A
 	Σ_sde::StaticMatrix
 	Δℓ_coeff::AA
 end
-function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=true, sparsity::Int=100, kwargs...)
+const _acceptable_types = [:star, :tel]
+function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=true, sparsity::Int=100, type=:star, kwargs...)
+	@assert type in _acceptable_types
 	n_obs = size(log_λ_obs, 2)
 	log_λ, λ = create_λ_template(log_λ_obs; kwargs...)
 	len = length(log_λ)
@@ -184,8 +186,12 @@ function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=
 	else
 		lm = BaseLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs))
 	end
-	A_sde, Σ_sde = SOAP_gp_sde_prediction_matrices(step(log_λ))
-	Δℓ_coeff = SOAP_gp_Δℓ_coefficients(length(log_λ), A_sde, Σ_sde; sparsity=sparsity)
+	if type == :star
+		A_sde, Σ_sde = SOAP_gp_sde_prediction_matrices(step(log_λ))
+	elseif type == :tel
+		A_sde, Σ_sde = LSF_gp_sde_prediction_matrices(step(log_λ))
+	end
+	Δℓ_coeff = gp_Δℓ_coefficients(length(log_λ), A_sde, Σ_sde; sparsity=sparsity)
 	return Submodel(log_λ, λ, lm, A_sde, Σ_sde, Δℓ_coeff)
 end
 function Submodel(log_λ::AV1, λ::AV2, lm, A_sde::StaticMatrix, Σ_sde::StaticMatrix, Δℓ_coeff::AA) where {T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:AbstractArray{T}}
@@ -289,8 +295,8 @@ function OrderModel(
 	oversamp::Bool=true,
 	kwargs...)
 
-	tel = Submodel(d.log_λ_obs, n_comp_tel; kwargs...)
-	star = Submodel(d.log_λ_star, n_comp_star; kwargs...)
+	tel = Submodel(d.log_λ_obs, n_comp_tel; type=:tel, kwargs...)
+	star = Submodel(d.log_λ_star, n_comp_star; type=:star, kwargs...)
 	rv = Submodel(d.log_λ_star, 1; include_mean=false, kwargs...)
 
 	n_obs = size(d.log_λ_obs, 2)
@@ -403,6 +409,8 @@ end
 
 SOAP_gp_params = (var_kernel = 0.2188511770097717, λ = 26063.07237159581)
 SOAP_gp = build_gp(SOAP_gp_params)
+LSF_gp_params = (var_kernel = 0.20771264919723142, λ = 114294.15657857814)
+LSF_gp = build_gp(SOAP_gp_params)
 
 # ParameterHandling version
 # SOAP_gp_params = (var_kernel = positive(3.3270754364467443), λ = positive(1 / 9.021560480866474e-5))
@@ -521,8 +529,8 @@ function model_prior(lm, om::OrderModel, key::Symbol)
 			if haskey(reg, :L1_μ₊_factor); val += dot(μ_mod, μ_mod .> 0) * reg[:L1_μ₊_factor] * reg[:L1_μ] end
 		end
 		# if haskey(reg, :GP_μ); val -= logpdf(SOAP_gp(getfield(om, key).log_λ), μ_mod) * reg[:GP_μ] end
-		# if haskey(reg, :GP_μ); val -= SOAP_gp_ℓ_nabla(μ_mod, sm.A_sde, sm.Σ_sde) * reg[:GP_μ] end
-		if haskey(reg, :GP_μ); val -= SOAP_gp_ℓ_precalc(sm.Δℓ_coeff, μ_mod, sm.A_sde, sm.Σ_sde) * reg[:GP_μ] end
+		# if haskey(reg, :GP_μ); val -= gp_ℓ_nabla(μ_mod, sm.A_sde, sm.Σ_sde) * reg[:GP_μ] end
+		if haskey(reg, :GP_μ); val -= gp_ℓ_precalc(sm.Δℓ_coeff, μ_mod, sm.A_sde, sm.Σ_sde) * reg[:GP_μ] end
 	end
 	if isFullLinearModel
 		if haskey(reg, :shared_M); val += shared_attention(lm[1]) * reg[:shared_M] end
