@@ -9,7 +9,8 @@ using ParameterHandling # Helper functionality for dealing with model parameters
 using Zygote # Algorithmic Differentiation
 
 # Ingesting data
-hdf5_loc = "C:/Users/chris/Downloads/res-1000-1years_full_id1.h5"
+# hdf5_loc = "C:/Users/chris/Downloads/res-1000-1years_full_id1.h5"
+hdf5_loc = "D:/Christian/Downloads/res-1000-1years_full_id1.h5"
 fid = h5open(hdf5_loc, "r")
 quiet = fid["quiet"][:]
 inds = quiet .!= 0
@@ -19,7 +20,7 @@ inds = quiet .!= 0
 quiet = quiet[inds]
 quiet ./= maximum(quiet)
 
-std(y)
+# std(y)
 # using Plots
 # plot(λs, quiet)
 
@@ -27,20 +28,20 @@ std(y)
 use_matern = true
 if use_matern
 	flat_initial_params, unflatten = value_flatten((
-		σ²_kernel = positive(0.1),
+		var_kernel = positive(0.1),
 		λ = positive(4e4),
 		))
 	function build_gp(params)
-	    f_naive = GP(params.σ²_kernel * Matern52Kernel() ∘ ScaleTransform(params.λ))
+	    f_naive = GP(params.var_kernel * Matern52Kernel() ∘ ScaleTransform(params.λ))
 	    return to_sde(f_naive, SArrayStorage(Float64))
 	end
 else
 	flat_initial_params, unflatten = value_flatten((
-		σ²_kernel = positive(0.1),
+		var_kernel = positive(0.1),
 		λ = positive(1e4),
 		))
 	function build_gp(params)
-	    f_naive = GP(params.σ²_kernel * PiecewisePolynomialKernel(;degree=2, dim=1) ∘ ScaleTransform(params.λ))
+	    f_naive = GP(params.var_kernel * PiecewisePolynomialKernel(;degree=2, dim=1) ∘ ScaleTransform(params.λ))
 		# return f_naive
 	    return to_sde(f_naive)
 	end
@@ -51,13 +52,13 @@ params = unflatten(flat_initial_params)
 x = λs
 y = quiet .- 1
 # Changing this changes the results significantly
-# ↑σ²_noise → ↑λ ↓σ²_kernel
-# σ²_noise = 1e-6 seems to lead to most sensible results i.e. draws from the
+# ↑var_noise → ↑λ ↓var_kernel
+# var_noise = 1e-6 seems to lead to most sensible results i.e. draws from the
 # prior of the optimal result look similar to the input spectra
-σ²_noise = 1e-6
+var_noise = 1e-6
 function objective(params)
     f = build_gp(params)
-    return -logpdf(f(x, σ²_noise), y)
+    return -logpdf(f(x, var_noise), y)
 end
 
 # Check that the objective function works:
@@ -67,12 +68,16 @@ f = objective ∘ unflatten
 function g!(G, θ)
 	G .= only(Zygote.gradient(f, θ))
 end
+f(flat_initial_params)
+G = zeros(length(flat_initial_params))
+g!(G, flat_initial_params)
 
 training_results = optimize(f, g!, flat_initial_params,
 	BFGS(alphaguess = Optim.LineSearches.InitialStatic(scaled=true),linesearch = Optim.LineSearches.BackTracking()),
-	Optim.Options(store_trace=true, show_trace=false))
+	Optim.Options(show_trace=true))
 final_params = unflatten(training_results.minimizer)
 println(final_params)
+# final_params = (var_kernel = 0.2188511770097717, λ = 26063.07237159581)
 
 # f = build_gp(final_params)
 # fx = f(x, final_params.σ²_noise)
