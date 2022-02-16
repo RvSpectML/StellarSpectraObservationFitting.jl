@@ -105,7 +105,7 @@ function SOAP_gp_ℓ(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
         # prediction step
         SSOF.predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
         # update step
-        v_k, S_k = SSOF.update!(K_k, m_k, P_k, y[k], H_k, m_kbar, P_kbar, σ²_meas)
+        v_k, S_k = SSOF.update_sde!(K_k, m_k, P_k, y[k], H_k, m_kbar, P_kbar, σ²_meas)
 
         ℓ -= log(S_k) + v_k^2/S_k  # 2*ℓ without normalization
     end
@@ -118,7 +118,7 @@ end
 @time SSOF.SOAP_gp_ℓ(y2, step(x2); σ²_meas=σ²_meas)
 A_k = SMatrix{3,3}(exp(SSOF.F * step(x) * SSOF.SOAP_gp.f.kernel.transform.s[1]))  # State transition matrix
 Σ_k = SMatrix{3,3}(Symmetric(P∞) - A_k * Symmetric(P∞) * A_k')  # eq. 6.71, the process noise
-@time SSOF.SOAP_gp_ℓ(y2, A_k, Σ_k; σ²_meas=σ²_meas)
+@time SSOF.gp_ℓ(y2, A_k, Σ_k; σ²_meas=σ²_meas)
 
 # fx = ft = SSOF.SOAP_gp(x, 8e-5)
 # @time TGP._logpdf(fx, y)
@@ -156,7 +156,7 @@ function Δℓ_helper_γ(y, A_k, Σ_k, H_k, P∞; σ²_meas::Real=1e-12)
         SSOF.predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
 
         # update step
-        v_k, S_k = SSOF.update!(K_k, m_k, P_k, y[k], H_k, m_kbar, P_kbar, σ²_meas)
+        v_k, S_k = SSOF.update_sde!(K_k, m_k, P_k, y[k], H_k, m_kbar, P_kbar, σ²_meas)
 
         γ[k] = v_k / S_k
     end

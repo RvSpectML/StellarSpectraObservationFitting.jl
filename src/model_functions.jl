@@ -176,7 +176,7 @@ struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:A
 	Δℓ_coeff::AA
 end
 const _acceptable_types = [:star, :tel]
-function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=true, sparsity::Int=100, type=:star, kwargs...)
+function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=true, type=:star, kwargs...)
 	@assert type in _acceptable_types
 	n_obs = size(log_λ_obs, 2)
 	log_λ, λ = create_λ_template(log_λ_obs; kwargs...)
@@ -188,8 +188,10 @@ function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=
 	end
 	if type == :star
 		A_sde, Σ_sde = SOAP_gp_sde_prediction_matrices(step(log_λ))
+		sparsity = Int(round(0.5 / (step(log_λ) * SOAP_gp_params.λ)))
 	elseif type == :tel
 		A_sde, Σ_sde = LSF_gp_sde_prediction_matrices(step(log_λ))
+		sparsity = Int(round(0.5 / (step(log_λ) * tel_gp_params.λ)))
 	end
 	Δℓ_coeff = gp_Δℓ_coefficients(length(log_λ), A_sde, Σ_sde; sparsity=sparsity)
 	return Submodel(log_λ, λ, lm, A_sde, Σ_sde, Δℓ_coeff)
@@ -539,7 +541,7 @@ function model_prior(lm, om::OrderModel, key::Symbol)
 		if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0); val += L1(lm[2]) end
 		if haskey(reg, :GP_M)
 			for i in 1:size(lm[1], 2)
-				val -= gp_ℓ_precalc(sm.Δℓ_coeff, view(lm[1], :, i), sm.A_sde, sm.Σ_sde) * reg[:GP_μ]
+				val -= gp_ℓ_precalc(sm.Δℓ_coeff,lm[1][:, i], sm.A_sde, sm.Σ_sde) * reg[:GP_μ]
 			end
 		end
 	end
