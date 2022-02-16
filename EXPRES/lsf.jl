@@ -2,9 +2,8 @@
 # Pkg.activate("EXPRES")
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 
-## Finding LSF width as a function of λ
+## Finding LSF width as a function of wavenumber
 using Distributions
-# using BandedMatrices
 using SparseArrays
 using LinearAlgebra
 _recalc = false
@@ -12,26 +11,16 @@ _inter_poly_order = 2
 _intra_poly_order = 2
 
 if _recalc
-    use_wavenumber = true; use_log = true
     using CSV, DataFrames
     eo = CSV.read("D:/Christian/Downloads/expres_psf.txt", DataFrame)
     # eo = CSV.read("C:/Users/chris/Downloads/expres_psf.txt", DataFrame)
     filter!(:line => ==("LFC"), eo)
     sort!(eo, ["wavenumber [1/cm]"])
 
-    if use_wavenumber
-        λs_func(wn) = wn[:]
-        dλs_func(wn) = ones(length(wn))
-        unit_str = "1/cm"
-        xlab = "Wavenumber ($unit_str)"
-    else
-        use_log ? λs_func(wn) = log.(1e8 ./ wn) : λs_func(wn) = 1e8 ./ wn
-        use_log ? dλs_func(wn) = -1 ./ wn : dλs_func(wn) = -1e8 ./ (wn .^ 2)
-        unit_str = "Å?"
-        xlab = "Wavelength ($unit_str)"
-    end
-    _λs = λs_func(eo."wavenumber [1/cm]")
-    σ = SSOF.fwhm_2_σ.(_λs .* (eo."fwhm [1/cm]" ./ eo."wavenumber [1/cm]"))
+    unit_str = "1/cm"
+    xlab = "Wavenumber ($unit_str)"
+    wns = eo."wavenumber [1/cm]"
+    σ = SSOF.fwhm_2_σ.(eo."fwhm [1/cm]")
 
     dm = ones(size(eo, 1), 1 + _inter_poly_order + _intra_poly_order)
     # orders = [i for i in 1:100 if i in eo.order]
@@ -50,10 +39,10 @@ if _recalc
             dm[inds_temp, i + 1 + _inter_poly_order] = dm[inds_temp, _inter_poly_order + 2] .^ i
         end
     end
-    _w = SSOF.general_lst_sq(dm, σ, (dλs_func(eo."wavenumber [1/cm]") .* eo."fwhm error [1/cm]") .^ 2)  # note the errors are not scaled FWHM -> σ
+    _w = SSOF.general_lst_sq(dm, σ, (eo."fwhm error [1/cm]") .^ 2)  # note the errors are not scaled FWHM -> σ
     println("new lsf_σ w: ", _w)
     model = dm * _w
-    _min_wn, _max_wn = extrema(_λs)
+    _min_wn, _max_wn = extrema(wns)
 else
     _w = [-0.013170986773323784, 4.8136021892119126e-6, -3.772787891582741e-11, 2.3266186490906004e-5, 1.100967064582426e-7]
     _min_wn, _max_wn = 13760.52558749721, 20111.11872452446
@@ -96,35 +85,35 @@ function lsf_σ_safe(wn::AbstractVector, wn_m_order_mean::AbstractVector)
     end
 end
 
-# plt = my_scatter(_λs, σ; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
+# plt = my_scatter(wns, σ; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
 # png(plt, "expres_lsf")
 #
 # inds1 = eo.order .== 38
 # inds2 = eo.order .== 39
-# plt = my_scatter(_λs[inds1], σ[inds1]; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
-# scatter!(_λs[inds2], σ[inds2]; label="")
+# plt = my_scatter(wns[inds1], σ[inds1]; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
+# scatter!(wns[inds2], σ[inds2]; label="")
 # png(plt, "expres_lsf_zoom")
 #
-# plt = my_scatter(_λs, σ; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
+# plt = my_scatter(wns, σ; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
 # for order in orders
 #     inds_temp = eo.order .== order
-#     plot!(_λs[inds_temp], model[inds_temp]; label="", lw=4)
+#     plot!(wns[inds_temp], model[inds_temp]; label="", lw=4)
 # end
 # plt
 # png(plt, "expres_lsf_model")
 #
-# plt = my_scatter(_λs[inds1], σ[inds1]; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
-# scatter!(_λs[inds2], σ[inds2]; label="")
-# plot!(_λs[inds1], model[inds1]; label="model", lw=6, c=plt_colors[6])
-# plot!(_λs[inds2], model[inds2]; label="model", lw=6)
+# plt = my_scatter(wns[inds1], σ[inds1]; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
+# scatter!(wns[inds2], σ[inds2]; label="")
+# plot!(wns[inds1], model[inds1]; label="model", lw=6, c=plt_colors[6])
+# plot!(wns[inds2], model[inds2]; label="model", lw=6)
 # png(plt, "expres_lsf_model_zoom")
 #
 # resids = σ ./ model
 # std(resids)
-# plt = my_scatter(_λs, resids; label="data / model", xlabel=xlab, ylabel="LSF σ ($unit_str)")
+# plt = my_scatter(wns, resids; label="data / model", xlabel=xlab, ylabel="LSF σ ($unit_str)")
 # png(plt, "expres_lsf_resids")
-# plt = scatter(_λs[inds1], resids[inds1]; label="data / model", xlabel=xlab, ylabel="LSF σ ($unit_str)")
-# scatter!(_λs[inds2], resids[inds2]; label="data / model")
+# plt = scatter(wns[inds1], resids[inds1]; label="data / model", xlabel=xlab, ylabel="LSF σ ($unit_str)")
+# scatter!(wns[inds2], resids[inds2]; label="data / model")
 # png(plt, "expres_lsf_resids_zoom")
 
 function EXPRES_lsf(λ::AbstractVector; safe::Bool=true)
