@@ -3,6 +3,8 @@ using Pkg
 Pkg.activate("NEID")
 Pkg.instantiate()
 
+using Dates
+julian2datetime("2459568")
 ## Importing data with Eric's code
 
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
@@ -11,9 +13,9 @@ using RvSpectMLBase, RvSpectML
 using EchelleInstruments, EchelleInstruments.NEID
 using CSV, DataFrames, Query, StatsBase, Statistics, Dates
 
-stars = ["10700"]
-star = stars[SSOF.parse_args(1, Int, 1)]
-target_subdir = star * "/"   # USER: Replace with directory of your choice
+dates = ["2021/12/19", "2021/12/20", "2021/12/23"]
+date = dates[SSOF.parse_args(1, Int, 1)]
+target_subdir = date * "/"
 paths_to_search_for_param = ["NEID"]
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 # include("lsf.jl")  # defines EXPRES_lsf()
@@ -78,7 +80,7 @@ println("starting to write new files")
 min_order_width = 1000
 for order_ind in 1:n_orders
 	order = order_ind + first_order - 1
-	save_path = neid_save_path * star * "/$(order)/"
+	save_path = neid_save_path * date * "/$(order)/"
 	mkpath(save_path)
 	mask_inds = flux_inds[order_ind]
 
@@ -130,4 +132,4 @@ for i in 1:n_obs # at every time
 end
 ord_has_rvs = vec(all(.!iszero.(neid_order_rv); dims=2))
 SSOF_path = dirname(dirname(pathof(SSOF)))
-@save SSOF_path * "/NEID/" * star * "_neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs
+@save SSOF_path * "/NEID/" * date * "_neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs

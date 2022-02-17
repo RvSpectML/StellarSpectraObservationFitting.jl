@@ -198,7 +198,7 @@ function scale_α_helper!(opt::Adam, α_ratio::Real, θ::AbstractVecOrMat, α::R
 	scale_α ? opt.α = α_ratio * rel_step_size(θ) : opt.α = α
 end
 function scale_α_helper!(opts::Vector, α_ratio::Real, θs, α::Real, scale_α::Bool)
-	for i in eachindex(opts)
+	@inbounds for i in eachindex(opts)
 		scale_α_helper!(opts[i], α_ratio, θs[i], α, scale_α)
 	end
 end

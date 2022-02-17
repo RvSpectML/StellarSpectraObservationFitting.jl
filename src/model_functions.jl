@@ -191,7 +191,7 @@ function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=
 		sparsity = Int(round(0.5 / (step(log_λ) * SOAP_gp_params.λ)))
 	elseif type == :tel
 		A_sde, Σ_sde = LSF_gp_sde_prediction_matrices(step(log_λ))
-		sparsity = Int(round(0.5 / (step(log_λ) * tel_gp_params.λ)))
+		sparsity = Int(round(0.5 / (step(log_λ) * LSF_gp_params.λ)))
 	end
 	Δℓ_coeff = gp_Δℓ_coefficients(length(log_λ), A_sde, Σ_sde; sparsity=sparsity)
 	return Submodel(log_λ, λ, lm, A_sde, Σ_sde, Δℓ_coeff)
@@ -538,12 +538,12 @@ function model_prior(lm, om::OrderModel, key::Symbol)
 		if haskey(reg, :shared_M); val += shared_attention(lm[1]) * reg[:shared_M] end
 		if haskey(reg, :L2_M); val += L2(lm[1]) * reg[:L2_M] end
 		if haskey(reg, :L1_M); val += L1(lm[1]) * reg[:L1_M] end
-		if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0); val += L1(lm[2]) end
 		if haskey(reg, :GP_M)
 			for i in 1:size(lm[1], 2)
 				val -= gp_ℓ_precalc(sm.Δℓ_coeff,lm[1][:, i], sm.A_sde, sm.Σ_sde) * reg[:GP_μ]
 			end
 		end
+		if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0) || (haskey(reg, :GP_M) && reg[:GP_M] != 0); val += L1(lm[2]) end
 	end
 	return val
 end
