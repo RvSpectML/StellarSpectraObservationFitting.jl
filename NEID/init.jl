@@ -14,6 +14,7 @@ using CSV, DataFrames, Query, StatsBase, Statistics, Dates
 stars = ["10700"]
 star = stars[SSOF.parse_args(1, Int, 1)]
 target_subdir = star * "/"   # USER: Replace with directory of your choice
+fits_target_str = "HD " * star  # needed by param.jl
 paths_to_search_for_param = ["NEID"]
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 # include("lsf.jl")  # defines EXPRES_lsf()

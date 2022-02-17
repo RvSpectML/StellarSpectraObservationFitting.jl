@@ -16,3 +16,12 @@ if fits_target_str == "HD 10700"
       @take(max_spectra_to_use) |>
       DataFrame
 end
+
+if fits_target_str == "Solar" || fits_target_str == "Sun"
+   global espresso_mask_filename = "G2.espresso.mas"
+   global ccf_mid_velocity = 0
+   global df_files
+   global df_files_use = df_files |>
+   @filter( _.target == fits_target_str ) |>
+   DataFrame
+end
