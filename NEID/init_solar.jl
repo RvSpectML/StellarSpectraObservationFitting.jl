@@ -25,7 +25,7 @@ pipeline_plan = PipelinePlan()
 dont_make_plot!(pipeline_plan, :movie)
 reset_all_needs!(pipeline_plan)
 
-target_dir = neid_data_path * target_subdir
+target_dir = neid_solar_data_path * target_subdir
 target_files = readdir(target_dir)
 using FITSIO
 first_order = min_order(NEID2D())
@@ -36,7 +36,7 @@ n_obs = sum(occursin.(r"\.fits$", target_files))
 flux_masks = Array{UnitRange, 2}(undef, n_obs, n_orders)
 
 if need_to(pipeline_plan,:read_spectra)
-	df_files = make_manifest(neid_data_path, target_subdir, NEID)
+	df_files = make_manifest(neid_solar_data_path, target_subdir, NEID)
 	# Reading in customized parameters from param.jl.
 	eval(code_to_include_param_jl(paths_to_search=paths_to_search_for_param))
 	# Reading in FITS files
