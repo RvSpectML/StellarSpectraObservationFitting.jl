@@ -3,8 +3,6 @@ using Pkg
 Pkg.activate("NEID")
 Pkg.instantiate()
 
-using Dates
-julian2datetime("2459568")
 ## Importing data with Eric's code
 
 import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
