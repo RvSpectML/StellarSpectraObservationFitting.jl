@@ -9,8 +9,8 @@ import StatsBase
 
 ## Setting up necessary variables
 
-stars = ["10700"]
-star = stars[SSOF.parse_args(1, Int, 1)]
+dates = ["2021/12/19", "2021/12/20", "2021/12/23"]
+date = dates[SSOF.parse_args(1, Int, 1)]
 interactive = length(ARGS) == 0
 save_plots = true
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
@@ -21,10 +21,10 @@ recalc = SSOF.parse_args(5, Bool, false)
 oversamp = SSOF.parse_args(6, Bool, true)
 use_lsf = SSOF.parse_args(7, Bool, false)
 use_gp_prior = SSOF.parse_args(8, Bool, true)
-max_components = 5
+max_components = 3
 
 ## Loading in data and initializing model
-save_path = neid_save_path * star * "/$(desired_order)/"
+save_path = neid_save_path * date * "/$(desired_order)/"
 @load save_path * "data.jld2" n_obs data times_nu airmasses
 if !use_reg
     save_path *= "noreg_"
@@ -49,12 +49,12 @@ if isfile(save_path*"results.jld2") && !recalc
     if model.metadata[:todo][:err_estimated]
         @load save_path*"results.jld2" rv_errors
     end
-    if model.metadata[:todo][:downsized]
-        @load save_path*"model_decision.jld2" comp_ls ℓ aics bics ks test_n_comp_tel test_n_comp_star
-    end
+    # if model.metadata[:todo][:downsized]
+    #     @load save_path*"model_decision.jld2" comp_ls ℓ aics bics ks test_n_comp_tel test_n_comp_star
+    # end
 else
     model_upscale = 2 * sqrt(2)
-    @time model = SSOF.OrderModel(data, "NEID", desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, upscale=model_upscale, oversamp=oversamp)
+    @time model = SSOF.OrderModel(data, "NEID", desired_order, date; n_comp_tel=max_components, n_comp_star=max_components, upscale=model_upscale, oversamp=oversamp)
     @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
     if !use_reg
         SSOF.rm_regularization(model)
@@ -115,33 +115,6 @@ if !model.metadata[:todo][:optimized]
     @save save_path*"results.jld2" model rvs_naive rvs_notel
 end
 
-## Downsizing model
-
-@time if !model.metadata[:todo][:downsized]  # 1.5 hrs (for 9x9)
-    test_n_comp_tel = 0:max_components
-    test_n_comp_star = 0:max_components
-    ks = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
-    comp_ls = zeros(length(test_n_comp_tel), length(test_n_comp_star))
-    comp_stds = zeros(length(test_n_comp_tel), length(test_n_comp_star))
-    for (i, n_tel) in enumerate(test_n_comp_tel)
-        for (j, n_star) in enumerate(test_n_comp_star)
-            comp_ls[i, j], ks[i, j], comp_stds[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star], mws)
-        end
-    end
-    n_comps_best, ℓ, aics, bics = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, data.var; return_inters=true)
-    @save save_path*"model_decision.jld2" comp_ls ℓ aics bics ks test_n_comp_tel test_n_comp_star comp_stds
-
-    model_large = copy(model)
-    model = SSOF.downsize(model, n_comps_best[1], n_comps_best[2])
-    # model = SSOF.downsize(model, 1, 0)
-    model.metadata[:todo][:downsized] = true
-    model.metadata[:todo][:reg_improved] = true
-    mws = typeof(mws)(model, data)
-    SSOF.fine_train_OrderModel!(mws; print_stuff=true)  # 120s
-    model.metadata[:todo][:optimized] = true
-    @save save_path*"results.jld2" model rvs_naive rvs_notel model_large
-end
-
 
 ## Getting RV error bars (only regularization held constant)
 
@@ -170,15 +143,15 @@ if save_plots
 
     include(SSOF_path * "/src/_plot_functions.jl")
 
-    @load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs
-
+    @load neid_save_path * date * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs
+    
     # Compare RV differences to actual RVs from activity
     rvs_notel_opt = SSOF.rvs(model)
-    plt = plot_model_rvs(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+    plt = plot_model_rvs(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="$date (median σ: $(round(median(vec(rv_errors)), digits=3)))");
     png(plt, save_path * "model_rvs.png")
 
     if ord_has_rvs[desired_order]
-        plt = plot_model_rvs(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_order_rv[:, desired_order], zeros(n_obs); display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+        plt = plot_model_rvs(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_order_rv[:, desired_order], zeros(n_obs); display_plt=interactive, markerstrokewidth=1, title="$date (median σ: $(round(median(vec(rv_errors)), digits=3)))");
         png(plt, save_path * "model_rvs_order.png")
     end
 
