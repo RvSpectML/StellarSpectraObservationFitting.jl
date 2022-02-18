@@ -242,10 +242,10 @@ function est_∇(f::Function, inputs; dif::Real=1e-7, inds::UnitRange=1:length(i
 end
 using Nabla
 
-f(y) = SSOF.SOAP_gp_ℓ_nabla(y, A_k, Σ_k; σ²_meas=σ²_meas)
+f(y) = SSOF.gp_ℓ_nabla(y, A_k, Σ_k; σ²_meas=σ²_meas)
 
-method_strs = ["Finite Differences", "Automatic (Nabla)", "Analytic", "Analytic (w/ precalc)", "Analytic (w/ sparse precalc)"]
-method_strs = method_strs[1:3]
+method_strs = ["Finite Differences", "Automatic (Nabla)", "Analytic", "Analytic (w/ precalc)", "Analytic (w/ sparse precalc)", "sparser"]
+# method_strs = method_strs[1:3]
 # plots for gradients estimates for each method
 function plot_methods(n; n_zoom=30)
     @assert length(y) > n > n_zoom
@@ -254,8 +254,9 @@ function plot_methods(n; n_zoom=30)
     anal = Δℓ(y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
     anal_p = Δℓ_precalc(Δℓ_coe[1:n, 1:n], y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
     anal_p_s = Δℓ_precalc(Δℓ_coe_s[1:n, 1:n], y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
+    anal_p_s2 = Δℓ_precalc(Δℓ_coe_ss[1:n, 1:n], y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
     auto = only(∇(f)(y_test))
-    ∇_vec = [numer, auto, anal, anal_p, anal_p_s]
+    ∇_vec = [numer, auto, anal, anal_p, anal_p_s, anal_p_s2]
     plt = _my_plot(; layout=grid(2, 1))
     for i in 1:length(method_strs)
         plot!(plt[1], ∇_vec[i], label=method_strs[i], title="N=$n", markershape=:circle)

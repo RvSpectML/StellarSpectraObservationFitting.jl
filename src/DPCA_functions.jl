@@ -11,6 +11,7 @@ function calc_deriv_RVSKL(x::Vector{<:Real})
     dx = similar(x)
     dx[1] = x[2]-x[1]
     dx[end] = x[end]-x[end-1]
+	# faster than dx[2:end-1] .= (x[3:end] - x[1:end-2]) ./ 2
     for i in 2:(length(x)-1)
         dx[i] = (x[i+1]-x[i-1])/2
     end
