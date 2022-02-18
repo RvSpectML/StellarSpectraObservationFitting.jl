@@ -131,4 +131,4 @@ for i in 1:n_obs # at every time
 end
 ord_has_rvs = vec(all(.!iszero.(neid_order_rv); dims=2))
 SSOF_path = dirname(dirname(pathof(SSOF)))
-@save SSOF_path * "/NEID/" * date * "_neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs
+@save save_path * "neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs
