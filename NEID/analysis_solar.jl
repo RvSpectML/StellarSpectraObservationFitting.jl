@@ -145,18 +145,6 @@ if save_plots
 
     include(SSOF_path * "/src/_plot_functions.jl")
 
-    @load neid_save_path * date * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs
-
-    # Compare RV differences to actual RVs from activity
-    rvs_notel_opt = SSOF.rvs(model)
-    plt = plot_model_rvs(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="$date (median σ: $(round(median(vec(rv_errors)), digits=3)))");
-    png(plt, save_path * "model_rvs.png")
-
-    if ord_has_rvs[desired_order]
-        plt = plot_model_rvs(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_order_rv[:, desired_order], zeros(n_obs); display_plt=interactive, markerstrokewidth=1, title="$date (median σ: $(round(median(vec(rv_errors)), digits=3)))");
-        png(plt, save_path * "model_rvs_order.png")
-    end
-
     if !(typeof(model.star.lm) <: SSOF.TemplateModel)
         plt = plot_stellar_model_bases(model; display_plt=interactive);
         png(plt, save_path * "model_star_basis.png")
@@ -176,12 +164,16 @@ if save_plots
     plt = status_plot(mws; display_plt=interactive);
     png(plt, save_path * "status_plot.png")
 
-    plt = component_test_plot(ℓ, test_n_comp_tel, test_n_comp_star);
-    png(plt, save_path * "l_plot.png")
+    @load neid_save_path * date * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs
 
-    plt = component_test_plot(aics, test_n_comp_tel, test_n_comp_star; ylabel="AIC");
-    png(plt, save_path * "aic_plot.png")
+    # Compare RV differences to actual RVs from activity
+    rvs_notel_opt = SSOF.rvs(model)
+    plt = plot_model_rvs(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="$date (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+    png(plt, save_path * "model_rvs.png")
 
-    plt = component_test_plot(bics, test_n_comp_tel, test_n_comp_star; ylabel="BIC");
-    png(plt, save_path * "bic_plot.png")
+    if ord_has_rvs[desired_order]
+        plt = plot_model_rvs(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_order_rv[:, desired_order], zeros(n_obs); display_plt=interactive, markerstrokewidth=1, title="$date (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+        png(plt, save_path * "model_rvs_order.png")
+    end
+
 end

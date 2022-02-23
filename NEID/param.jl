@@ -65,10 +65,9 @@ if fits_target_str == "Solar" || fits_target_str == "Sun"
 		loc = Dict("lon"=> -111.600562, "lat"=> 31.958092, "elevation"=> 2.091)  # wiyn location
 		pyloc = AstropyCoordinates.EarthLocation.from_geodetic(loc["lon"], loc["lat"], height=loc["elevation"])
 		TimeObs = AstropyTime.Time(jd, format="jd", scale="utc", location=pyloc)
-		lst = TimeObs.sidereal_time("mean")
+		lst = TimeObs.sidereal_time("mean")  # doesn't work on ROAR :(
 
 		# getting sun right ascention
-		TimeObs = AstropyTime.Time(jd, format="jd", scale="utc", location=pyloc)
 		ra = AstropyCoordinates.get_sun(TimeObs).ra
 
 		# converting ra to hour angle
