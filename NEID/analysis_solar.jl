@@ -9,7 +9,7 @@ import StatsBase
 
 ## Setting up necessary variables
 
-dates = ["2021/12/19", "2021/12/20", "2021/12/23"]
+dates = ["2021/12/10", "2021/12/19", "2021/12/20", "2021/12/23"]
 date = dates[SSOF.parse_args(1, Int, 1)]
 interactive = length(ARGS) == 0
 save_plots = true
@@ -65,8 +65,10 @@ end
 if use_gp_prior
     delete!(model.reg_tel, :L2_μ)
     delete!(model.reg_star, :L2_μ)
-    delete!(model.reg_tel, :L2_M)
-    delete!(model.reg_star, :L2_M)
+    # delete!(model.reg_tel, :L2_M)
+    # delete!(model.reg_star, :L2_M)
+    delete!(model.reg_tel, :GP_M)
+    delete!(model.reg_star, :GP_M)
 else
     delete!(model.reg_tel, :GP_μ)
     delete!(model.reg_star, :GP_μ)
@@ -144,7 +146,7 @@ if save_plots
     include(SSOF_path * "/src/_plot_functions.jl")
 
     @load neid_save_path * date * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs
-    
+
     # Compare RV differences to actual RVs from activity
     rvs_notel_opt = SSOF.rvs(model)
     plt = plot_model_rvs(times_nu, rvs_notel_opt, vec(rv_errors), neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="$date (median σ: $(round(median(vec(rv_errors)), digits=3)))");

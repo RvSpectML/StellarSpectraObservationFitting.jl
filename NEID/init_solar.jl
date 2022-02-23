@@ -11,7 +11,7 @@ using RvSpectMLBase, RvSpectML
 using EchelleInstruments, EchelleInstruments.NEID
 using CSV, DataFrames, Query, StatsBase, Statistics, Dates
 
-dates = ["2021/12/19", "2021/12/20", "2021/12/23"]
+dates = ["2021/12/10", "2021/12/19", "2021/12/20", "2021/12/23"]
 date = dates[SSOF.parse_args(1, Int, 1)]
 target_subdir = date * "/"
 fits_target_str = "Sun"  # needed by param.jl
@@ -30,41 +30,41 @@ using FITSIO
 first_order = min_order(NEID2D())
 orders_to_read = first_order:max_order(NEID2D())
 n_orders = length(orders_to_read)
-n_obs = sum(occursin.(r"\.fits$", target_files))
+
+# if need_to(pipeline_plan,:read_spectra)
+df_files = make_manifest(neid_solar_data_path, target_subdir, NEID)
+# Reading in customized parameters from param.jl.
+eval(code_to_include_param_jl(paths_to_search=paths_to_search_for_param))
+# Reading in FITS files
+
+n_obs = size(df_files_use, 1)
 # excal_masks = Array{UnitRange, 2}(undef, n_obs, n_orders)
 flux_masks = Array{UnitRange, 2}(undef, n_obs, n_orders)
-
-if need_to(pipeline_plan,:read_spectra)
-	df_files = make_manifest(neid_solar_data_path, target_subdir, NEID)
-	# Reading in customized parameters from param.jl.
-	eval(code_to_include_param_jl(paths_to_search=paths_to_search_for_param))
-	# Reading in FITS files
-
-	all_spectra = Spectra2DExtended[]
-	function mask2range(mask::AbstractVector)
-		try
-			range = findfirst(mask):findlast(mask)
-			# @assert all(mask[range] .== true)
-			return range
-		catch exception
-			if typeof(exception)==MethodError
-				return 0:0
-			else
-				throw(exception)
-			end
+all_spectra = Spectra2DExtended[]
+function mask2range(mask::AbstractVector)
+	try
+		range = findfirst(mask):findlast(mask)
+		# @assert all(mask[range] .== true)
+		return range
+	catch exception
+		if typeof(exception)==MethodError
+			return 0:0
+		else
+			throw(exception)
 		end
 	end
-	mask2range(masks::AbstractMatrix) = [mask2range(view(masks, :, i)) for i in 1:size(masks, 2)]
-
-	for i in 1:n_obs # at every time
-		# spectra, excal_mask = NEID.read_data(eachrow(df_files_use)[i]; store_min_data=true, store_tellurics=true, normalization=:blaze, return_λ_obs=true, return_excalibur_mask=true)
-		spectra = NEID.read_data(eachrow(df_files_use)[i], orders_to_read; normalization=:blaze, return_λ_obs=true)
-		append!(all_spectra, [spectra])
-		flux_masks[i, :] .= mask2range(.!(isnan.(spectra.flux)))
-	end
-	GC.gc()
-	dont_need_to!(pipeline_plan,:read_spectra)
 end
+mask2range(masks::AbstractMatrix) = [mask2range(view(masks, :, i)) for i in 1:size(masks, 2)]
+
+for i in 1:n_obs # at every time
+	# spectra, excal_mask = NEID.read_data(eachrow(df_files_use)[i]; store_min_data=true, store_tellurics=true, normalization=:blaze, return_λ_obs=true, return_excalibur_mask=true)
+	spectra = NEID.read_data(eachrow(df_files_use)[i], orders_to_read; normalization=:blaze, return_λ_obs=true)
+	append!(all_spectra, [spectra])
+	flux_masks[i, :] .= mask2range(.!(isnan.(spectra.flux)))
+end
+GC.gc()
+dont_need_to!(pipeline_plan,:read_spectra)
+# end
 
 flatten_ranges(ranges::AbstractVector) = maximum([range[1] for range in ranges]):minimum([range[end] for range in ranges])
 flatten_ranges(ranges::AbstractMatrix) = [flatten_ranges(view(ranges, :, i)) for i in 1:size(ranges, 2)]

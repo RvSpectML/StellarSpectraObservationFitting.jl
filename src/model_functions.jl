@@ -2,6 +2,7 @@ using AbstractGPs
 using LinearAlgebra
 using KernelFunctions
 using TemporalGPs
+import AbstractGPs
 using Distributions
 import Base.copy
 import Base.vec
@@ -405,14 +406,14 @@ function get_mean_GP(
 end
 
 function build_gp(params::NamedTuple)
-	f_naive = GP(params.var_kernel * Matern52Kernel() ∘ ScaleTransform(params.λ))
+	f_naive = AbstractGPs.GP(params.var_kernel * Matern52Kernel() ∘ ScaleTransform(params.λ))
 	return to_sde(f_naive, SArrayStorage(Float64))
 end
 
 SOAP_gp_params = (var_kernel = 0.2188511770097717, λ = 26063.07237159581)
 SOAP_gp = build_gp(SOAP_gp_params)
 LSF_gp_params = (var_kernel = 0.20771264919723142, λ = 114294.15657857814)
-LSF_gp = build_gp(SOAP_gp_params)
+LSF_gp = build_gp(LSF_gp_params)
 
 # ParameterHandling version
 # SOAP_gp_params = (var_kernel = positive(3.3270754364467443), λ = positive(1 / 9.021560480866474e-5))
