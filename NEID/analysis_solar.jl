@@ -26,6 +26,7 @@ max_components = 3
 ## Loading in data and initializing model
 save_path = neid_save_path * date * "/$(desired_order)/"
 @load save_path * "data.jld2" n_obs data times_nu airmasses
+airmasses[airmasses .> 13] .= 0
 if !use_reg
     save_path *= "noreg_"
 end
@@ -120,7 +121,7 @@ end
 
 ## Getting RV error bars (only regularization held constant)
 
-@time if !model.metadata[:todo][:err_estimated] # 25 mins
+if !model.metadata[:todo][:err_estimated] # 25 mins
     data.var[data.var.==Inf] .= 0
     data_noise = sqrt.(data.var)
     data.var[data.var.==0] .= Inf

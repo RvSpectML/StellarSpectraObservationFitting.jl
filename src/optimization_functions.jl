@@ -322,7 +322,7 @@ function opt_funcs(loss::Function, pars::possible_θ)
     function fg_obj!(G, θ)
 		θunfl = unflatten(θ)
 		l, g = ∇(loss; get_output=true)(θunfl)
-		G[:], _= flatten(g)
+		G[:], _ = flatten(g)
         return l.val
     end
     return flat_initial_params, OnceDifferentiable(f, g!, fg_obj!, flat_initial_params), unflatten

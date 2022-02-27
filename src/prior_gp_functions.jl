@@ -133,12 +133,6 @@ function gp_ℓ_nabla(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_meas::R
     return (ℓ - n*log(2π))/2
 end
 
-x_test = 8.78535917650598:6.616545829861497e-7:8.798522794434488
-fx = SOAP_gp(x_test)
-y = rand(fx)
-
-@assert isapprox(TGP.logpdf(fx, y), SOAP_gp_ℓ(y, step(x_test)))
-@assert isapprox(TGP.logpdf(fx, y), SOAP_gp_ℓ_nabla(y, step(x_test)))
 
 # for calculating gradients w.r.t. y
 function gp_Δℓ_helper_K(n::Int, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; σ²_meas::Real=_σ²_meas_def)
@@ -227,11 +221,11 @@ end
 
 # only to allow Nabla to know that we should use the faster gradient
 # calculations using the precalcuated coefficients
-gp_ℓ_precalc(Δℓ_coeff::AbstractMatrix, y::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix; kwargs...) =
-    gp_ℓ(y, A_k, Σ_k; kwargs...)
+gp_ℓ_precalc(Δℓ_coeff::AbstractMatrix, x::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix; kwargs...) =
+    gp_ℓ(x, A_k, Σ_k; kwargs...)
 
-Δℓ_precalc(Δℓ_coeff::AbstractMatrix, y::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; kwargs...) =
-    Δℓ_coeff * gp_Δℓ_helper_γ(y, A_k, Σ_k, H_k, P∞; kwargs...)
+Δℓ_precalc(Δℓ_coeff::AbstractMatrix, x::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; kwargs...) =
+    Δℓ_coeff * gp_Δℓ_helper_γ(x, A_k, Σ_k, H_k, P∞; kwargs...)
 
 
 using Nabla

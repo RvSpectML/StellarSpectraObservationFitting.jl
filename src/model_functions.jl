@@ -251,9 +251,9 @@ function oversamp_interp_helper(to_bounds::AbstractVector, from_x::AbstractVecto
 		ans[i, hi_ind] = 2 * x_hi - from_x[hi_ind] - from_x[hi_ind-1] - edge_term_hi
 		ans[i, hi_ind+1] = edge_term_hi
 		# println(sum(view(ans, i, lo_ind-1:hi_ind+1))," vs ", 2 * (x_hi - x_lo))
-		@assert isapprox(sum(view(ans, i, lo_ind-1:hi_ind+1)), 2 * (x_hi - x_lo); rtol=1e-3)
-		# ans[i, lo_ind-1:hi_ind+1] ./= sum(view(ans, i, lo_ind-1:hi_ind+1))
-		ans[i, lo_ind-1:hi_ind+1] ./= 2 * (x_hi - x_lo)
+		# @assert isapprox(sum(view(ans, i, lo_ind-1:hi_ind+1)), 2 * (x_hi - x_lo); rtol=1e-3)
+		ans[i, lo_ind-1:hi_ind+1] ./= sum(view(ans, i, lo_ind-1:hi_ind+1))
+		# ans[i, lo_ind-1:hi_ind+1] ./= 2 * (x_hi - x_lo)
 	end
 	dropzeros!(ans)
 	return ans
