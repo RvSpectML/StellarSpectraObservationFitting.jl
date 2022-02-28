@@ -49,3 +49,16 @@ end
     println()
 end
 
+@testset "custom spectra_interp() sensitivity" begin
+
+    B = rand(3,5)
+    As = [sparse(rand(2,3)) for i in 1:size(B, 2)]
+    C = rand(5,6)
+
+    f_custom_sensitivity(x) = sum(SSOF.spectra_interp(x.^2, As) * C)
+    f_nabla(x) = sum(SSOF.spectra_interp_nabla(x.^2, As) * C)
+
+    @test ∇(f_custom_sensitivity)(B) == ∇(f_nabla)(B)
+
+    println()
+end

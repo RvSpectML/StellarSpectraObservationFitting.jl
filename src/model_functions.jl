@@ -9,10 +9,10 @@ import Base.vec
 import Base.getindex
 import Base.eachindex
 import Base.setindex!
-# using BandedMatrices
 using SparseArrays
 using SpecialFunctions
 using StaticArrays
+using Nabla
 
 abstract type Data end
 
@@ -369,6 +369,12 @@ spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:_current_m
 	hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
 spectra_interp(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
 	hcat([interp_helper[i] * model[:, i] for i in 1:size(model, 2)]...)
+spectra_interp_nabla(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
+	spectra_interp(model, interp_helper)
+
+@explicit_intercepts spectra_interp Tuple{AbstractMatrix, AbstractVector{<:_current_matrix_modifier}}
+Nabla.∇(::typeof(spectra_interp), ::Type{Arg{1}}, _, y, ȳ, model, interp_helper) =
+	hcat([interp_helper[i]' * view(ȳ, :, i) for i in 1:size(model, 2)]...)
 
 tel_model(om::OrderModel; lm=om.tel.lm::LinearModel) = spectra_interp(lm(), om.t2o)
 star_model(om::OrderModel; lm=om.star.lm::LinearModel) = spectra_interp(lm(), om.b2o)
