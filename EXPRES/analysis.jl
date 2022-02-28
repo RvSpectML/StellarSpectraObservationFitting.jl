@@ -53,7 +53,8 @@ if isfile(save_path*"results.jld2") && !recalc
         @load save_path*"model_decision.jld2" comp_ls ℓ aics bics ks test_n_comp_tel test_n_comp_star
     end
 else
-    model_upscale = 2 * sqrt(2)
+    # model_upscale = 2 * sqrt(2)
+    model_upscale = 1.
     @time model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, upscale=model_upscale, oversamp=oversamp)
     @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
     if !use_reg

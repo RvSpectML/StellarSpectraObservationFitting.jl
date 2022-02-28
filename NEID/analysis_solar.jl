@@ -26,7 +26,7 @@ max_components = 3
 ## Loading in data and initializing model
 save_path = neid_save_path * date * "/$(desired_order)/"
 @load save_path * "data.jld2" n_obs data times_nu airmasses
-airmasses[airmasses .> 13] .= 0
+airmasses[airmasses .> 13] .= 1
 if !use_reg
     save_path *= "noreg_"
 end
@@ -50,11 +50,9 @@ if isfile(save_path*"results.jld2") && !recalc
     if model.metadata[:todo][:err_estimated]
         @load save_path*"results.jld2" rv_errors
     end
-    # if model.metadata[:todo][:downsized]
-    #     @load save_path*"model_decision.jld2" comp_ls ℓ aics bics ks test_n_comp_tel test_n_comp_star
-    # end
 else
-    model_upscale = 2 * sqrt(2)
+    # model_upscale = 2 * sqrt(2)
+    model_upscale = 1.
     @time model = SSOF.OrderModel(data, "NEID", desired_order, date; n_comp_tel=max_components, n_comp_star=max_components, upscale=model_upscale, oversamp=oversamp)
     @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
     if !use_reg
@@ -66,10 +64,10 @@ end
 if use_gp_prior
     delete!(model.reg_tel, :L2_μ)
     delete!(model.reg_star, :L2_μ)
-    # delete!(model.reg_tel, :L2_M)
-    # delete!(model.reg_star, :L2_M)
-    delete!(model.reg_tel, :GP_M)
-    delete!(model.reg_star, :GP_M)
+    delete!(model.reg_tel, :L2_M)
+    delete!(model.reg_star, :L2_M)
+    # delete!(model.reg_tel, :GP_M)
+    # delete!(model.reg_star, :GP_M)
 else
     delete!(model.reg_tel, :GP_μ)
     delete!(model.reg_star, :GP_μ)
@@ -146,21 +144,17 @@ if save_plots
 
     include(SSOF_path * "/src/_plot_functions.jl")
 
-    if !(typeof(model.star.lm) <: SSOF.TemplateModel)
-        plt = plot_stellar_model_bases(model; display_plt=interactive);
-        png(plt, save_path * "model_star_basis.png")
+    plt = plot_stellar_model_bases(model; display_plt=interactive);
+    png(plt, save_path * "model_star_basis.png")
 
-        plt = plot_stellar_model_scores(model; display_plt=interactive);
-        png(plt, save_path * "model_star_weights.png")
-    end
+    plt = plot_stellar_model_scores(model; display_plt=interactive);
+    png(plt, save_path * "model_star_weights.png")
 
-    if !(typeof(model.tel.lm) <: SSOF.TemplateModel)
-        plt = plot_telluric_model_bases(model; display_plt=interactive);
-        png(plt, save_path * "model_tel_basis.png")
+    plt = plot_telluric_model_bases(model; display_plt=interactive);
+    png(plt, save_path * "model_tel_basis.png")
 
-        plt = plot_telluric_model_scores(model; display_plt=interactive);
-        png(plt, save_path * "model_tel_weights.png")
-    end
+    plt = plot_telluric_model_scores(model; display_plt=interactive);
+    png(plt, save_path * "model_tel_weights.png")
 
     plt = status_plot(mws; display_plt=interactive);
     png(plt, save_path * "status_plot.png")
