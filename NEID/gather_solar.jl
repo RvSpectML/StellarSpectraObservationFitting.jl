@@ -46,7 +46,7 @@ for date_ind in date_inds
             println("order $(orders[i]) is missing")
         end
     end
-    @save neid_save_path*date*"/$(order)/$(prep_str)rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
+    @save neid_save_path*date*"/$(prep_str)rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 
     reg_tels = zeros(n_ord, length(reg_keys))
     reg_stars = zeros(n_ord, length(reg_keys))
@@ -57,5 +57,5 @@ for date_ind in date_inds
             println("order $(orders[i]) is missing")
         end
     end
-    @save neid_save_path*date*"/$(order)/$(prep_str)regs.jld2" reg_tels reg_stars
+    @save neid_save_path*date*"/$(prep_str)regs.jld2" reg_tels reg_stars
 end
