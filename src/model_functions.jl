@@ -367,10 +367,10 @@ downsize(m::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
 
 spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
 	hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
-spectra_interp(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
-	hcat([interp_helper[i] * model[:, i] for i in 1:size(model, 2)]...)
 spectra_interp_nabla(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
-	spectra_interp(model, interp_helper)
+	hcat([interp_helper[i] * model[:, i] for i in 1:size(model, 2)]...)
+spectra_interp(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
+	spectra_interp_nabla(model, interp_helper)
 
 @explicit_intercepts spectra_interp Tuple{AbstractMatrix, AbstractVector{<:_current_matrix_modifier}}
 Nabla.∇(::typeof(spectra_interp), ::Type{Arg{1}}, _, y, ȳ, model, interp_helper) =
