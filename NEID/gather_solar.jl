@@ -13,7 +13,7 @@ input_ind = SSOF.parse_args(1, Int, 0)
 dates = ["2021/12/10", "2021/12/19", "2021/12/20", "2021/12/23"]
 
 input_ind == 0 ? date_inds = (1:4) : date_inds = input_ind
-orders_list = [4:122]
+orders_list = [4:122, 4:122, 4:122, 4:122]
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
 # prep_str = "noreg_"
 prep_str = "nolsf_"
@@ -48,8 +48,8 @@ for date_ind in date_inds
     end
     @save neid_save_path*date*"/$(prep_str)rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 
-    reg_tels = zeros(n_ord, length(reg_keys))
-    reg_stars = zeros(n_ord, length(reg_keys))
+    reg_tels = zeros(n_ord, length(reg_keys)-4)
+    reg_stars = zeros(n_ord, length(reg_keys)-4)
     for i in 1:n_ord
         try
             reg_tels[i, :], reg_stars[i, :] = retrieve_reg(orders[i], date)
