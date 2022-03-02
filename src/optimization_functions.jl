@@ -158,15 +158,20 @@ struct AdamWorkspace{T}
 	opt
 	as::AdamState
 	l::Function
-	function AdamWorkspace(θ::T, opt, as, l) where T
+	gl::Function
+	function AdamWorkspace(θ::T, opt, as, l, gl) where T
 		@assert typeof(l(θ)) <: Real
-		return new{T}(θ, opt, as, l)
+		return new{T}(θ, opt, as, l, gl)
 	end
 end
-AdamWorkspace(θ, l::Function) = AdamWorkspace(θ, Adams(θ), AdamState(), l)
+function AdamWorkspace(θ, l::Function)
+	gl = ∇(l; get_output=true)
+	gl(θ)  # compile it
+	return AdamWorkspace(θ, Adams(θ), AdamState(), l, gl)
+end
 
 function update!(aws::AdamWorkspace)
-    val, Δ = ∇(aws.l; get_output=true)(aws.θ)
+    val, Δ = gl(aws.θ)
 	Δ = only(Δ)
 	AdamState!(aws.as, val.val, Δ)
     iterate!(aws.θ, Δ, aws.opt)
@@ -315,13 +320,15 @@ possible_θ = Union{Vector{<:Vector{<:AbstractArray}}, Vector{<:AbstractArray}, 
 function opt_funcs(loss::Function, pars::possible_θ)
     flat_initial_params, unflatten = flatten(pars)  # unflatten returns Vector of untransformed params
     f = loss ∘ unflatten
+	g_nabla = ∇(loss)
+	g_val_nabla = ∇(loss; get_output=true)
+	g_nabla(pars)  # compile it
+	g_val_nabla(pars)  # compile it
     function g!(G, θ)
-		θunfl = unflatten(θ)
-        G[:], _ = flatten(∇(loss)(θunfl))
+        G[:], _ = flatten(g_nabla(unflatten(θ)))
     end
     function fg_obj!(G, θ)
-		θunfl = unflatten(θ)
-		l, g = ∇(loss; get_output=true)(θunfl)
+		l, g = g_val_nabla(unflatten(θ))
 		G[:], _ = flatten(g)
         return l.val
     end
