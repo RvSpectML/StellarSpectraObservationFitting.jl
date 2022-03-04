@@ -24,7 +24,7 @@ function retrieve(order::Int, date::String)
     return rvs_notel_opt, rv_errors
 end
 
-reg_keys = SSOF._key_list[1:end-1]
+reg_keys = [:GP_μ, :L1_μ, :L1_μ₊_factor, :GP_M, :L1_M]
 function retrieve_reg(order::Int, date::String)
     @load neid_save_path*date*"/$(order)/$(prep_str)results.jld2" model
     return [model.reg_tel[k] for k in reg_keys], [model.reg_star[k] for k in reg_keys]
@@ -41,20 +41,28 @@ for date_ind in date_inds
     for i in 1:n_ord
         try
             rvs[i, :], rvs_σ[i, :] = retrieve(orders[i], date)
-        catch
-            rvs_σ[i, :] .= Inf
-            println("order $(orders[i]) is missing")
+        catch err
+            if isa(err, SystemError)
+                rvs_σ[i, :] .= Inf
+                println("order $(orders[i]) is missing")
+            else
+                rethrow()
+            end
         end
     end
     @save neid_save_path*date*"/$(prep_str)rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 
-    reg_tels = zeros(n_ord, length(reg_keys)-4)
-    reg_stars = zeros(n_ord, length(reg_keys)-4)
+    reg_tels = zeros(n_ord, length(reg_keys))
+    reg_stars = zeros(n_ord, length(reg_keys))
     for i in 1:n_ord
         try
             reg_tels[i, :], reg_stars[i, :] = retrieve_reg(orders[i], date)
-        catch
-            println("order $(orders[i]) is missing")
+        catch err
+            if isa(err, SystemError)
+                println("order $(orders[i]) is missing")
+            else
+                rethrow()
+            end
         end
     end
     @save neid_save_path*date*"/$(prep_str)regs.jld2" reg_tels reg_stars
