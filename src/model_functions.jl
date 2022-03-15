@@ -547,7 +547,7 @@ function model_prior(lm, om::OrderModel, key::Symbol)
 		if haskey(reg, :L1_M); val += L1(lm[1]) * reg[:L1_M] end
 		if haskey(reg, :GP_M)
 			for i in 1:size(lm[1], 2)
-				val -= gp_ℓ_precalc(sm.Δℓ_coeff,lm[1][:, i], sm.A_sde, sm.Σ_sde) * reg[:GP_μ]
+				val -= gp_ℓ_precalc(sm.Δℓ_coeff, view(lm[1], :, i), sm.A_sde, sm.Σ_sde) * reg[:GP_M]
 			end
 		end
 		if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0) || (haskey(reg, :GP_M) && reg[:GP_M] != 0); val += L1(lm[2]) end
