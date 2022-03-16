@@ -182,31 +182,11 @@ if save_plots
     plt = plot_model_rvs(times_nu, rvs_notel_opt, vec(rv_errors), eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
     png(plt, save_path * "model_rvs.png")
 
-    if !(typeof(model.star.lm) <: SSOF.TemplateModel)
-        plt = plot_stellar_model_bases(model; display_plt=interactive);
-        png(plt, save_path * "model_star_basis.png")
-
-        plt = plot_stellar_model_scores(model; display_plt=interactive);
-        png(plt, save_path * "model_star_weights.png")
-    end
-
-    if !(typeof(model.tel.lm) <: SSOF.TemplateModel)
-        plt = plot_telluric_model_bases(model; display_plt=interactive);
-        png(plt, save_path * "model_tel_basis.png")
-
-        plt = plot_telluric_model_scores(model; display_plt=interactive);
-        png(plt, save_path * "model_tel_weights.png")
-    end
+    plt = plot_model(mws; display_plt=interactive);
+    png(plt, save_path * "model.png")
 
     plt = status_plot(mws; display_plt=interactive);
     png(plt, save_path * "status_plot.png")
 
-    plt = component_test_plot(ℓ, test_n_comp_tel, test_n_comp_star);
-    png(plt, save_path * "l_plot.png")
-
-    plt = component_test_plot(aics, test_n_comp_tel, test_n_comp_star; ylabel="AIC");
-    png(plt, save_path * "aic_plot.png")
-
-    plt = component_test_plot(bics, test_n_comp_tel, test_n_comp_star; ylabel="BIC");
-    png(plt, save_path * "bic_plot.png")
+    model_choice_plots(ℓ, aics, bics, test_n_comp_tel, test_n_comp_star, save_path)
 end

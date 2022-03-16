@@ -49,65 +49,76 @@ function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat
 end
 
 c_ind_f(i) = ((i + 3) % 19) + 1
-function plot_stellar_model(mws::SSOF.ModelWorkspace; inds::UnitRange=1:size(mws.om.star.lm.M, 2), display_plt::Bool=true, layout = grid(2, 1), size=(_plt_size[1],_plt_size[2]*1.5), kwargs...)
+function plot_model(mws::SSOF.ModelWorkspace; display_plt::Bool=true, kwargs...)
     om = mws.om
-	plt = _my_plot(; layout=layout, size=size)
+	plot_stellar = !(typeof(om.star.lm) <: SSOF.TemplateModel)
+	plot_telluric = !(typeof(om.tel.lm) <: SSOF.TemplateModel)
+	println((!plot_stellar) && (!plot_telluric))
+	println(plot_stellar, plot_telluric)
+	# plot the two templates if there is no time variation
+	if (!plot_stellar) && (!plot_telluric)
+		plt = plot_spectrum(; title="Telluric Model Bases", legend=:outerright, kwargs...)
+		plot!(plt, om.tel.λ, om.tel.lm.μ; label="μₜₑₗ")
+		plot!(plt, om.star.λ, om.star.lm.μ .- 0.5; label="μₛₜₐᵣ")
+		if display_plt; display(plt) end
+		return plt
+	end
 
-	# basis plot
-	plot!(plt[1], om.tel.λ, om.tel.lm.μ; label="μₜₑₗ", alpha=0.3, color=:white, title="Stellar Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
-	plot!(plt[1], om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ")
-
+	n_plots = plot_stellar + plot_telluric
+	plt = _my_plot(; layout=grid(2, n_plots), size=(n_plots * _plt_size[1],_plt_size[2]*1.5))
 	shift_M = 0.2
-	shift_s = ceil(10 * maximum([std(om.star.lm.s[inds[i], :] .* norm(om.star.lm.M[:, inds[i]])) for i in inds])) / 2
-	half_shift_s = ceil(shift_s) / 2
 	χ²_base = SSOF._loss(mws)
-	holder = copy(om.star.lm.s)
-    for i in reverse(inds)
-        c_ind = c_ind_f(i - inds[1])
-		norm_M = norm(view(om.star.lm.M, :, i))
+	if plot_telluric
+		inds = 1:size(mws.om.tel.lm.M, 2)
 
 		# basis plot
-        plot!(plt[1], om.star.λ, (view(om.star.lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); label="Basis $i", color=plt_colors[c_ind])
+		plot!(plt[1, 1], om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ", alpha=0.3, color=:white, title="Telluric Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
+		plot!(plt[1, 1], om.tel.λ, om.tel.lm.μ; label="μₜₑₗ")
 
-		# weights plot
-		om.star.lm.s[i, :] .= 0
-		Δχ² = 1 - (χ²_base / SSOF._loss(mws; star=vec(om.star.lm)))
-		om.star.lm.s[i, :] .= view(holder, i, :)
-		my_scatter!(plt[2], times_nu, (view(om.star.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1) + half_shift_s); label="Weights $i (Δχ² = $(round(Δχ²; digits=3)))", color=plt_colors[c_ind], title="Stellar Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
-		hline!(plt[2], [-(shift_s * (i - 1) + half_shift_s)]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
-    end
+		shift_s = ceil(10 * maximum([std(om.tel.lm.s[inds[i], :] .* norm(om.tel.lm.M[:, inds[i]])) for i in inds])) / 2
+		half_shift_s = ceil(shift_s) / 2
+		holder = copy(om.tel.lm.s)
+	    for i in reverse(inds)
+	        c_ind = c_ind_f(i - inds[1])
+			norm_M = norm(view(om.tel.lm.M, :, i))
 
-    if display_plt; display(plt) end
-    return plt
-end
+			# basis plot
+	        plot!(plt[1, 1], om.tel.λ, (view(om.tel.lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); label="Basis $i", color=plt_colors[c_ind])
 
-function plot_telluric_model(mws::SSOF.ModelWorkspace; inds::UnitRange=1:size(mws.om.tel.lm.M, 2), display_plt::Bool=true, layout = grid(2, 1), size=(_plt_size[1],_plt_size[2]*1.5), kwargs...)
-    om = mws.om
-	plt = _my_plot(; layout=layout, size=size)
-
-	# basis plot
-	plot!(plt[1], om.tel.λ, om.tel.lm.μ; label="μₜₑₗ", alpha=0.3, color=:white, title="Telluric Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
-	plot!(plt[1], om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ")
-
-	shift_M = 0.2
-	shift_s = ceil(10 * maximum([std(om.tel.lm.s[inds[i], :] .* norm(om.tel.lm.M[:, inds[i]])) for i in inds])) / 2
-	half_shift_s = ceil(shift_s) / 2
-	χ²_base = SSOF._loss(mws)
-	holder = copy(om.tel.lm.s)
-    for i in reverse(inds)
-        c_ind = c_ind_f(i - inds[1])
-		norm_M = norm(view(om.tel.lm.M, :, i))
+			# weights plot
+			om.tel.lm.s[i, :] .= 0
+			Δχ² = 1 - (χ²_base / SSOF._loss(mws; tel=vec(om.tel.lm)))
+			om.tel.lm.s[i, :] .= view(holder, i, :)
+			my_scatter!(plt[2, 1], times_nu, (view(om.tel.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1) + half_shift_s); label="Weights $i (Δχ² = $(round(Δχ²; digits=3)))", color=plt_colors[c_ind], title="Telluric Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
+			hline!(plt[2, 1], [-(shift_s * (i - 1) + half_shift_s)]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
+	    end
+	end
+	if plot_stellar
+		plot_telluric ? c_offset = inds[end] - 1 : c_offset = 1
+		inds = 1:size(mws.om.star.lm.M, 2)
 
 		# basis plot
-        plot!(plt[1], om.tel.λ, (view(om.tel.lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); label="Basis $i", color=plt_colors[c_ind])
+		plot!(plt[1, n_plots], om.tel.λ, om.tel.lm.μ; label="μₜₑₗ", alpha=0.3, color=:white, title="Stellar Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
+		plot!(plt[1, n_plots], om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ")
 
-		# weights plot
-		om.tel.lm.s[i, :] .= 0
-		Δχ² = 1 - (χ²_base / SSOF._loss(mws; tel=vec(om.tel.lm)))
-		om.tel.lm.s[i, :] .= view(holder, i, :)
-		my_scatter!(plt[2], times_nu, (view(om.tel.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1) + half_shift_s); label="Weights $i (Δχ² = $(round(Δχ²; digits=3)))", color=plt_colors[c_ind], title="Telluric Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
-		hline!(plt[2], [-(shift_s * (i - 1) + half_shift_s)]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
-    end
+		shift_s = ceil(10 * maximum([std(om.star.lm.s[inds[i], :] .* norm(om.star.lm.M[:, inds[i]])) for i in inds])) / 2
+		half_shift_s = ceil(shift_s) / 2
+		holder = copy(om.star.lm.s)
+		for i in reverse(inds)
+			c_ind = c_ind_f(i + c_offset)
+			norm_M = norm(view(om.star.lm.M, :, i))
+
+			# basis plot
+			plot!(plt[1, n_plots], om.star.λ, (view(om.star.lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); label="Basis $i", color=plt_colors[c_ind])
+
+			# weights plot
+			om.star.lm.s[i, :] .= 0
+			Δχ² = 1 - (χ²_base / SSOF._loss(mws; star=vec(om.star.lm)))
+			om.star.lm.s[i, :] .= view(holder, i, :)
+			my_scatter!(plt[2, n_plots], times_nu, (view(om.star.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1) + half_shift_s); label="Weights $i (Δχ² = $(round(Δχ²; digits=3)))", color=plt_colors[c_ind], title="Stellar Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
+			hline!(plt[2, n_plots], [-(shift_s * (i - 1) + half_shift_s)]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
+		end
+	end
 
     if display_plt; display(plt) end
     return plt
@@ -151,4 +162,15 @@ function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n
     end
     display(plt)
     return plt
+end
+
+function model_choice_plots(ℓ, aics, bics, test_n_comp_tel, test_n_comp_star, save_path::String)
+	plt = component_test_plot(ℓ, test_n_comp_tel, test_n_comp_star);
+	png(plt, save_path * "l_plot.png")
+
+	plt = component_test_plot(aics, test_n_comp_tel, test_n_comp_star; ylabel="AIC");
+	png(plt, save_path * "aic_plot.png")
+
+	plt = component_test_plot(bics, test_n_comp_tel, test_n_comp_star; ylabel="BIC");
+	png(plt, save_path * "bic_plot.png")
 end

@@ -144,17 +144,8 @@ if save_plots
 
     include(SSOF_path * "/src/_plot_functions.jl")
 
-    plt = plot_stellar_model_bases(model; display_plt=interactive);
-    png(plt, save_path * "model_star_basis.png")
-
-    plt = plot_stellar_model_scores(model; display_plt=interactive);
-    png(plt, save_path * "model_star_weights.png")
-
-    plt = plot_telluric_model_bases(model; display_plt=interactive);
-    png(plt, save_path * "model_tel_basis.png")
-
-    plt = plot_telluric_model_scores(model; display_plt=interactive);
-    png(plt, save_path * "model_tel_weights.png")
+    plt = plot_model(mws; display_plt=interactive);
+    png(plt, save_path * "model.png")
 
     plt = status_plot(mws; display_plt=interactive);
     png(plt, save_path * "status_plot.png")
