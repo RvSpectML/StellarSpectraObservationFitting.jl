@@ -60,7 +60,7 @@ Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.log_λ
 GenericData(d::LSFData) = GenericData(d.flux, d.var, d.log_λ_obs, d.log_λ_star)
 GenericData(d::GenericData) = d
 
-function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=2*sqrt(2))
+function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=1.)
     log_min_wav, log_max_wav = extrema(log_λ_obs)
     Δ_logλ_og = minimum(view(log_λ_obs, size(log_λ_obs, 1), :) .- view(log_λ_obs, 1, :)) / size(log_λ_obs, 1)
 	Δ_logλ = Δ_logλ_og / upscale
@@ -326,11 +326,17 @@ Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv),
 function rm_regularization(om::OrderModel)
 	for (key, value) in om.reg_tel
 		delete!(om.reg_tel, key)
-		# om.reg_tel[key] = 0
 	end
 	for (key, value) in om.reg_star
 		delete!(om.reg_star, key)
-		# om.reg_star[key] = 0
+	end
+end
+function zero_regularization(om::OrderModel)
+	for (key, value) in om.reg_tel
+		om.reg_tel[key] = 0
+	end
+	for (key, value) in om.reg_star
+		om.reg_star[key] = 0
 	end
 end
 
@@ -452,7 +458,7 @@ end
 #     return findfirst(s_var ./ sum(s_var) .< threshold)[1] - 1
 # end
 
-function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2, kwargs...)
+function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2)
 
 	μ_min = min + 0.05
 	μ_max = max - 0.05
@@ -467,6 +473,8 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2, kw
 	vars_star = ones(length(om.star.log_λ), n_obs)
 	flux_tel = ones(length(om.tel.log_λ), n_obs)
 	vars_tel = ones(length(om.tel.log_λ), n_obs)
+
+	# stellar template assuming no tellurics
 	_spectra_interp_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star)
 
 	om.star.lm.μ[:] = make_template(flux_star; min=μ_min, max=μ_max)
@@ -478,19 +486,20 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2, kw
 	_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
 
 	om.tel.lm.μ[:] = make_template(flux_tel; min=μ_min, max=μ_max)
-	# _, om.tel.lm.M[:, :], om.tel.lm.s[:, :], _ =
-	#     fit_gen_pca(flux_tel; num_components=n_comp_tel, mu=om.tel.lm.μ)
 
 	# stellar model with telluric template
 	flux_tel .= om.tel.lm.μ
 	_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
 
 	om.star.lm.μ[:] = make_template(flux_star; min=μ_min, max=μ_max)
-	# _, M_star, s_star, rvs_notel =
-	#     DEMPCA(flux_star, om.star.λ, 1 ./ vars_star; template=om.star.lm.μ, num_components=n_comp_star, kwargs...)
 	_, M_star, s_star, rvs_notel =
 		DEMPCA(flux_star, om.star.λ, 1 ./ vars_star; template=om.star.lm.μ, num_components=n_comp_star)
 	fracvar_star = fracvar(flux_star .- om.star.lm.μ, M_star, s_star, 1 ./ vars_star)
+
+	om.star.lm.M .= view(M_star, :, 2:size(M_star, 2))
+	om.star.lm.s[:] = view(s_star, 2:size(s_star, 1), :)
+	om.rv.lm.M .= view(M_star, :, 1)
+	om.rv.lm.s[:] = view(s_star, 1, :)
 
 	# telluric model with updated stellar template
 	flux_star .= om.star.lm.μ
@@ -498,14 +507,8 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2, kw
 
 	om.tel.lm.μ[:] = make_template(flux_tel; min=μ_min, max=μ_max)
 	Xtmp = flux_tel .- om.tel.lm.μ
-	# EMPCA!(om.tel.lm.M, Xtmp, om.tel.lm.s, 1 ./ vars_tel; kwargs...)
 	EMPCA!(om.tel.lm.M, Xtmp, om.tel.lm.s, 1 ./ vars_tel)
 	fracvar_tel = fracvar(Xtmp, om.tel.lm.M, om.tel.lm.s, 1 ./ vars_tel)
-
-	om.star.lm.M .= view(M_star, :, 2:size(M_star, 2))
-	om.star.lm.s[:] = view(s_star, 2:size(s_star, 1), :)
-	om.rv.lm.M .= view(M_star, :, 1)
-	om.rv.lm.s[:] = view(s_star, 1, :)
 
 	fix_FullLinearModel_s!(om.star.lm, min, max)
 	fix_FullLinearModel_s!(om.tel.lm, min, max)
@@ -545,9 +548,10 @@ function model_prior(lm, om::OrderModel, key::Symbol)
 		if haskey(reg, :shared_M); val += shared_attention(lm[1]) * reg[:shared_M] end
 		if haskey(reg, :L2_M); val += L2(lm[1]) * reg[:L2_M] end
 		if haskey(reg, :L1_M); val += L1(lm[1]) * reg[:L1_M] end
+		# if haskey(reg, :GP_μ); val -= gp_ℓ_precalc(sm.Δℓ_coeff, view(lm[1], :, 1), sm.A_sde, sm.Σ_sde) * reg[:GP_μ] end
 		if haskey(reg, :GP_M)
 			for i in 1:size(lm[1], 2)
-				val -= gp_ℓ_precalc(sm.Δℓ_coeff, view(lm[1], :, i), sm.A_sde, sm.Σ_sde) * reg[:GP_M]
+				val -= gp_ℓ_precalc(sm.Δℓ_coeff, lm[1][:, i], sm.A_sde, sm.Σ_sde) * reg[:GP_M]
 			end
 		end
 		if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0) || (haskey(reg, :GP_M) && reg[:GP_M] != 0); val += L1(lm[2]) end

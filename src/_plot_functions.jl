@@ -53,8 +53,6 @@ function plot_model(mws::SSOF.ModelWorkspace; display_plt::Bool=true, kwargs...)
     om = mws.om
 	plot_stellar = !(typeof(om.star.lm) <: SSOF.TemplateModel)
 	plot_telluric = !(typeof(om.tel.lm) <: SSOF.TemplateModel)
-	println((!plot_stellar) && (!plot_telluric))
-	println(plot_stellar, plot_telluric)
 	# plot the two templates if there is no time variation
 	if (!plot_stellar) && (!plot_telluric)
 		plt = plot_spectrum(; title="Telluric Model Bases", legend=:outerright, kwargs...)
@@ -151,7 +149,7 @@ status_plot(mws::SSOF.ModelWorkspace; kwargs...) =
 
 function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector; size=(_plt_size[1],_plt_size[2]*1.5), ylabel="ℓ")
     plt = _my_plot(; ylabel=ylabel, layout=grid(2, 1), size=size)
-	lims = [maximum(view(ys, 2:end, 2:end)), minimum(view(ys, 2:end, 2:end))]
+	lims = [maximum(ys[2:end, 2:end]), minimum(ys[2:end, 2:end])]
 	buffer = 0.5 * (lims[1] - lims[2])
 	ylims!(plt, lims[2] - buffer, lims[1] + buffer)
     for i in eachindex(test_n_comp_tel)
