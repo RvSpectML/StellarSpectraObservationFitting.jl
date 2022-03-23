@@ -6,6 +6,19 @@ import Base.println
 
 abstract type ModelWorkspace end
 
+_loss_diagnostic(tel, star, rv, d::GenericData) =
+	((total_model(tel, star, rv) .- d.flux) .^ 2) ./ d.var
+_loss_diagnostic(tel, star, rv, d::LSFData) =
+    (((d.lsf * total_model(tel, star, rv)) .- d.flux) .^ 2) ./ d.var
+function _loss_diagnostic(o::Output, om::OrderModel, d::Data;
+	tel=nothing, star=nothing, rv=nothing)
+    !isnothing(tel) ? tel_o = spectra_interp(_eval_lm_vec(om, tel), om.t2o) : tel_o = o.tel
+    !isnothing(star) ? star_o = spectra_interp(_eval_lm_vec(om, star), om.b2o) : star_o = o.star
+    !isnothing(rv) ? rv_o = spectra_interp(_eval_lm_vec(om, rv), om.b2o) : rv_o = o.rv
+    return _loss_diagnostic(tel_o, star_o, rv_o, d)
+end
+_loss_diagnostic(mws::ModelWorkspace; kwargs...) = _loss_diagnostic(mws.o, mws.om, mws.d; kwargs...)
+
 # χ² loss function
 _loss(tel, star, rv, d::GenericData) =
     sum(((total_model(tel, star, rv) .- d.flux) .^ 2) ./ d.var)
@@ -171,7 +184,7 @@ function AdamWorkspace(θ, l::Function)
 end
 
 function update!(aws::AdamWorkspace)
-    val, Δ = gl(aws.θ)
+    val, Δ = aws.gl(aws.θ)
 	Δ = only(Δ)
 	AdamState!(aws.as, val.val, Δ)
     iterate!(aws.θ, Δ, aws.opt)
@@ -429,8 +442,8 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
     result_rv = _OSW_optimize!(ow.rv, options)
 	ow.om.rv.lm.s[:] = ow.rv.unflatten(ow.rv.p0)
     ow.o.rv .= rv_model(ow.om)
-	recalc_total!(ow.o, ow.d)
 
+	recalc_total!(ow.o, ow.d)
     if ignore_regularization
         copy_dict!(ow.om.reg_tel, reg_tel_holder)
         copy_dict!(ow.om.reg_star, reg_star_holder)

@@ -6,7 +6,7 @@ using LinearAlgebra
 # These were initially defined to act on all of the orders of the spectra at a
 # given time, but I have defined them to act on all of the times of the spectra
 # at a given order. Should be equivalent
-function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVector; order::Int=6, nsigma::Vector{<:Real}=[0.3,3.0], maxniter::Int=50, plot_stuff::Bool=false)
+function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVector; order::Int=6, nsigma::Vector{<:Real}=[0.3,3.0], maxniter::Int=50, plot_stuff::Bool=false, edge_mask::Int=0)
     """Fit the continuum using sigma clipping
     Args:
         x: The wavelengths
@@ -24,9 +24,17 @@ function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVecto
 
     A = vander(x .- mean(x), order)
     m = fill(true, length(x))
+	m[σ² .== Inf] .= false  # mask out the bad pixels
+	if edge_mask > 0
+		# m[edge_pad+1:edge_mask+edge_pad] .= false
+		# m[end-edge_mask-edge_pad+1:end-edge_pad] .= false
+		hold_left = y[1:edge_mask]
+		hold_right = y[end-edge_mask+1:end]
+		y[1:edge_mask] .= 1
+		y[end-edge_mask+1:end] .= 1
+	end
     μ = ones(length(x))
     for i in 1:maxniter
-        m[σ² .== Inf] .= false  # mask out the bad pixels
         w = general_lst_sq(view(A, m, :), view(y, m), view(σ², m))
         μ[:] = A * w
 		# if plot_stuff
@@ -42,6 +50,10 @@ function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVecto
         if sum(m) == sum(m_new); break end
         m = m_new
     end
+	if edge_mask > 0
+		y[1:edge_mask] .= hold_left
+		y[end-edge_mask+1:end] .= hold_right
+	end
     return μ
 end
 function continuum_normalize!(d; kwargs...)
@@ -114,7 +126,16 @@ function mask_bad_edges!(d; kwargs...)
 	end
 end
 
+function median_normalize!(d; kwargs...)
+	for i in 1:size(d.log_λ_obs, 2)
+		continuum = median(view(d.flux, :, i)[.!(isnan.(view(d.flux, :, i)))])
+		d.flux[:, i] ./= continuum
+		d.var[:, i] ./= continuum * continuum
+	end
+end
+
 function process!(d; kwargs...)
+	median_normalize!(d)
 	mask_low_pixels!(d)
 	mask_bad_edges!(d)
 	continuum_normalize!(d; kwargs...)
