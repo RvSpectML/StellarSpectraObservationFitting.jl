@@ -55,7 +55,7 @@ function plot_model(mws::SSOF.ModelWorkspace; display_plt::Bool=true, kwargs...)
 	plot_telluric = !(typeof(om.tel.lm) <: SSOF.TemplateModel)
 	# plot the two templates if there is no time variation
 	if (!plot_stellar) && (!plot_telluric)
-		plt = plot_spectrum(; title="Telluric Model Bases", legend=:outerright, kwargs...)
+		plt = plot_spectrum(; title="Constant Model", legend=:outerright, kwargs...)
 		plot!(plt, om.tel.λ, om.tel.lm.μ; label="μₜₑₗ")
 		plot!(plt, om.star.λ, om.star.lm.μ .- 0.5; label="μₛₜₐᵣ")
 		if display_plt; display(plt) end

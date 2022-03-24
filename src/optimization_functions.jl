@@ -453,3 +453,8 @@ end
 
 fine_train_OrderModel!(mws::ModelWorkspace; iter=3*_iter_def, kwargs...) =
 	train_OrderModel!(mws; iter=iter, kwargs...)
+
+function finalize_scores!(mws::ModelWorkspace; kwargs...)
+	mws_s = OptimWorkspace(mws.om, mws.d; only_s=true)
+	train_OrderModel!(mws_s; kwargs...)
+end
