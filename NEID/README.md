@@ -1,7 +1,7 @@
 StellarSpectraObservationFitting/NEID
 ========
 
-This folder has scripts which analyze EXPRES data with SSOF
+This folder has scripts which analyze NEID data with SSOF
 - init.jl: Reformats the data into an SSOF-acceptable form
 - param.jl: used by init.jl to filter which data to use. Hopefully will be deprecated soon.
 - analysis.jl : Performs the model fitting
