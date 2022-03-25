@@ -13,22 +13,18 @@ function effective_length(x; return_mask::Bool=false, masked_val::Real = Inf)
 end
 intra_night_std(rvs::Vector, times::Vector) = median([std(rvs[i]) for i in observation_night_inds(times) if length(i)>3])
 
-function test_ℓ_for_n_comps_basic(n_comps::Vector, mws_inp::ModelWorkspace, times::Vector; return_inters::Bool=false, iter=50, kwargs...)
+function test_ℓ_for_n_comps_basic(n_comps::Vector, mws_inp::ModelWorkspace; return_inters::Bool=false, iter=50, kwargs...)
     mws = typeof(mws_inp)(downsize(mws_inp.om, n_comps[1], n_comps[2]), mws_inp.d)
     train_OrderModel!(mws; iter=iter, kwargs...)  # 16s
+    if return_inters
+        return mws, _loss(mws), total_length(mws)
+    end
     return _loss(mws), total_length(mws)
 end
 function test_ℓ_for_n_comps(n_comps::Vector, mws_inp::ModelWorkspace, times::Vector; return_inters::Bool=false, iter=50, kwargs...)
-    mws = typeof(mws_inp)(downsize(mws_inp.om, n_comps[1], n_comps[2]), mws_inp.d)
-    train_OrderModel!(mws; iter=iter, kwargs...)  # 16s
+    mws, l, len = test_ℓ_for_n_comps_basic(n_comps, mws_inp; return_inters=true)
     model_rvs = rvs(mws.om)
-    return _loss(mws), total_length(mws), std(model_rvs), intra_night_std(model_rvs, times)
-    # l = loss_func(mws)
-    # if return_inters
-    #     return mws, l, l(), total_length(mws), std(rvs(mws.om))
-    # else
-    #     return l(), total_length(mws), std(rvs(mws.om))
-    # end
+    return l, len, std(model_rvs), intra_night_std(model_rvs, times)
 end
 
 function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector, var::AbstractMatrix; return_inters::Bool=false)

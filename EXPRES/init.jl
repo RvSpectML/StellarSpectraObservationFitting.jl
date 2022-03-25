@@ -23,7 +23,7 @@ include("param.jl")  # filters df_files -> df_files_use
 
 SSOFU.reformat_spectra(
 	df_files_use,
-	expres_save_path,
+	expres_save_path * target_subdir,
 	EXPRES,
 	min_order(EXPRES2D()):max_order(EXPRES2D());
 	lsf_f = EXPRES_lsf)

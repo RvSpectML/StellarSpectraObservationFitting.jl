@@ -489,16 +489,24 @@ train_rvs_optim!(ow::OptimWorkspace, optim_cb::Function, kwargs...) =
 fine_train_OrderModel!(mws::ModelWorkspace; iter=3*_iter_def, kwargs...) =
 	train_OrderModel!(mws; iter=iter, kwargs...)
 
-function finalize_scores!(mws::ModelWorkspace; kwargs...)
+function finalize_scores_setup(mws::ModelWorkspace; kwargs...)
 	if is_time_variable(mws.om.tel) || is_time_variable(mws.om.star)
 		mws_s = OptimWorkspace(mws.om, mws.d; only_s=true)
-		train_OrderModel!(mws_s; kwargs...)
+		score_trainer() = train_OrderModel!(mws_s; kwargs...)
 	else
 		loss_rv(rv_s) = _loss(mws.o, mws.om, mws.d; rv=[mws.om.rv.lm.M, rv_s])
 		rv_ws = OptimSubWorkspace(mws.om.rv.lm.s, loss_rv; use_cg=true)
-		train_rvs_optim!(rv_ws, mws.om.rv, mws.om.star, optim_cb, kwargs...)
+		score_trainer() = train_rvs_optim!(rv_ws, mws.om.rv, mws.om.star, optim_cb, kwargs...)
 	end
+	return score_trainer
+end
+function finalize_scores!(score_trainer::Function, mws::ModelWorkspace)
+	score_trainer()
 	Output!(mws)
+end
+function finalize_scores!(mws::ModelWorkspace; kwargs...)
+	score_trainer = finalize_scores_setup(mws::ModelWorkspace)
+	finalize_scores!(score_trainer, mws)
 end
 
 is_time_variable(lm::LinearModel) = !(typeof(lm) <: TemplateModel)

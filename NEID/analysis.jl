@@ -31,9 +31,6 @@ end
 if which_opt == 1
     save_path *= "optim_"
 end
-if !use_gp_prior
-    save_path *= "nogpprior_"
-end
 if !oversamp
     save_path *= "undersamp_"
 end
@@ -127,10 +124,21 @@ end
     model.metadata[:todo][:reg_improved] = true
     mws = typeof(mws)(model, data)
     SSOF.train_OrderModel!(mws; print_stuff=true)  # 120s
+    SSOF.finalize_scores!(mws)
     model.metadata[:todo][:optimized] = true
     @save save_path*"results.jld2" model rvs_naive rvs_notel model_large
 end
 
+if save_plots
+    include(SSOF_path * "/src/_plot_functions.jl")
+    diagnostics = [ℓ, aics, bics, comp_stds, comp_intra_stds]
+    diagnostics_labels = ["ℓ", "AIC", "BIC", "RV std", "Intra-night RV std"]
+    diagnostics_fn = ["l", "aic", "bic", "rv", "rv_intra"]
+    for i in 1:length(diagnostics)
+        plt = component_test_plot(diagnostics[i], test_n_comp_tel, test_n_comp_star, ylabel=diagnostics_labels[i]);
+        png(plt, save_path * diagnostics_fn[i] * "_choice.png")
+    end
+end
 
 ## Getting RV error bars (only regularization held constant)
 
@@ -139,14 +147,15 @@ end
     data_noise = sqrt.(data.var)
     data.var[data.var.==0] .= Inf
 
-    data_holder = copy(data)
-    model_holder = copy(model)
     n = 50
     rv_holder = Array{Float64}(undef, n, length(model.rv.lm.s))
+    _mws = typeof(mws)(copy(model), copy(data))
+    _mws_score_finalizer() = SSOF.finalize_scores_setup(_mws)
     @time for i in 1:n
-        data_holder.flux .= data.flux .+ (data_noise .* randn(size(data_holder.var)))
-        SSOF.train_OrderModel!(typeof(mws)(model_holder, data_holder); iter=50)
-        rv_holder[i, :] = SSOF.rvs(model_holder)
+        _mws.d.flux .= data.flux .+ (data_noise .* randn(size(data.var)))
+        SSOF.train_OrderModel!(_mws; iter=50)
+        _mws_score_finalizer()
+        rv_holder[i, :] = SSOF.rvs(_mws.om)
     end
     rv_errors = vec(std(rv_holder; dims=1))
     model.metadata[:todo][:err_estimated] = true
@@ -156,9 +165,7 @@ end
 ## Plots
 
 if save_plots
-
     include(SSOF_path * "/src/_plot_functions.jl")
-
     @load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs
 
     # Compare RV differences to actual RVs from activity
@@ -176,6 +183,4 @@ if save_plots
 
     plt = status_plot(mws; display_plt=interactive);
     png(plt, save_path * "status_plot.png")
-
-    model_choice_plots(ℓ, aics, bics, test_n_comp_tel, test_n_comp_star, save_path::String)
 end

@@ -28,6 +28,6 @@ include("param.jl")  # filters df_files -> df_files_use
 
 SSOFU.reformat_spectra(
 	df_files_use,
-	neid_save_path,
+	neid_save_path * target_subdir,
 	NEID,
 	min_order(NEID2D()):max_order(NEID2D()))
