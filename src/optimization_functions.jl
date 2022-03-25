@@ -54,11 +54,21 @@ function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
     l_telstar(telstar; kwargs...) =
         _loss(o, om, d; tel=telstar[1], star=telstar[2], kwargs...) +
 			tel_prior(telstar[1], om) + star_prior(telstar[2], om)
+	is_tel_time_variable = is_time_variable(om.tel)
+	is_star_time_variable = is_time_variable(om.star)
     function l_telstar_s(telstar_s)
-		!(typeof(om.tel.lm) <: TemplateModel) ? tel = [om.tel.lm.M, telstar_s[1], om.tel.lm.μ] : tel = nothing
-		!(typeof(om.tel.lm) <: TemplateModel) ? star = [om.star.lm.M, telstar_s[2], om.star.lm.μ] : star = nothing
-		return _loss(o, om, d; tel=tel, star=star) +
-			tel_prior(tel, om) + star_prior(star, om)
+		if is_tel_time_variable
+			tel = [om.tel.lm.M, telstar_s[1], om.tel.lm.μ]
+			is_star_time_variable ?
+				star = [om.star.lm.M, telstar_s[2], om.star.lm.μ] : star = nothing
+		elseif is_star_time_variable
+			tel = nothing
+			star = [om.star.lm.M, telstar_s[1], om.star.lm.μ]
+		else
+			tel = nothing
+			star = nothing
+		end
+		return _loss(o, om, d; tel=tel, star=star)
     end
 
     l_rv(rv_s) = _loss(o, om, d; rv=[om.rv.lm.M, rv_s])
@@ -71,11 +81,10 @@ function loss_funcs_total(o::Output, om::OrderModel, d::Data)
 		_loss_recalc_rv_basis(om, d, total[1], total[2], total[3]) +
 		tel_prior(total[1], om) + star_prior(total[2], om)
     function l_total_s(total_s)
-		!(typeof(om.tel.lm) <: TemplateModel) ? tel = [om.tel.lm.M, total_s[1], om.tel.lm.μ] : tel = nothing
-		!(typeof(om.star.lm) <: TemplateModel) ? star = [om.star.lm.M, total_s[2], om.star.lm.μ] : star = nothing
+		is_time_variable(om.tel) ? tel = [om.tel.lm.M, total_s[1], om.tel.lm.μ] : tel = nothing
+		is_time_variable(om.star) ? star = [om.star.lm.M, total_s[2], om.star.lm.μ] : star = nothing
 		rv = [om.rv.lm.M, total_s[3]]
-		return _loss(o, om, d; tel=tel, star=star, rv=rv) +
-			tel_prior(tel, om) + star_prior(star, om)
+		return _loss(o, om, d; tel=tel, star=star, rv=rv)
     end
 
     return l_total, l_total_s
@@ -375,9 +384,23 @@ end
 function OptimWorkspace(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=false, only_s::Bool=false)
 	loss_telstar, loss_telstar_s, loss_rv = loss_funcs_telstar(o, om, d)
 	rv = OptimSubWorkspace(om.rv.lm.s, loss_rv; use_cg=true)
-	only_s ?
-		telstar = OptimSubWorkspace([om.tel.lm.s, om.star.lm.s], loss_telstar_s; use_cg=!only_s) :
+	is_tel_time_variable = is_time_variable(om.tel)
+	is_star_time_variable = is_time_variable(om.star)
+	if only_s
+		if is_tel_time_variable
+			if is_star_time_variable
+				telstar = OptimSubWorkspace([om.tel.lm.s, om.star.lm.s], loss_telstar_s; use_cg=!only_s)
+			else
+				telstar = OptimSubWorkspace([om.tel.lm.s], loss_telstar_s; use_cg=!only_s)
+			end
+		elseif is_star_time_variable
+			telstar = OptimSubWorkspace([om.star.lm.s], loss_telstar_s; use_cg=!only_s)
+		else
+			@error "This model has no time variability, so a workspace that only changes scores makes no sense"
+		end
+	else
 		telstar = OptimSubWorkspace([vec(om.tel.lm), vec(om.star.lm)], loss_telstar; use_cg=!only_s)
+	end
 	return OptimWorkspace(telstar, rv, om, o, d, only_s)
 end
 OptimWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
@@ -426,8 +449,14 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
         result_telstar = _OSW_optimize!(ow.telstar, options)
 		lm_vec = ow.telstar.unflatten(ow.telstar.p0)
         if ow.only_s
-			ow.om.tel.lm.s[:] = lm_vec[1]
-			ow.om.star.lm.s[:] = lm_vec[2]
+			if is_time_variable(ow.om.tel)
+				ow.om.tel.lm.s[:] = lm_vec[1]
+				if is_time_variable(ow.om.star)
+					ow.om.star.lm.s[:] = lm_vec[2]
+				end
+			else
+				ow.om.star.lm.s[:] = lm_vec[1]
+			end
         else
             copy_to_LinearModel!(ow.om.tel.lm, lm_vec[1])
 			copy_to_LinearModel!(ow.om.star.lm, lm_vec[2])
@@ -437,10 +466,7 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
     end
 
     # optimize RVs
-    options = Optim.Options(; callback=optim_cb, g_tol=1e-2, kwargs...)
-    ow.om.rv.lm.M .= calc_doppler_component_RVSKL(ow.om.star.λ, ow.om.star.lm.μ)
-    result_rv = _OSW_optimize!(ow.rv, options)
-	ow.om.rv.lm.s[:] = ow.rv.unflatten(ow.rv.p0)
+	result_rv = train_rvs_optim!(ow, optim_cb, kwargs...)
     ow.o.rv .= rv_model(ow.om)
 
 	recalc_total!(ow.o, ow.d)
@@ -450,13 +476,29 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
     end
     return result_telstar, result_rv
 end
+function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::Submodel, star::Submodel, optim_cb::Function, kwargs...)
+	options = Optim.Options(; callback=optim_cb, g_tol=1e-2, kwargs...)
+	rv.lm.M .= calc_doppler_component_RVSKL(star.λ, star.lm.μ)
+	result_rv = _OSW_optimize!(rv_ws, options)
+	rv.lm.s[:] = rv_ws.unflatten(rv_ws.p0)
+	return result_rv
+end
+train_rvs_optim!(ow::OptimWorkspace, optim_cb::Function, kwargs...) =
+	train_rvs_optim!(ow.rv, ow.om.rv, ow.om.star, optim_cb, kwargs...)
 
 fine_train_OrderModel!(mws::ModelWorkspace; iter=3*_iter_def, kwargs...) =
 	train_OrderModel!(mws; iter=iter, kwargs...)
 
 function finalize_scores!(mws::ModelWorkspace; kwargs...)
-	mws_s = OptimWorkspace(mws.om, mws.d; only_s=true)
-	train_OrderModel!(mws_s; kwargs...)
+	if is_time_variable(mws.om.tel) || is_time_variable(mws.om.star)
+		mws_s = OptimWorkspace(mws.om, mws.d; only_s=true)
+		train_OrderModel!(mws_s; kwargs...)
+	else
+		loss_rv(rv_s) = _loss(mws.o, mws.om, mws.d; rv=[mws.om.rv.lm.M, rv_s])
+		rv_ws = OptimSubWorkspace(mws.om.rv.lm.s, loss_rv; use_cg=true)
+		train_rvs_optim!(rv_ws, mws.om.rv, mws.om.star, optim_cb, kwargs...)
+	end
+	Output!(mws)
 end
 
 is_time_variable(lm::LinearModel) = !(typeof(lm) <: TemplateModel)
