@@ -241,3 +241,6 @@ wavenumber_to_Å(wn::Real) = Å_to_wavenumber(wn)
 
 vector_zero(θ::AbstractVecOrMat) = zero(θ)
 vector_zero(θ::Vector{<:AbstractArray}) = [vector_zero(i) for i in θ]
+
+flatten_ranges(ranges::AbstractVector) = maximum([range[1] for range in ranges]):minimum([range[end] for range in ranges])
+flatten_ranges(ranges::AbstractMatrix) = [flatten_ranges(view(ranges, :, i)) for i in 1:size(ranges, 2)]
