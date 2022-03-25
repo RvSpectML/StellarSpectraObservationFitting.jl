@@ -221,13 +221,15 @@ function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 	return log_λ_model_to
 end
 
-default_reg_tel = Dict([(:GP_μ, 1e1), (:L2_μ, 1e6), (:L1_μ, 1e2),
-	(:L1_μ₊_factor, 6.), (:GP_M, 1e1), (:L2_M, 1e-1), (:L1_M, 1e3)])
-default_reg_star = Dict([(:GP_μ, 1e1), (:L2_μ, 1e4), (:L1_μ, 1e3),
-	(:L1_μ₊_factor, 7.2), (:GP_M, 1e1), (:L2_M, 1e1), (:L1_M, 1e6)])
 # They need to be different or else the stellar μ will be surpressed
-# default_reg_star = Dict([(:L2_μ, 1e6), (:L1_μ, 1e2),
-# 	(:L1_μ₊_factor, 6.), (:L2_M, 1e-1), (:L1_M, 1e3)])
+# We only use the ones that have seemed useful
+default_reg_tel = Dict([(:GP_μ, 1e6), (:L1_μ, 1e5), (:L1_μ₊_factor, 6.),
+	(:GP_M, 1e7), (:L1_M, 1e7)])
+default_reg_star = Dict([(:GP_μ, 1e2), (:GP_M, 1e4), (:L1_M, 1e7)])
+default_reg_tel_full = Dict([(:GP_μ, 1e6), (:L2_μ, 1e6), (:L1_μ, 1e5),
+	(:L1_μ₊_factor, 6.), (:GP_M, 1e7), (:L2_M, 1e4), (:L1_M, 1e7)])
+default_reg_star_full = Dict([(:GP_μ, 1e2), (:L2_μ, 1e-2), (:L1_μ, 1e1),
+	(:L1_μ₊_factor, 6.), (:GP_M, 1e4), (:L2_M, 1e4), (:L1_M, 1e7)])
 
 function oversamp_interp_helper(to_bounds::AbstractVector, from_x::AbstractVector)
 	ans = spzeros(length(to_bounds)-1, length(from_x))
@@ -331,12 +333,24 @@ function rm_regularization(om::OrderModel)
 		delete!(om.reg_star, key)
 	end
 end
-function zero_regularization(om::OrderModel)
+function zero_regularization(om::OrderModel; include_L1_factor::Bool=false)
 	for (key, value) in om.reg_tel
-		om.reg_tel[key] = 0
+		if include_L1_factor || (key != :L1_μ₊_factor)
+			om.reg_tel[key] = 0
+		end
 	end
 	for (key, value) in om.reg_star
-		om.reg_star[key] = 0
+		if include_L1_factor || (key != :L1_μ₊_factor)
+			om.reg_star[key] = 0
+		end
+	end
+end
+function reset_regularization!(om::OrderModel)
+	for (key, value) in om.reg_tel
+		om.reg_tel[key] = default_reg_tel_full[key]
+	end
+	for (key, value) in om.reg_star
+		om.reg_star[key] = default_reg_star_full[key]
 	end
 end
 
@@ -481,14 +495,18 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2)
 	_, _, _, rvs_naive =
 	    DPCA(flux_star, om.star.λ; template=om.star.lm.μ, num_components=1)
 
-	# telluric model with stellar template
+	# 1 basis telluric model using stellar template
 	flux_star .= om.star.lm.μ
 	_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
 
 	om.tel.lm.μ[:] = make_template(flux_tel; min=μ_min, max=μ_max)
+	Xtmp = flux_tel .- om.tel.lm.μ
+	tel_M_1 = ones(size(om.tel.lm.M, 1), 1)
+	tel_s_1 = ones(1, size(om.tel.lm.s, 2))
+	EMPCA!(tel_M_1, Xtmp, tel_s_1, 1 ./ vars_tel)
 
-	# stellar model with telluric template
-	flux_tel .= om.tel.lm.μ
+	# stellar model with 1 basis telluric model
+	flux_tel .= (tel_M_1 * tel_s_1) .+ om.tel.lm.μ
 	_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
 
 	om.star.lm.μ[:] = make_template(flux_star; min=μ_min, max=μ_max)
