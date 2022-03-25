@@ -125,36 +125,13 @@ function plot_model(mws::SSOF.ModelWorkspace, airmasses::Vector; display_plt::Bo
     return plt
 end
 
-function status_plot(o::SSOF.Output, d::SSOF.Data; plot_epoch::Int=10, tracker::Int=0, display_plt::Bool=true, kwargs...)
+function status_plot(o::SSOF.Output, d::SSOF.Data; plot_epoch::Int=10, tracker::Int=0, display_plt::Bool=true, include_χ²::Bool=true, kwargs...)
     obs_mask = .!(isinf.(d.var[:, plot_epoch]))
     obs_λ = exp.(d.log_λ_obs[:, plot_epoch])
     plot_star_λs = exp.(d.log_λ_star[:, plot_epoch])
-    plt = plot_spectrum(; legend = :bottomright, layout = grid(2, 1, heights=[0.85, 0.15]), kwargs...)
-
-    plot!(plt[1], obs_λ, o.tel[:, plot_epoch], label="Telluric Model")
-
-    shift = 1.1 - minimum(o.tel[:, plot_epoch])
-    star_model = o.star[:, plot_epoch] + o.rv[:, plot_epoch]
-    plot!(plt[1], obs_λ, star_model .- shift, label="Stellar Model")
-
-    shift += 1.1 - minimum(star_model)
-    my_scatter!(plt[1], obs_λ[obs_mask], d.flux[obs_mask, plot_epoch] .- shift, label="Observed Data", color=:white, alpha=0.1, xlabel="")
-    plot!(plt[1], obs_λ, o.total[:, plot_epoch] .- shift, label="Full Model", ls=:dash, color=:white)
-    # plot!(plt[1], obs_λ, o.tel[:, plot_epoch] .* star_model .- shift, label="Full Model", ls=:dash, color=:white)
-
-    my_scatter!(plt[2], obs_λ[obs_mask], d.flux[obs_mask, plot_epoch] - o.total[obs_mask, plot_epoch], ylabel="Residuals", label="", alpha=0.1, color=:white)
-    # my_scatter!(plt[2], obs_λ, d.flux[:, plot_epoch] - (o.tel[:, plot_epoch] .* star_model), ylabel="Residuals", label="", alpha=0.1, color=:white)
-    if display_plt; display(plt) end
-    return plt
-end
-status_plot(mws::SSOF.ModelWorkspace; kwargs...) =
-    status_plot(mws.o, mws.d; kwargs...)
-
-function status_plot_χ²(o::SSOF.Output, d::SSOF.Data; plot_epoch::Int=10, tracker::Int=0, display_plt::Bool=true, kwargs...)
-    obs_mask = .!(isinf.(d.var[:, plot_epoch]))
-    obs_λ = exp.(d.log_λ_obs[:, plot_epoch])
-    plot_star_λs = exp.(d.log_λ_star[:, plot_epoch])
-    plt = plot_spectrum(; legend = :bottomright, layout = grid(3, 1, heights=[0.6, 0.2, 0.2]), kwargs...)
+	include_χ² ?
+		plt = plot_spectrum(; legend = :bottomright, layout = grid(3, 1, heights=[0.6, 0.2, 0.2]), kwargs...) :
+		plt = plot_spectrum(; legend = :bottomright, layout = grid(2, 1, heights=[0.85, 0.15]), kwargs...)
 
     plot!(plt[1], obs_λ, o.tel[:, plot_epoch], label="Telluric Model")
 
@@ -170,12 +147,15 @@ function status_plot_χ²(o::SSOF.Output, d::SSOF.Data; plot_epoch::Int=10, trac
     my_scatter!(plt[2], obs_λ[obs_mask], d.flux[obs_mask, plot_epoch] - o.total[obs_mask, plot_epoch], ylabel="Residuals", label="", alpha=0.1, color=:white, xlabel="")
     # my_scatter!(plt[2], obs_λ, d.flux[:, plot_epoch] - (o.tel[:, plot_epoch] .* star_model), ylabel="Residuals", label="", alpha=0.1, color=:white)
 
-	my_scatter!(plt[3], obs_λ[obs_mask], -sum(SSOF._loss_diagnostic(mws); dims=2)[obs_mask], ylabel="Remaining χ²", label="", alpha=0.1, color=:white)
+	if include_χ²
+		my_scatter!(plt[3], obs_λ[obs_mask], -sum(SSOF._loss_diagnostic(mws); dims=2)[obs_mask], ylabel="Remaining χ²", label="", alpha=0.1, color=:white)
+	end
+
     if display_plt; display(plt) end
     return plt
 end
-status_plot_χ²(mws::SSOF.ModelWorkspace; kwargs...) =
-    status_plot2(mws.o, mws.d; kwargs...)
+status_plot(mws::SSOF.ModelWorkspace; kwargs...) =
+    status_plot(mws.o, mws.d; kwargs...)
 
 function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector; size=(_plt_size[1],_plt_size[2]*1.5), ylabel="ℓ")
     plt = _my_plot(; ylabel=ylabel, layout=grid(2, 1), size=size)
