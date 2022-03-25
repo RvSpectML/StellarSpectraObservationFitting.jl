@@ -458,3 +458,6 @@ function finalize_scores!(mws::ModelWorkspace; kwargs...)
 	mws_s = OptimWorkspace(mws.om, mws.d; only_s=true)
 	train_OrderModel!(mws_s; kwargs...)
 end
+
+is_time_variable(lm::LinearModel) = !(typeof(lm) <: TemplateModel)
+is_time_variable(sm::Submodel) = is_time_variable(sm.lm)

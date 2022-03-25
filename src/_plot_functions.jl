@@ -49,10 +49,10 @@ function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat
 end
 
 c_ind_f(i) = ((i + 3) % 19) + 1
-function plot_model(mws::SSOF.ModelWorkspace; display_plt::Bool=true, kwargs...)
+function plot_model(mws::SSOF.ModelWorkspace, airmasses::Vector; display_plt::Bool=true, kwargs...)
     om = mws.om
-	plot_stellar = !(typeof(om.star.lm) <: SSOF.TemplateModel)
-	plot_telluric = !(typeof(om.tel.lm) <: SSOF.TemplateModel)
+	plot_stellar = SSOF.is_time_variable(om.star)
+	plot_telluric = SSOF.is_time_variable(om.tel)
 	# plot the two templates if there is no time variation
 	if (!plot_stellar) && (!plot_telluric)
 		plt = plot_spectrum(; title="Constant Model", legend=:outerright, kwargs...)
@@ -72,6 +72,9 @@ function plot_model(mws::SSOF.ModelWorkspace; display_plt::Bool=true, kwargs...)
 		# basis plot
 		plot!(plt[1, 1], om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ", alpha=0.3, color=:white, title="Telluric Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
 		plot!(plt[1, 1], om.tel.λ, om.tel.lm.μ; label="μₜₑₗ")
+
+		my_scatter!(plt[2, 1], times_nu, airmasses; label="Airmasses", color=plt_colors[1])
+		hline!(plt[2, 1], [1]; label="", color=plt_colors[1], lw=3, alpha=0.4)
 
 		shift_s = ceil(10 * maximum([std(om.tel.lm.s[inds[i], :] .* norm(om.tel.lm.M[:, inds[i]])) for i in inds])) / 2
 		half_shift_s = ceil(shift_s) / 2
@@ -146,6 +149,33 @@ function status_plot(o::SSOF.Output, d::SSOF.Data; plot_epoch::Int=10, tracker::
 end
 status_plot(mws::SSOF.ModelWorkspace; kwargs...) =
     status_plot(mws.o, mws.d; kwargs...)
+
+function status_plot_χ²(o::SSOF.Output, d::SSOF.Data; plot_epoch::Int=10, tracker::Int=0, display_plt::Bool=true, kwargs...)
+    obs_mask = .!(isinf.(d.var[:, plot_epoch]))
+    obs_λ = exp.(d.log_λ_obs[:, plot_epoch])
+    plot_star_λs = exp.(d.log_λ_star[:, plot_epoch])
+    plt = plot_spectrum(; legend = :bottomright, layout = grid(3, 1, heights=[0.6, 0.2, 0.2]), kwargs...)
+
+    plot!(plt[1], obs_λ, o.tel[:, plot_epoch], label="Telluric Model")
+
+    shift = 1.1 - minimum(o.tel[:, plot_epoch])
+    star_model = o.star[:, plot_epoch] + o.rv[:, plot_epoch]
+    plot!(plt[1], obs_λ, star_model .- shift, label="Stellar Model")
+
+    shift += 1.1 - minimum(star_model)
+    my_scatter!(plt[1], obs_λ[obs_mask], d.flux[obs_mask, plot_epoch] .- shift, label="Observed Data", color=:white, alpha=0.1, xlabel="")
+    plot!(plt[1], obs_λ, o.total[:, plot_epoch] .- shift, label="Full Model", ls=:dash, color=:white)
+    # plot!(plt[1], obs_λ, o.tel[:, plot_epoch] .* star_model .- shift, label="Full Model", ls=:dash, color=:white)
+
+    my_scatter!(plt[2], obs_λ[obs_mask], d.flux[obs_mask, plot_epoch] - o.total[obs_mask, plot_epoch], ylabel="Residuals", label="", alpha=0.1, color=:white, xlabel="")
+    # my_scatter!(plt[2], obs_λ, d.flux[:, plot_epoch] - (o.tel[:, plot_epoch] .* star_model), ylabel="Residuals", label="", alpha=0.1, color=:white)
+
+	my_scatter!(plt[3], obs_λ[obs_mask], -sum(SSOF._loss_diagnostic(mws); dims=2)[obs_mask], ylabel="Remaining χ²", label="", alpha=0.1, color=:white)
+    if display_plt; display(plt) end
+    return plt
+end
+status_plot_χ²(mws::SSOF.ModelWorkspace; kwargs...) =
+    status_plot2(mws.o, mws.d; kwargs...)
 
 function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector; size=(_plt_size[1],_plt_size[2]*1.5), ylabel="ℓ")
     plt = _my_plot(; ylabel=ylabel, layout=grid(2, 1), size=size)
