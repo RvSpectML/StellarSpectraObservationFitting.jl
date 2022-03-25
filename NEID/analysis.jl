@@ -2,7 +2,7 @@
 using Pkg
 Pkg.activate("NEID")
 
-import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
+import StellarSpectraObservationFitting as SSOF
 using JLD2
 using Statistics
 import StatsBase
@@ -16,11 +16,10 @@ save_plots = true
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
 desired_order = SSOF.parse_args(2, Int, 67)
 use_reg = SSOF.parse_args(3, Bool, true)
-which_opt = SSOF.parse_args(4, Int, 1)
+which_opt = SSOF.parse_args(4, Int, 3)
 recalc = SSOF.parse_args(5, Bool, false)
 oversamp = SSOF.parse_args(6, Bool, true)
 use_lsf = SSOF.parse_args(7, Bool, false)
-use_gp_prior = SSOF.parse_args(8, Bool, true)
 max_components = 5
 
 ## Loading in data and initializing model
@@ -62,17 +61,6 @@ else
         model.metadata[:todo][:reg_improved] = true
     end
     @save save_path*"results.jld2" model rvs_naive rvs_notel
-end
-if use_gp_prior
-    delete!(model.reg_tel, :L2_μ)
-    delete!(model.reg_star, :L2_μ)
-    delete!(model.reg_tel, :L2_M)
-    delete!(model.reg_star, :L2_M)
-else
-    delete!(model.reg_tel, :GP_μ)
-    delete!(model.reg_star, :GP_μ)
-    delete!(model.reg_tel, :GP_M)
-    delete!(model.reg_star, :GP_M)
 end
 
 ## Creating optimization workspace

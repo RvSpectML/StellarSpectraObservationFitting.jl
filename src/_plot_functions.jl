@@ -1,7 +1,7 @@
 using LinearAlgebra
 using Plots
 using Statistics
-import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
+import StellarSpectraObservationFitting as SSOF
 
 _plt_dpi = 400
 _plt_size = (1920,1080)

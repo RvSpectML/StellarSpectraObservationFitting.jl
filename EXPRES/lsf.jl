@@ -1,6 +1,6 @@
 # using Pkg
 # Pkg.activate("EXPRES")
-import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
+import StellarSpectraObservationFitting as SSOF
 
 ## Finding LSF width as a function of wavenumber
 using Distributions

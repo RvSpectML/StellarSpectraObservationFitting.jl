@@ -2,7 +2,7 @@
 using Pkg
 Pkg.activate("NEID")
 
-import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
+import StellarSpectraObservationFitting as SSOF
 using JLD2
 using Statistics
 import StatsBase

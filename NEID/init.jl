@@ -5,9 +5,9 @@ Pkg.instantiate()
 
 ## Importing data with Eric's code
 
-import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
 using JLD2
 using RvSpectMLBase, RvSpectML
+import StellarSpectraObservationFitting as SSOF
 using EchelleInstruments, EchelleInstruments.NEID
 using CSV, DataFrames, Query, StatsBase, Statistics, Dates
 

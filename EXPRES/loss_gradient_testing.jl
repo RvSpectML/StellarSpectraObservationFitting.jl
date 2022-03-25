@@ -2,7 +2,7 @@
 using Pkg
 Pkg.activate("EXPRES")
 
-import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
+import StellarSpectraObservationFitting as SSOF
 using JLD2
 using Statistics
 import StatsBase

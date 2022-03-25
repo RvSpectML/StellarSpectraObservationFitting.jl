@@ -4,7 +4,7 @@ Pkg.activate("periodogram")
 Pkg.instantiate()
 
 using JLD2
-import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
+import StellarSpectraObservationFitting as SSOF
 using CSV, DataFrames
 
 ## Setting up necessary variables

@@ -2,7 +2,7 @@ using Test
 import TemporalGPs; TGP = TemporalGPs
 using Nabla
 using SparseArrays
-import StellarSpectraObservationFitting; SSOF = StellarSpectraObservationFitting
+import StellarSpectraObservationFitting as SSOF
 
 println("Testing...")
 
