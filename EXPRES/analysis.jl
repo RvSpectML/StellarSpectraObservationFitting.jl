@@ -16,11 +16,10 @@ save_plots = true
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 desired_order = SSOF.parse_args(2, Int, 68)  # 68 has a bunch of tels, 47 has very few
 use_reg = SSOF.parse_args(3, Bool, true)
-which_opt = SSOF.parse_args(4, Int, 1)
+which_opt = SSOF.parse_args(4, Int, 3)
 recalc = SSOF.parse_args(5, Bool, false)
 oversamp = SSOF.parse_args(6, Bool, true)
 use_lsf = SSOF.parse_args(7, Bool, true)
-use_gp_prior = SSOF.parse_args(8, Bool, true)
 max_components = 5
 
 ## Loading in data and initializing model
@@ -29,8 +28,8 @@ save_path = expres_save_path * star * "/$(desired_order)/"
 if !use_reg
     save_path *= "noreg_"
 end
-if which_opt != 1
-    save_path *= "adam_"
+if which_opt == 1
+    save_path *= "optim_"
 end
 if !use_gp_prior
     save_path *= "nogpprior_"
@@ -56,23 +55,12 @@ else
     # model_upscale = 2 * sqrt(2)
     model_upscale = 1.
     @time model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, upscale=model_upscale, oversamp=oversamp)
-    @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
+    @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data)
     if !use_reg
         SSOF.rm_regularization(model)
         model.metadata[:todo][:reg_improved] = true
     end
     @save save_path*"results.jld2" model rvs_naive rvs_notel
-end
-if use_gp_prior
-    delete!(model.reg_tel, :L2_μ)
-    delete!(model.reg_star, :L2_μ)
-    delete!(model.reg_tel, :L2_M)
-    delete!(model.reg_star, :L2_M)
-else
-    delete!(model.reg_tel, :GP_μ)
-    delete!(model.reg_star, :GP_μ)
-    delete!(model.reg_tel, :GP_M)
-    delete!(model.reg_star, :GP_M)
 end
 
 ## Creating optimization workspace
@@ -98,9 +86,10 @@ end
 
 if !model.metadata[:todo][:reg_improved]  # 27 mins
     @time SSOF.train_OrderModel!(mws; print_stuff=true, ignore_regularization=true)  # 45s
-    n_obs_train = Int(round(0.75 * n_obs))
-    training_inds = sort(StatsBase.sample(1:n_obs, n_obs_train; replace=false))
-    @time SSOF.fit_regularization!(mws, training_inds)
+    n_obs_test = Int(round(0.25 * n_obs))
+    test_start_ind = max(1, Int(round(rand() * (n_obs - n_obs_test))))
+    testing_inds = test_start_ind:test_start_ind+n_obs_test-1
+    @time SSOF.fit_regularization!(mws, testing_inds)
     model.metadata[:todo][:reg_improved] = true
     model.metadata[:todo][:optimized] = false
     @save save_path*"results.jld2" model rvs_naive rvs_notel
@@ -109,7 +98,7 @@ end
 ## Optimizing model
 
 if !model.metadata[:todo][:optimized]
-    @time results = SSOF.fine_train_OrderModel!(mws; print_stuff=true)  # 120s
+    @time results = SSOF.train_OrderModel!(mws; print_stuff=true)  # 120s
     rvs_notel_opt = SSOF.rvs(model)
     if interactive; status_plot(mws) end
     model.metadata[:todo][:optimized] = true
@@ -124,13 +113,14 @@ end
     ks = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
     comp_ls = zeros(length(test_n_comp_tel), length(test_n_comp_star))
     comp_stds = zeros(length(test_n_comp_tel), length(test_n_comp_star))
+    comp_intra_stds = zeros(length(test_n_comp_tel), length(test_n_comp_star))
     for (i, n_tel) in enumerate(test_n_comp_tel)
         for (j, n_star) in enumerate(test_n_comp_star)
-            comp_ls[i, j], ks[i, j], comp_stds[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star], mws)
+            comp_ls[i, j], ks[i, j], comp_stds[i, j], comp_intra_stds[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star], mws, times_nu)
         end
     end
     n_comps_best, ℓ, aics, bics = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, data.var; return_inters=true)
-    @save save_path*"model_decision.jld2" comp_ls ℓ aics bics ks test_n_comp_tel test_n_comp_star comp_stds
+    @save save_path*"model_decision.jld2" comp_ls ℓ aics bics ks test_n_comp_tel test_n_comp_star comp_stds comp_intra_stds
 
     model_large = copy(model)
     model = SSOF.downsize(model, n_comps_best[1], n_comps_best[2])
@@ -138,11 +128,22 @@ end
     model.metadata[:todo][:downsized] = true
     model.metadata[:todo][:reg_improved] = true
     mws = typeof(mws)(model, data)
-    SSOF.fine_train_OrderModel!(mws; print_stuff=true)  # 120s
+    SSOF.train_OrderModel!(mws; print_stuff=true)  # 120s
+    SSOF.finalize_scores!(mws)
     model.metadata[:todo][:optimized] = true
     @save save_path*"results.jld2" model rvs_naive rvs_notel model_large
 end
 
+if save_plots
+    include(SSOF_path * "/src/_plot_functions.jl")
+    diagnostics = [ℓ, aics, bics, comp_stds, comp_intra_stds]
+    diagnostics_labels = ["ℓ", "AIC", "BIC", "RV std", "Intra-night RV std"]
+    diagnostics_fn = ["l", "aic", "bic", "rv", "rv_intra"]
+    for i in 1:length(diagnostics)
+        plt = component_test_plot(diagnostics[i], test_n_comp_tel, test_n_comp_star, ylabel=diagnostics_labels[i]);
+        png(plt, save_path * diagnostics_fn[i] * "_choice.png")
+    end
+end
 
 ## Getting RV error bars (only regularization held constant)
 
@@ -151,14 +152,15 @@ end
     data_noise = sqrt.(data.var)
     data.var[data.var.==0] .= Inf
 
-    data_holder = copy(data)
-    model_holder = copy(model)
     n = 50
     rv_holder = Array{Float64}(undef, n, length(model.rv.lm.s))
+    _mws = typeof(mws)(copy(model), copy(data))
+    _mws_score_finalizer() = SSOF.finalize_scores_setup(_mws)
     @time for i in 1:n
-        data_holder.flux .= data.flux .+ (data_noise .* randn(size(data_holder.var)))
-        SSOF.train_OrderModel!(typeof(mws)(model_holder, data_holder))
-        rv_holder[i, :] = SSOF.rvs(model_holder)
+        _mws.d.flux .= data.flux .+ (data_noise .* randn(size(data.var)))
+        SSOF.train_OrderModel!(_mws; iter=50)
+        _mws_score_finalizer()
+        rv_holder[i, :] = SSOF.rvs(_mws.om)
     end
     rv_errors = vec(std(rv_holder; dims=1))
     model.metadata[:todo][:err_estimated] = true
@@ -187,6 +189,4 @@ if save_plots
 
     plt = status_plot(mws; display_plt=interactive);
     png(plt, save_path * "status_plot.png")
-
-    model_choice_plots(ℓ, aics, bics, test_n_comp_tel, test_n_comp_star, save_path)
 end

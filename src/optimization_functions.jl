@@ -54,10 +54,9 @@ function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
     l_telstar(telstar; kwargs...) =
         _loss(o, om, d; tel=telstar[1], star=telstar[2], kwargs...) +
 			tel_prior(telstar[1], om) + star_prior(telstar[2], om)
-	is_tel_time_variable = is_time_variable(om.tel)
 	is_star_time_variable = is_time_variable(om.star)
     function l_telstar_s(telstar_s)
-		if is_tel_time_variable
+		if is_time_variable(om.tel)
 			tel = [om.tel.lm.M, telstar_s[1], om.tel.lm.μ]
 			is_star_time_variable ?
 				star = [om.star.lm.M, telstar_s[2], om.star.lm.μ] : star = nothing
@@ -80,10 +79,21 @@ function loss_funcs_total(o::Output, om::OrderModel, d::Data)
     l_total(total) =
 		_loss_recalc_rv_basis(om, d, total[1], total[2], total[3]) +
 		tel_prior(total[1], om) + star_prior(total[2], om)
+	is_tel_time_variable = is_time_variable(om.tel)
+	is_star_time_variable = is_time_variable(om.star)
     function l_total_s(total_s)
-		is_time_variable(om.tel) ? tel = [om.tel.lm.M, total_s[1], om.tel.lm.μ] : tel = nothing
-		is_time_variable(om.star) ? star = [om.star.lm.M, total_s[2], om.star.lm.μ] : star = nothing
-		rv = [om.rv.lm.M, total_s[3]]
+		if is_tel_time_variable
+			tel = [om.tel.lm.M, total_s[1], om.tel.lm.μ]
+			is_star_time_variable ?
+				star = [om.star.lm.M, telstar_s[2], om.star.lm.μ] : star = nothing
+		elseif is_star_time_variable
+			tel = nothing
+			star = [om.star.lm.M, telstar_s[1], om.star.lm.μ]
+		else
+			tel = nothing
+			star = nothing
+		end
+		rv = [om.rv.lm.M, total_s[1+is_star_time_variable+is_tel_time_variable]]
 		return _loss(o, om, d; tel=tel, star=star, rv=rv)
     end
 
@@ -299,12 +309,28 @@ end
 
 function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def)
 	l_total, l_total_s = loss_funcs_total(o, om, d)
-	only_s ?
-		total = AdamWorkspace([om.tel.lm.s, om.star.lm.s, om.rv.lm.s], l_total_s) :
-		total = AdamWorkspace([vec(om.tel.lm), vec(om.star.lm), om.rv.lm.s], l_total)
 	α_ratio = α * sqrt(length(om.tel.lm.μ)) # = α / rel_step_size(om.tel.lm.M) assuming M starts as L2 normalized basis vectors. Need to use this instead because TemplateModels don't have basis vectors
-	scale_α_helper!(total.opt[1:2], α_ratio, total.θ, α, scale_α)
-	scale_α_helper!(total.opt[3], α_ratio, total.θ[3], α, true)
+	is_tel_time_variable = is_time_variable(om.tel)
+	is_star_time_variable = is_time_variable(om.star)
+	if only_s
+		if is_tel_time_variable
+			if is_star_time_variable
+				total = AdamWorkspace([om.tel.lm.s, om.star.lm.s, om.rv.lm.s], l_total_s)
+			else
+				total = AdamWorkspace([om.tel.lm.s, om.rv.lm.s], l_total_s)
+			end
+		elseif is_star_time_variable
+			total = AdamWorkspace([om.star.lm.s, om.rv.lm.s], l_total_s)
+		else
+			total = AdamWorkspace([om.rv.lm.s], l_total_s)
+		end
+	else
+		total = AdamWorkspace([vec(om.tel.lm), vec(om.star.lm), om.rv.lm.s], l_total)
+	end
+	if is_tel_time_variable || is_star_time_variable
+		scale_α_helper!(total.opt[1:(is_tel_time_variable+is_star_time_variable)], α_ratio, total.θ, α, scale_α)
+	end
+	scale_α_helper!(total.opt[end], α_ratio, total.θ[end], α, true)
 	return TotalWorkspace(total, om, o, d, only_s)
 end
 TotalWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
@@ -493,19 +519,19 @@ function finalize_scores_setup(mws::ModelWorkspace; kwargs...)
 	if is_time_variable(mws.om.tel) || is_time_variable(mws.om.star)
 		mws_s = OptimWorkspace(mws.om, mws.d; only_s=true)
 		score_trainer() = train_OrderModel!(mws_s; kwargs...)
-	else
-		loss_rv(rv_s) = _loss(mws.o, mws.om, mws.d; rv=[mws.om.rv.lm.M, rv_s])
-		rv_ws = OptimSubWorkspace(mws.om.rv.lm.s, loss_rv; use_cg=true)
-		score_trainer() = train_rvs_optim!(rv_ws, mws.om.rv, mws.om.star, optim_cb, kwargs...)
+		return score_trainer
 	end
-	return score_trainer
+	loss_rv(rv_s) = _loss(mws.o, mws.om, mws.d; rv=[mws.om.rv.lm.M, rv_s])
+	rv_ws = OptimSubWorkspace(mws.om.rv.lm.s, loss_rv; use_cg=true)
+	score_trainer_template() = train_rvs_optim!(rv_ws, mws.om.rv, mws.om.star, optim_cb, kwargs...)
+	return score_trainer_template
 end
 function finalize_scores!(score_trainer::Function, mws::ModelWorkspace)
 	score_trainer()
 	Output!(mws)
 end
 function finalize_scores!(mws::ModelWorkspace; kwargs...)
-	score_trainer = finalize_scores_setup(mws::ModelWorkspace)
+	score_trainer = finalize_scores_setup(mws)
 	finalize_scores!(score_trainer, mws)
 end
 
