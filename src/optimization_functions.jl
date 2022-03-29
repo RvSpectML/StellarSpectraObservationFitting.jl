@@ -85,10 +85,10 @@ function loss_funcs_total(o::Output, om::OrderModel, d::Data)
 		if is_tel_time_variable
 			tel = [om.tel.lm.M, total_s[1], om.tel.lm.μ]
 			is_star_time_variable ?
-				star = [om.star.lm.M, telstar_s[2], om.star.lm.μ] : star = nothing
+				star = [om.star.lm.M, total_s[2], om.star.lm.μ] : star = nothing
 		elseif is_star_time_variable
 			tel = nothing
-			star = [om.star.lm.M, telstar_s[1], om.star.lm.μ]
+			star = [om.star.lm.M, total_s[1], om.star.lm.μ]
 		else
 			tel = nothing
 			star = nothing
