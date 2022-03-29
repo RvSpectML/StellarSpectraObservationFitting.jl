@@ -30,7 +30,7 @@ function clean(order::Int, star::String)
     end
 end
 
-input_ind == 0 ? star_inds = (1:3) : star_inds = input_ind
+input_ind == 0 ? star_inds = (1:length(stars)) : star_inds = input_ind
 for star_ind in star_inds
     star = stars[star_ind]
     orders = orders_list[star_ind]
