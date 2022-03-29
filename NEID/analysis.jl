@@ -178,7 +178,7 @@ if save_plots
         png(plt, save_path * "model_rvs_order.png")
     end
 
-    plt = plot_model(mws; display_plt=interactive);
+    plt = plot_model(mws, airmasses; display_plt=interactive);
     png(plt, save_path * "model.png")
 
     plt = status_plot(mws; display_plt=interactive);

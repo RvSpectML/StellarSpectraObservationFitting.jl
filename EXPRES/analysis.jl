@@ -184,7 +184,7 @@ if save_plots
     plt = plot_model_rvs(times_nu, rvs_notel_opt, vec(rv_errors), eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
     png(plt, save_path * "model_rvs.png")
 
-    plt = plot_model(mws; display_plt=interactive);
+    plt = plot_model(mws, airmasses; display_plt=interactive);
     png(plt, save_path * "model.png")
 
     plt = status_plot(mws; display_plt=interactive);
