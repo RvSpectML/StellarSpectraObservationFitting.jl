@@ -59,7 +59,7 @@ function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol,
         start_ℓ, end_ℓ = _fit_regularization_helper!(reg_fields, reg_key, start, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
         println("$(reg_fields[1])[:$reg_key] : $start -> $(getfield(mws.om, reg_fields[1])[reg_key])")
         println("test χ²: $start_ℓ -> $end_ℓ ($(round(end_ℓ/start_ℓ; digits=3)))")
-        if end_ℓ > (1.2 * before_ℓ)
+        if end_ℓ > (1.1 * before_ℓ)
             for field in reg_fields
                 getfield(mws.om, field)[reg_key] = 0.
             end
@@ -73,7 +73,8 @@ end
 
 
 _key_list = [:GP_μ, :L2_μ, :L1_μ, :L1_μ₊_factor, :GP_M, :L2_M, :L1_M, :shared_M]
-_key_list_fit = [:GP_μ, :L1_μ, :GP_M, :L2_M, :L1_M]
+_key_list_fit = [:GP_μ, :L1_μ, :GP_M, :L1_M]
+_key_list_bases = [:GP_M, :L2_M, :L1_M, :shared_M]
 function check_for_valid_regularization(reg::Dict{Symbol, <:Real})
     for i in keys(reg)
         @assert i in _key_list "The requested regularization isn't valid"
@@ -105,8 +106,12 @@ function fit_regularization!(mws::ModelWorkspace, testing_inds::AbstractVecOrMat
         if share_regs
             before_ℓ = fit_regularization_helper!(_reg_fields, key, om.reg_tel[key], before_ℓ, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
         else
-            before_ℓ = fit_regularization_helper!([:reg_star], key, hold_star[key], before_ℓ, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
-            before_ℓ = fit_regularization_helper!([:reg_tel], key, hold_tel[key], before_ℓ, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
+            if (!(key in _key_list_bases)) || is_time_variable(om.star)
+                before_ℓ = fit_regularization_helper!([:reg_star], key, hold_star[key], before_ℓ, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
+            end
+            if (!(key in _key_list_bases)) || is_time_variable(om.tel)
+                before_ℓ = fit_regularization_helper!([:reg_tel], key, hold_tel[key], before_ℓ, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
+            end
         end
     end
 end
