@@ -515,12 +515,13 @@ train_rvs_optim!(ow::OptimWorkspace, optim_cb::Function, kwargs...) =
 fine_train_OrderModel!(mws::ModelWorkspace; iter=3*_iter_def, kwargs...) =
 	train_OrderModel!(mws; iter=iter, kwargs...)
 
-function finalize_scores_setup(mws::ModelWorkspace; kwargs...)
+function finalize_scores_setup(mws::ModelWorkspace; print_stuff::Bool=_print_stuff_def, kwargs...)
 	if is_time_variable(mws.om.tel) || is_time_variable(mws.om.star)
 		mws_s = OptimWorkspace(mws.om, mws.d; only_s=true)
 		score_trainer() = train_OrderModel!(mws_s; kwargs...)
 		return score_trainer
 	end
+	optim_cb=optim_cb_f(; print_stuff=print_stuff)
 	loss_rv(rv_s) = _loss(mws.o, mws.om, mws.d; rv=[mws.om.rv.lm.M, rv_s])
 	rv_ws = OptimSubWorkspace(mws.om.rv.lm.s, loss_rv; use_cg=true)
 	score_trainer_template() = train_rvs_optim!(rv_ws, mws.om.rv, mws.om.star, optim_cb, kwargs...)
