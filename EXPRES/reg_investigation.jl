@@ -100,7 +100,7 @@ for reg_sym in reg_syms
     println("done with " * string(reg_sym) * " star")
 end
 
-plt = _my_plot(; title="EXPRES HD " * star * " Order " * string(desired_order), legend=:topleft, xaxis=:log, yaxis=:log, ylabel="χ² of training set", xlabel="regularization value")
+plt = _plot(; title="EXPRES HD " * star * " Order " * string(desired_order), legend=:topleft, xaxis=:log, yaxis=:log, ylabel="χ² of training set", xlabel="regularization value")
 for (i, s) in enumerate(["tel", "star"])
     for (j, reg_s) in enumerate(string.(reg_syms))
         c = plt_colors[c_ind_f(length(reg_syms)*(i-1)+j)]

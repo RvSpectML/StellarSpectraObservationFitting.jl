@@ -257,7 +257,7 @@ function plot_methods(n; n_zoom=30)
     anal_p_s2 = Δℓ_precalc(Δℓ_coe_ss[1:n, 1:n], y_test, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
     auto = only(∇(f)(y_test))
     ∇_vec = [numer, auto, anal, anal_p, anal_p_s, anal_p_s2]
-    plt = _my_plot(; layout=grid(2, 1))
+    plt = _plot(; layout=grid(2, 1))
     for i in 1:length(method_strs)
         plot!(plt[1], ∇_vec[i], label=method_strs[i], title="N=$n", markershape=:circle)
         plot!(plt[2], ∇_vec[i][1:n_zoom], label=method_strs[i], title="Zoomed", markershape=:circle)
@@ -287,7 +287,7 @@ t_auto = [983.4e-6, 3.146e-3, 10.8e-3, 32.7e-3, 110e-3, 333.24e-3, 1.768, 2.853]
 plot_f!(plt, ts, label) =
     plot!(plt, ns[1:length(ts)], ts, xaxis=:log, yaxis=:log, label="~n^$(round(log(ts[end] / ts[3]) / log(ns[end]/ns[3]), digits=2)) " * label)
 t_vec = [t_numer, t_auto, t_anal, t_anal_p, t_anal_p_s]
-plt = _my_plot(;xlabel="N", ylabel="t (s)", title="Time to Δℓ", legend=:topleft)
+plt = _plot(;xlabel="N", ylabel="t (s)", title="Time to Δℓ", legend=:topleft)
 for i in 1:length(method_strs)
     plot_f!(plt, t_vec[i], method_strs[i])
 end

@@ -28,32 +28,32 @@ include("data_locs.jl")  # defines neid_data_path and neid_save_path
 ## RV reduction
 @load neid_save_path*date*"/$(prep_str)rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 # # plotting order means which don't matter because the are constant shifts for the reduced rv
-# my_scatter(orders, mean(rvs; dims=2); series_annotations=annot, legend=:topleft)
+# _scatter(orders, mean(rvs; dims=2); series_annotations=annot, legend=:topleft)
 rvs .-= median(rvs; dims=2)
 med_rvs_σ = vec(median(rvs_σ; dims=2))
 rvs_std = vec(std(rvs; dims=2))
 σ_floor = 50
 
 annot = text.(orders[rvs_std .< σ_floor], :center, :black, 3)
-plt = my_scatter(orders[rvs_std .< σ_floor], rvs_std[rvs_std .< σ_floor]; legend=:topleft, label="", title="$date RV std", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor])
+plt = _scatter(orders[rvs_std .< σ_floor], rvs_std[rvs_std .< σ_floor]; legend=:topleft, label="", title="$date RV std", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor])
 annot = text.(orders[rvs_std .> σ_floor], :center, :black, 3)
-my_scatter!(plt, orders[rvs_std .> σ_floor], ones(sum(rvs_std .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=plt_colors[1])
+_scatter!(plt, orders[rvs_std .> σ_floor], ones(sum(rvs_std .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=plt_colors[1])
 png(plt, "neid_" * prep_str * date_ * "_order_rv_std")
 
 annot = text.(orders[med_rvs_σ .< σ_floor], :center, :black, 3)
-plt = my_scatter(orders[med_rvs_σ .< σ_floor], med_rvs_σ[med_rvs_σ .< σ_floor]; legend=:topleft, label="", title="$date Median σ", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor])
+plt = _scatter(orders[med_rvs_σ .< σ_floor], med_rvs_σ[med_rvs_σ .< σ_floor]; legend=:topleft, label="", title="$date Median σ", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor])
 annot = text.(orders[med_rvs_σ .> σ_floor], :center, :black, 3)
-my_scatter!(plt, orders[med_rvs_σ .> σ_floor], ones(sum(med_rvs_σ .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=plt_colors[1])
+_scatter!(plt, orders[med_rvs_σ .> σ_floor], ones(sum(med_rvs_σ .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=plt_colors[1])
 png(plt, "neid_" * prep_str * date_ * "_order_rv_σ")
 
 annot = text.(orders, :center, :black, 3)
-plt = my_scatter(orders, std(rvs; dims=2) ./ med_rvs_σ; legend=:topleft, label="", title="$date (RV std) / (Median σ)", xlabel="Order", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot)
+plt = _scatter(orders, std(rvs; dims=2) ./ med_rvs_σ; legend=:topleft, label="", title="$date (RV std) / (Median σ)", xlabel="Order", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot)
 png(plt, "neid_" * prep_str * date_ * "_order_rv_ratio")
 
 χ² = vec(sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2))
 annot = text.(orders[sortperm(χ²)], :center, :black, 4)
 
-plt = my_scatter(1:length(χ²)-1, sort(χ²)[1:end-1]; label="χ²", series_annotations=annot, legend=:topleft, title=prep_str * date * "_χ²") #, yaxis=:log)
+plt = _scatter(1:length(χ²)-1, sort(χ²)[1:end-1]; label="χ²", series_annotations=annot, legend=:topleft, title=prep_str * date * "_χ²") #, yaxis=:log)
 png(plt, "neid_" * prep_str * date_ * "_χ²")
 
 χ²_orders = sortperm(χ²)[1:end-20]
@@ -81,7 +81,7 @@ png(plt, "neid_" * prep_str * date_ * "_model_rvs_mask.png")
 reg_keys = [:GP_μ, :L1_μ, :L1_μ₊_factor, :GP_M, :L1_M]
 mask = [reg_tels[i, 1]!=0 for i in 1:length(orders)]
 
-plt = _my_plot(;xlabel="Order", ylabel="Regularization", title="Regularizations per order ($date)", yaxis=:log)
+plt = _plot(;xlabel="Order", ylabel="Regularization", title="Regularizations per order ($date)", yaxis=:log)
 for i in eachindex(reg_keys)
     plot!(plt, orders[mask], reg_tels[mask, i], label="reg_$(reg_keys[i])", markershape=:circle, markerstrokewidth=0)
 end
@@ -95,7 +95,7 @@ end
 display(plt)
 png(plt, "neid_" * prep_str * date_ * "_reg_tel")
 
-plt = _my_plot(;xlabel="Order", ylabel="Regularization", title="Regularizations per order ($date)", yaxis=:log)
+plt = _plot(;xlabel="Order", ylabel="Regularization", title="Regularizations per order ($date)", yaxis=:log)
 # for i in eachindex(reg_keys)
 #     plot!(plt, orders, reg_tels[:, i], label="reg_$(reg_keys[i])", markershape=:circle, markerstrokewidth=0)
 # end

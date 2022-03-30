@@ -115,8 +115,8 @@ function fit_continuum_gif(x::AbstractVector, y::AbstractVector, σ²::AbstractV
         w = StellarSpectraObservationFitting.general_lst_sq(view(A, m, :), view(y, m), view(σ², m))
         μ[:] = A * w
 		plt = plot_spectrum(; ylabel = "Blaze Normalized Flux")
-		my_scatter!(plt, ex[m], y[m]; label="")
-		my_scatter!(plt, ex[.!m], y[.!m]; label="")
+		_scatter!(plt, ex[m], y[m]; label="")
+		_scatter!(plt, ex[.!m], y[.!m]; label="")
 		plot!(plt, ex, μ; label="")
         resid = y - μ
         # sigma = median(abs.(resid))
@@ -134,14 +134,14 @@ i=10
 fit_continuum_gif(data.log_λ_obs[:, i], data.flux[:, i], data.var[:, i]; order=6)
 
 ## Wavelength calibration plot
-plt = _my_plot(;xlabel="MJD", ylabel="Observer Frame Wavelength (Å)", title="Wavelength Calibration", thickness_scaling=3)
+plt = _plot(;xlabel="MJD", ylabel="Observer Frame Wavelength (Å)", title="Wavelength Calibration", thickness_scaling=3)
 for i in 1:5
     scatter!(plt, times_nu, exp.(log_λ_obs[i, :]); label="Pixel $(mask_inds[i])", markerstrokewidth=0)
 end
 display(plt)
 png("obs.png")
 
-plt = _my_plot(;xlabel="MJD", ylabel="Barycentric Frame Wavelength (Å)", title="Wavelength Calibration", thickness_scaling=3, markerstrokestyle=:dash)
+plt = _plot(;xlabel="MJD", ylabel="Barycentric Frame Wavelength (Å)", title="Wavelength Calibration", thickness_scaling=3, markerstrokestyle=:dash)
 for i in 1:5
     scatter!(plt, times_nu, exp.(log_λ_star[i, :]); label="Pixel $(mask_inds[i])", markerstrokewidth=0)
 end

@@ -41,13 +41,13 @@ annot=text.(x, :top, :white, 5)
 #     if !robust[i]; robust_str[i] *= "!" end
 # end
 # annot=text.(robust_str, :top, :white, 9)
-plt = _my_plot(; ylabel="# of basis vectors", xlabel="Order", title="Best Models for $star (Based on AIC)", xticks=false)
-my_scatter!(plt, x, n_comps[:, 1]; alpha=α, label="# of telluric components", legend=:top, series_annotations=annot)
-my_scatter!(plt, x, n_comps[:, 2]; alpha=α, label="# of stellar components", series_annotations=annot)
+plt = _plot(; ylabel="# of basis vectors", xlabel="Order", title="Best Models for $star (Based on AIC)", xticks=false)
+_scatter!(plt, x, n_comps[:, 1]; alpha=α, label="# of telluric components", legend=:top, series_annotations=annot)
+_scatter!(plt, x, n_comps[:, 2]; alpha=α, label="# of stellar components", series_annotations=annot)
 plot!(plt, x, n_comps[:, 1]; label = "", alpha=α, color=plt_colors[1], ls=:dot)
 plot!(plt, x, n_comps[:, 2]; label = "", alpha=α, color=plt_colors[2], ls=:dot)
-my_scatter!(plt, x[n_robust], n_comps_bic[n_robust, 1]; alpha=α/2, color=plt_colors[11], label="# of telluric components (BIC)")
-my_scatter!(plt, x[n_robust], n_comps_bic[n_robust, 2]; alpha=α/2, color=plt_colors[12], label="# of stellar components (BIC)")
+_scatter!(plt, x[n_robust], n_comps_bic[n_robust, 1]; alpha=α/2, color=plt_colors[11], label="# of telluric components (BIC)")
+_scatter!(plt, x[n_robust], n_comps_bic[n_robust, 2]; alpha=α/2, color=plt_colors[12], label="# of stellar components (BIC)")
 plot!(plt, x, n_comps_bic[:, 1]; label = "", alpha=α/2, color=plt_colors[11], ls=:dot)
 plot!(plt, x, n_comps_bic[:, 2]; label = "", alpha=α/2, color=plt_colors[12], ls=:dot)
 
@@ -59,7 +59,7 @@ png(plt, "expres_$(prep_str)md_$star.png")
 # good_orders_mask = [i in orders for i in 12:83] .& good_orders
 # good_orders_2 = (12:83)[good_orders_mask]
 # bad_orders_2 = (12:83)[[i in orders for i in 12:83] .& .!(good_orders)]
-# plt = my_scatter(12:83,order_weights; label="", title="$star Order Weights", xlabel="Orders", c=[i ? :green : :red for i in good_orders])
+# plt = _scatter(12:83,order_weights; label="", title="$star Order Weights", xlabel="Orders", c=[i ? :green : :red for i in good_orders])
 # png(plt, "order_weights")
 #
 # using Plots.PlotMeasures
@@ -81,34 +81,34 @@ png(plt, "expres_$(prep_str)md_$star.png")
 # lc_rvs = rvs .- median(rvs; dims=4); lc_rvs_σ = copy(rvs_σ)
 @load "expres_$(prep_str)$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 # # plotting order means which don't matter because the are constant shifts for the reduced rv
-# my_scatter(orders, mean(rvs; dims=2); series_annotations=annot, legend=:topleft)
+# _scatter(orders, mean(rvs; dims=2); series_annotations=annot, legend=:topleft)
 rvs .-= median(rvs; dims=2)
 med_rvs_σ = vec(median(rvs_σ; dims=2))
 rvs_std = vec(std(rvs; dims=2))
 σ_floor = 50
 
 # annot = text.(orders[rvs_std .< σ_floor], :center, :black, 3)
-# plt = my_scatter(orders[rvs_std .< σ_floor], rvs_std[rvs_std .< σ_floor]; legend=:topleft, label="", title="$star RV std", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor])
+# plt = _scatter(orders[rvs_std .< σ_floor], rvs_std[rvs_std .< σ_floor]; legend=:topleft, label="", title="$star RV std", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor])
 # annot = text.(orders[rvs_std .> σ_floor], :center, :black, 3)
-# my_scatter!(plt, orders[rvs_std .> σ_floor], ones(sum(rvs_std .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=plt_colors[1])
+# _scatter!(plt, orders[rvs_std .> σ_floor], ones(sum(rvs_std .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=plt_colors[1])
 # png(plt, "expres_" * prep_str * star * "_order_rv_std")
 #
 # annot = text.(orders[med_rvs_σ .< σ_floor], :center, :black, 3)
-# plt = my_scatter(orders[med_rvs_σ .< σ_floor], med_rvs_σ[med_rvs_σ .< σ_floor]; legend=:topleft, label="", title="$star Median σ", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor])
+# plt = _scatter(orders[med_rvs_σ .< σ_floor], med_rvs_σ[med_rvs_σ .< σ_floor]; legend=:topleft, label="", title="$star Median σ", xlabel="Order", ylabel="m/s", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor])
 # annot = text.(orders[med_rvs_σ .> σ_floor], :center, :black, 3)
-# my_scatter!(plt, orders[med_rvs_σ .> σ_floor], ones(sum(med_rvs_σ .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=plt_colors[1])
+# _scatter!(plt, orders[med_rvs_σ .> σ_floor], ones(sum(med_rvs_σ .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=plt_colors[1])
 # png(plt, "expres_" * prep_str * star * "_order_rv_σ")
 #
 # annot = text.(orders, :center, :black, 3)
-# plt = my_scatter(orders, std(rvs; dims=2) ./ med_rvs_σ; legend=:topleft, label="", title="$star (RV std) / (Median σ)", xlabel="Order", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot)
+# plt = _scatter(orders, std(rvs; dims=2) ./ med_rvs_σ; legend=:topleft, label="", title="$star (RV std) / (Median σ)", xlabel="Order", size=(_plt_size[1]*0.5,_plt_size[2]*0.75), series_annotations=annot)
 # png(plt, "expres_" * prep_str * star * "_order_rv_ratio")
 χ² = vec(sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2))
 non_missing_inds = (sum(iszero.(χ²))+1):length(χ²)  # take out missing χ²_orders
 no_cut_χ²_order_inds = sortperm(χ²)[non_missing_inds]
 annot = text.(orders[no_cut_χ²_order_inds], :center, :black, 4)
 
-# plt = my_scatter(non_missing_inds, χ²[no_cut_χ²_order_inds]; ylabel="χ²", label="", series_annotations=annot, legend=:topleft, title=prep_str * star * "_χ²") #, yaxis=:log)
-plt = my_scatter(non_missing_inds, χ²[no_cut_χ²_order_inds]; ylabel="χ²", label="", series_annotations=annot, legend=:topleft, title=prep_str * star * "_χ²", yaxis=:log)
+# plt = _scatter(non_missing_inds, χ²[no_cut_χ²_order_inds]; ylabel="χ²", label="", series_annotations=annot, legend=:topleft, title=prep_str * star * "_χ²") #, yaxis=:log)
+plt = _scatter(non_missing_inds, χ²[no_cut_χ²_order_inds]; ylabel="χ²", label="", series_annotations=annot, legend=:topleft, title=prep_str * star * "_χ²", yaxis=:log)
 png(plt, "expres_" * prep_str * star * "_χ²")
 
 χ²_order_inds = no_cut_χ²_order_inds[1:end-5]
@@ -138,10 +138,10 @@ png(plt, "expres_" * prep_str * star * "_model_rvs.png")
 rvs_chrom = rvs[inds, :] .- rvs_red'
 rvs_σ_chrom = rvs_σ[inds, :]
 # dif as a function of order
-my_scatter(orders_to_use, rvs_chrom, label="", xlabel="Order", ylabel="m/s", yerror=rvs_σ_chrom)
+_scatter(orders_to_use, rvs_chrom, label="", xlabel="Order", ylabel="m/s", yerror=rvs_σ_chrom)
 
 # dif as a function of time, order colored
-# plt = _my_plot(;xlabel="Observations", ylabel="m/s")
+# plt = _plot(;xlabel="Observations", ylabel="m/s")
 # cs = cgrad(:redsblues)
 # for i in 1:size(rvs_chrom, 1)
 #     scatter!(plt, 1:length(times_nu), rvs_chrom[i, :], label="", c=get(cs, (i-1)/(length(inds)-1)))
@@ -149,7 +149,7 @@ my_scatter(orders_to_use, rvs_chrom, label="", xlabel="Order", ylabel="m/s", yer
 # plt
 
 dm = SSOF.vander(orders_to_use, 1)
-plt = _my_plot(;xlabel="Order", ylabel="m/s", layout = grid(2, 1, heights=[0.7, 0.3]), size=(1920, 1920), title="HD$star Chromatic RVs")
+plt = _plot(;xlabel="Order", ylabel="m/s", layout = grid(2, 1, heights=[0.7, 0.3]), size=(1920, 1920), title="HD$star Chromatic RVs")
 lin_terms = zeros(length(times_nu))
 for t in 1:size(rvs_chrom, 2)
     w = SSOF.general_lst_sq(dm, rvs_chrom[:, t], rvs_σ_chrom[:, t])
@@ -213,7 +213,7 @@ use_mad ? png(plt, "expres_" * prep_str * star * "_lc_mad") : png(plt, "expres_"
 reg_keys = SSOF._key_list[1:end-1]
 mask = [reg_tels[i, 1]!=0 for i in 1:length(orders)]
 
-plt = _my_plot(;xlabel="Order", ylabel="Regularization", title="Regularizations per order (HD$star)", yaxis=:log)
+plt = _plot(;xlabel="Order", ylabel="Regularization", title="Regularizations per order (HD$star)", yaxis=:log)
 for i in eachindex(reg_keys)
     plot!(plt, orders[mask], reg_tels[mask, i], label="reg_$(reg_keys[i])", markershape=:circle, markerstrokewidth=0)
 end
@@ -227,7 +227,7 @@ end
 display(plt)
 png(plt, "expres_" * prep_str * star * "_reg_tel")
 
-plt = _my_plot(;xlabel="Order", ylabel="Regularization", title="Regularizations per order (HD$star)", yaxis=:log)
+plt = _plot(;xlabel="Order", ylabel="Regularization", title="Regularizations per order (HD$star)", yaxis=:log)
 # for i in eachindex(reg_keys)
 #     plot!(plt, orders, reg_tels[:, i], label="reg_$(reg_keys[i])", markershape=:circle, markerstrokewidth=0)
 # end

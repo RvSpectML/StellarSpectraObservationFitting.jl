@@ -85,16 +85,16 @@ function lsf_σ_safe(wn::AbstractVector, wn_m_order_mean::AbstractVector)
     end
 end
 
-# plt = my_scatter(wns, σ; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
+# plt = _scatter(wns, σ; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
 # png(plt, "expres_lsf")
 #
 # inds1 = eo.order .== 38
 # inds2 = eo.order .== 39
-# plt = my_scatter(wns[inds1], σ[inds1]; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
+# plt = _scatter(wns[inds1], σ[inds1]; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
 # scatter!(wns[inds2], σ[inds2]; label="")
 # png(plt, "expres_lsf_zoom")
 #
-# plt = my_scatter(wns, σ; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
+# plt = _scatter(wns, σ; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
 # for order in orders
 #     inds_temp = eo.order .== order
 #     plot!(wns[inds_temp], model[inds_temp]; label="", lw=4)
@@ -102,7 +102,7 @@ end
 # plt
 # png(plt, "expres_lsf_model")
 #
-# plt = my_scatter(wns[inds1], σ[inds1]; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
+# plt = _scatter(wns[inds1], σ[inds1]; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
 # scatter!(wns[inds2], σ[inds2]; label="")
 # plot!(wns[inds1], model[inds1]; label="model", lw=6, c=plt_colors[6])
 # plot!(wns[inds2], model[inds2]; label="model", lw=6)
@@ -110,7 +110,7 @@ end
 #
 # resids = σ ./ model
 # std(resids)
-# plt = my_scatter(wns, resids; label="data / model", xlabel=xlab, ylabel="LSF σ ($unit_str)")
+# plt = _scatter(wns, resids; label="data / model", xlabel=xlab, ylabel="LSF σ ($unit_str)")
 # png(plt, "expres_lsf_resids")
 # plt = scatter(wns[inds1], resids[inds1]; label="data / model", xlabel=xlab, ylabel="LSF σ ($unit_str)")
 # scatter!(wns[inds2], resids[inds2]; label="data / model")
