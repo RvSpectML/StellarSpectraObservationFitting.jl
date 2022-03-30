@@ -532,7 +532,7 @@ function finalize_scores!(score_trainer::Function, mws::ModelWorkspace)
 	Output!(mws)
 end
 function finalize_scores!(mws::ModelWorkspace; kwargs...)
-	score_trainer = finalize_scores_setup(mws)
+	score_trainer = finalize_scores_setup(mws, kwargs...)
 	finalize_scores!(score_trainer, mws)
 end
 
