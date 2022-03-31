@@ -10,10 +10,6 @@ _thickness_scaling = 2
 _theme = :juno
 _plot(; dpi = _plt_dpi, size = _plt_size, thickness_scaling=_thickness_scaling, kwargs...) =
     plot(; dpi=dpi, size=size, thickness_scaling=thickness_scaling, kwargs...)
-function my_plot(x, y; kwargs...)
-    plt = _plot(; kwargs...)
-    plot!(plt, x, y; kwargs...)
-end
 plot_spectrum(; xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const", kwargs...) =
     _plot(; xlabel=xlabel, ylabel=ylabel, kwargs...)
 plot_rv(; xlabel = "Time (d)", ylabel = "RV (m/s)", kwargs...) =
@@ -24,6 +20,7 @@ theme(_theme)
 function _scatter(x::AbstractVecOrMat, y::AbstractVecOrMat; kwargs...)
     plt = _plot(; kwargs...)
     scatter!(plt, x, y; kwargs...)
+	return plt
 end
 _scatter!(plt::Union{Plots.AbstractPlot,Plots.AbstractLayout}, x::AbstractVecOrMat, y::AbstractVecOrMat; markerstrokewidth::Real=0, kwargs...) = scatter!(plt, x, y; markerstrokewidth=markerstrokewidth, kwargs...)
 _theme == :default ? plt_colors = palette(_theme).colors.colors : plt_colors = PlotThemes._themes[_theme].defaults[:palette].colors.colors
@@ -124,8 +121,10 @@ function plot_model(mws::SSOF.ModelWorkspace, airmasses::Vector; display_plt::Bo
     return plt
 end
 
-function status_plot(o::SSOF.Output, d::SSOF.Data; plot_epoch::Int=10, tracker::Int=0, display_plt::Bool=true, include_χ²::Bool=true, kwargs...)
-    obs_mask = .!(isinf.(d.var[:, plot_epoch]))
+function status_plot(mws::SSOF.ModelWorkspace; plot_epoch::Int=10, tracker::Int=0, display_plt::Bool=true, include_χ²::Bool=true, kwargs...)
+    o = mws.o
+	d = mws.d
+	obs_mask = .!(isinf.(d.var[:, plot_epoch]))
     obs_λ = exp.(d.log_λ_obs[:, plot_epoch])
     plot_star_λs = exp.(d.log_λ_star[:, plot_epoch])
 	include_χ² ?
@@ -153,8 +152,6 @@ function status_plot(o::SSOF.Output, d::SSOF.Data; plot_epoch::Int=10, tracker::
     if display_plt; display(plt) end
     return plt
 end
-status_plot(mws::SSOF.ModelWorkspace; kwargs...) =
-    status_plot(mws.o, mws.d; kwargs...)
 
 function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector; size=(_plt_size[1],_plt_size[2]*1.5), ylabel="ℓ")
     plt = _plot(; ylabel=ylabel, layout=grid(2, 1), size=size)
@@ -171,13 +168,10 @@ function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n
     return plt
 end
 
-function model_choice_plots(ℓ, aics, bics, test_n_comp_tel, test_n_comp_star, save_path::String)
-	plt = component_test_plot(ℓ, test_n_comp_tel, test_n_comp_star);
-	png(plt, save_path * "l_plot.png")
+function save_model_plots(mws, airmasses, save_path::String; display_plt::Bool=true)
+	plt = plot_model(mws, airmasses; display_plt=display_plt);
+	png(plt, save_path * "model.png")
 
-	plt = component_test_plot(aics, test_n_comp_tel, test_n_comp_star; ylabel="AIC");
-	png(plt, save_path * "aic_plot.png")
-
-	plt = component_test_plot(bics, test_n_comp_tel, test_n_comp_star; ylabel="BIC");
-	png(plt, save_path * "bic_plot.png")
+	plt = status_plot(mws; display_plt=display_plt);
+	png(plt, save_path * "status_plot.png")
 end
