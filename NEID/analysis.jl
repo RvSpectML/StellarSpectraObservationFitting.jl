@@ -11,7 +11,7 @@ using JLD2
 
 ## Setting up necessary variables
 
-stars = ["10700"]
+stars = ["10700", "2021/12/10", "2021/12/19", "2021/12/20", "2021/12/23"]
 star = stars[SSOF.parse_args(1, Int, 1)]
 interactive = length(ARGS) == 0
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
@@ -38,12 +38,12 @@ rvs, rv_errors = SSOFU.estimate_errors(mws; save_fn=save_path)
 @load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs
 
 # Compare RV differences to actual RVs from activity
-plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
 png(plt, save_path * "model_rvs.png")
 
 SSOFU.save_model_plots(mws, airmasses, base_path; display_plt=interactive)
 
 if ord_has_rvs[desired_order]
-    plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, neid_order_rv[:, desired_order], zeros(length(times_nu)); display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+    plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, neid_order_rv[:, desired_order], zeros(length(times_nu)); display_plt=interactive, markerstrokewidth=1, title="$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
     png(plt, save_path * "model_rvs_order.png")
 end
