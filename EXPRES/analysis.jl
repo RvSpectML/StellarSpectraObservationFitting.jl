@@ -41,7 +41,7 @@ eo_rv_σ = expres_output."CBC RV Err. [m/s]"
 eo_time = expres_output."Time [MJD]"
 
 # Compare RV differences to actual RVs from activity
-plt = SSOFU.plot_model_rvs(times_nu, rvs, vec(rv_errors), eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
 png(plt, save_path * "model_rvs.png")
 
 SSOFU.save_model_plots(mws, airmasses, base_path; display_plt=interactive)

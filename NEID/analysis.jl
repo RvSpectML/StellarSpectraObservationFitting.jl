@@ -1,12 +1,13 @@
 ## Importing packages
 using Pkg
-Pkg.activate("EXPRES")
+Pkg.activate("NEID")
 
 import StellarSpectraObservationFitting as SSOF
 SSOF_path = dirname(dirname(pathof(SSOF)))
 include(SSOF_path * "/SSOFUtliities/SSOFUtilities.jl")
 SSOFU = SSOFUtilities
 using Statistics
+using JLD2
 
 ## Setting up necessary variables
 
@@ -36,13 +37,13 @@ rvs, rv_errors = SSOFU.estimate_errors(mws; save_fn=save_path)
 ## Plots
 @load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs
 
-if ord_has_rvs[desired_order]
-    plt = SSOFU.plot_model_rvs(times_nu, rvs, vec(rv_errors), neid_time, neid_order_rv[:, desired_order], zeros(n_obs); display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
-    png(plt, save_path * "model_rvs_order.png")
-end
-
 # Compare RV differences to actual RVs from activity
-plt = SSOFU.plot_model_rvs(times_nu, rvs, vec(rv_errors), neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
 png(plt, save_path * "model_rvs.png")
 
 SSOFU.save_model_plots(mws, airmasses, base_path; display_plt=interactive)
+
+if ord_has_rvs[desired_order]
+    plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, neid_order_rv[:, desired_order], zeros(length(times_nu)); display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+    png(plt, save_path * "model_rvs_order.png")
+end
