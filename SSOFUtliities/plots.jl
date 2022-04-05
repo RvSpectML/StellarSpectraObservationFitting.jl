@@ -45,8 +45,7 @@ function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat
 end
 
 c_ind_f(i) = ((i + 3) % 19) + 1
-function plot_model(mws::SSOF.ModelWorkspace, airmasses::Vector; display_plt::Bool=true, kwargs...)
-    om = mws.om
+function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; display_plt::Bool=true, d::Union{SSOF.Data, Nothing}=nothing, o::Union{SSOF.Output, Nothing}=nothing, kwargs...)
 	plot_stellar = SSOF.is_time_variable(om.star)
 	plot_telluric = SSOF.is_time_variable(om.tel)
 	# plot the two templates if there is no time variation
@@ -61,9 +60,10 @@ function plot_model(mws::SSOF.ModelWorkspace, airmasses::Vector; display_plt::Bo
 	n_plots = plot_stellar + plot_telluric
 	plt = _plot(; layout=grid(2, n_plots), size=(n_plots * _plt_size[1],_plt_size[2]*1.5))
 	shift_M = 0.2
-	χ²_base = SSOF._loss(mws)
+	incl_χ² = !isnothing(d) && !isnothing(o)
+	if incl_χ²; χ²_base = SSOF._loss(o, om, d) end
 	if plot_telluric
-		inds = 1:size(mws.om.tel.lm.M, 2)
+		inds = 1:size(om.tel.lm.M, 2)
 
 		# basis plot
 		plot!(plt[1, 1], om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ", alpha=0.3, color=:white, title="Telluric Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
@@ -83,16 +83,20 @@ function plot_model(mws::SSOF.ModelWorkspace, airmasses::Vector; display_plt::Bo
 	        plot!(plt[1, 1], om.tel.λ, (view(om.tel.lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); label="Basis $i", color=plt_colors[c_ind])
 
 			# weights plot
-			om.tel.lm.s[i, :] .= 0
-			Δχ² = 1 - (χ²_base / SSOF._loss(mws; tel=vec(om.tel.lm)))
-			om.tel.lm.s[i, :] .= view(holder, i, :)
-			_scatter!(plt[2, 1], times_nu, (view(om.tel.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1) + half_shift_s); label="Weights $i (Δχ² = $(round(Δχ²; digits=3)))", color=plt_colors[c_ind], title="Telluric Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
+			if incl_χ²
+				om.tel.lm.s[i, :] .= 0
+				Δχ² = 1 - (χ²_base / SSOF._loss(o, om, d; tel=vec(om.tel.lm)))
+				om.tel.lm.s[i, :] .= view(holder, i, :)
+				_scatter!(plt[2, 1], times_nu, (view(om.tel.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1) + half_shift_s); label="Weights $i (Δχ² = $(round(Δχ²; digits=3)))", color=plt_colors[c_ind], title="Telluric Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
+			else
+				_scatter!(plt[2, 1], times_nu, (view(om.tel.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1) + half_shift_s); label="Weights $i", color=plt_colors[c_ind], title="Telluric Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
+			end
 			hline!(plt[2, 1], [-(shift_s * (i - 1) + half_shift_s)]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
 	    end
 	end
 	if plot_stellar
 		plot_telluric ? c_offset = inds[end] - 1 : c_offset = 1
-		inds = 1:size(mws.om.star.lm.M, 2)
+		inds = 1:size(om.star.lm.M, 2)
 
 		# basis plot
 		plot!(plt[1, n_plots], om.tel.λ, om.tel.lm.μ; label="μₜₑₗ", alpha=0.3, color=:white, title="Stellar Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
@@ -109,10 +113,14 @@ function plot_model(mws::SSOF.ModelWorkspace, airmasses::Vector; display_plt::Bo
 			plot!(plt[1, n_plots], om.star.λ, (view(om.star.lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); label="Basis $i", color=plt_colors[c_ind])
 
 			# weights plot
-			om.star.lm.s[i, :] .= 0
-			Δχ² = 1 - (χ²_base / SSOF._loss(mws; star=vec(om.star.lm)))
-			om.star.lm.s[i, :] .= view(holder, i, :)
-			_scatter!(plt[2, n_plots], times_nu, (view(om.star.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1) + half_shift_s); label="Weights $i (Δχ² = $(round(Δχ²; digits=3)))", color=plt_colors[c_ind], title="Stellar Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
+			if incl_χ²
+				om.star.lm.s[i, :] .= 0
+				Δχ² = 1 - (χ²_base / SSOF._loss(o, om, d; star=vec(om.star.lm)))
+				om.star.lm.s[i, :] .= view(holder, i, :)
+				_scatter!(plt[2, n_plots], times_nu, (view(om.star.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1) + half_shift_s); label="Weights $i (Δχ² = $(round(Δχ²; digits=3)))", color=plt_colors[c_ind], title="Stellar Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
+			else
+				_scatter!(plt[2, n_plots], times_nu, (view(om.star.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1) + half_shift_s); label="Weights $i", color=plt_colors[c_ind], title="Stellar Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
+			end
 			hline!(plt[2, n_plots], [-(shift_s * (i - 1) + half_shift_s)]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
 		end
 	end
@@ -120,6 +128,8 @@ function plot_model(mws::SSOF.ModelWorkspace, airmasses::Vector; display_plt::Bo
     if display_plt; display(plt) end
     return plt
 end
+plot_model(mws::SSOF.ModelWorkspace, airmasses::Vector, times_nu::Vector; kwargs...) =
+	plot_model(mws.om, airmasses, times_nu; d=mws.d, o=mws.o, kwargs...)
 
 function status_plot(mws::SSOF.ModelWorkspace; plot_epoch::Int=10, tracker::Int=0, display_plt::Bool=true, include_χ²::Bool=true, kwargs...)
     o = mws.o
@@ -168,8 +178,8 @@ function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n
     return plt
 end
 
-function save_model_plots(mws, airmasses, save_path::String; display_plt::Bool=true)
-	plt = plot_model(mws, airmasses; display_plt=display_plt);
+function save_model_plots(mws, airmasses, times_nu, save_path::String; display_plt::Bool=true)
+	plt = plot_model(mws, airmasses, times_nu; display_plt=display_plt);
 	png(plt, save_path * "model.png")
 
 	plt = status_plot(mws; display_plt=display_plt);

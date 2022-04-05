@@ -44,4 +44,4 @@ eo_time = expres_output."Time [MJD]"
 plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
 png(plt, save_path * "model_rvs.png")
 
-SSOFU.save_model_plots(mws, airmasses, base_path; display_plt=interactive)
+SSOFU.save_model_plots(mws, airmasses, times_nu, base_path; display_plt=interactive)

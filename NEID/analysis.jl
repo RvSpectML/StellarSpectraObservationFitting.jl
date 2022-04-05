@@ -41,7 +41,7 @@ rvs, rv_errors = SSOFU.estimate_errors(mws; save_fn=save_path)
 plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
 png(plt, save_path * "model_rvs.png")
 
-SSOFU.save_model_plots(mws, airmasses, base_path; display_plt=interactive)
+SSOFU.save_model_plots(mws, airmasses, times_nu, base_path; display_plt=interactive)
 
 if ord_has_rvs[desired_order]
     plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, neid_order_rv[:, desired_order], zeros(length(times_nu)); display_plt=interactive, markerstrokewidth=1, title="$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");

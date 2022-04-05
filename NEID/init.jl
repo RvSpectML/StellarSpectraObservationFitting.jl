@@ -12,7 +12,7 @@ include(SSOF_path * "/SSOFUtliities/SSOFUtilities.jl")
 SSOFU = SSOFUtilities
 
 stars = ["10700", "2021/12/10", "2021/12/19", "2021/12/20", "2021/12/23"]
-star_choice = SSOF.parse_args(1, Int, 2)
+star_choice = SSOF.parse_args(1, Int, 3)
 star = stars[star_choice]
 solar = star_choice > 1
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
