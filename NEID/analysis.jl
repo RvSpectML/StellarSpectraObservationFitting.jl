@@ -12,7 +12,9 @@ using JLD2
 ## Setting up necessary variables
 
 stars = ["10700", "2021/12/10", "2021/12/19", "2021/12/20", "2021/12/23"]
-star = stars[SSOF.parse_args(1, Int, 1)]
+star_choice = SSOF.parse_args(1, Int, 3)
+solar = star_choice > 1
+star = stars[star_choice]
 interactive = length(ARGS) == 0
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 desired_order = SSOF.parse_args(2, Int, 81)  # 81 has a bunch of tels, 60 has very few
@@ -26,7 +28,12 @@ base_path = neid_save_path * star * "/$(desired_order)/"
 data_path = base_path * "data.jld2"
 save_path = base_path * "results.jld2"
 
-model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc)
+if solar
+    @load neid_save_path * "10700/$(desired_order)/results.jld2" model
+    model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, seed=model)
+else
+    model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc)
+end
 mws = SSOFU.create_workspace(model, data, opt)
 SSOFU.improve_regularization!(mws; save_fn=save_path)
 SSOFU.improve_model!(mws; show_plot=interactive, save_fn=save_path)

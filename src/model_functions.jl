@@ -446,7 +446,10 @@ LSF_gp = build_gp(LSF_gp_params)
 # flat_SOAP_gp_params, unflatten = value_flatten(SOAP_gp_params)
 # # unflatten(flat_SOAP_gp_params) == ParameterHandling.value(SOAP_gp_params)  # true
 # SOAP_gp = build_gp(ParameterHandling.value(SOAP_gp_params))
-
+function _spectra_interp_gp!(fluxes::Vector, log_λ, flux_obs::Vector, var_obs, log_λ_obs; gp_mean::Number=1., gp_base=SOAP_gp)
+	gp = get_marginal_GP(gp_base(log_λ_obs, var_obs), flux_obs .- gp_mean, log_λ)
+	fluxes[:] .= mean.(gp) .+ gp_mean
+end
 function _spectra_interp_gp!(fluxes, vars, log_λ, flux_obs, var_obs, log_λ_obs; gp_mean::Number=1.)
 	for i in 1:size(flux_obs, 2)
 		gp = get_marginal_GP(SOAP_gp(view(log_λ_obs, :, i), view(var_obs, :, i)), view(flux_obs, :, i) .- gp_mean, log_λ)

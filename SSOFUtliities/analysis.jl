@@ -15,10 +15,12 @@ function create_model(
 	oversamp::Bool=true,
 	use_reg::Bool=true,
 	save_fn::String="",
-	recalc::Bool=false
+	recalc::Bool=false,
+	seed::Union{SSOF.OrderModel, Nothing}=nothing
 	)
 
 	save = save_fn!=""
+	seeded = !isnothing(seed)
 
 	# save_path = save_path_base * star * "/$(desired_order)/"
 	@load data_fn n_obs data times_nu airmasses
@@ -32,11 +34,15 @@ function create_model(
 	else
 	    model = SSOF.OrderModel(data, instrument, desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, oversamp=oversamp)
 	    SSOF.initialize!(model, data)
-	    if !use_reg
-	        SSOF.rm_regularization(model)
-	        model.metadata[:todo][:reg_improved] = true
-	    end
-	    if save; @save save_fn model end
+		if seeded
+			SSOF._spectra_interp_gp!(model.tel.lm.μ, model.tel.log_λ, seed.tel.lm.μ, 1e-4, seed.tel.log_λ; gp_base=SSOF.LSF_gp)
+			SSOF._spectra_interp_gp!(model.star.lm.μ, model.star.log_λ, seed.star.lm.μ, 1e-6, seed.star.log_λ; gp_base=SSOF.SOAP_gp)
+		end
+		if !use_reg
+			SSOF.rm_regularization(model)
+			model.metadata[:todo][:reg_improved] = true
+		end
+		if save; @save save_fn model end
 	end
 	return model, data, times_nu, airmasses
 end
@@ -125,6 +131,13 @@ function downsize_model(mws, times; save_fn::String="", decision_fn::String="", 
 		end
 		return mws_smol, ℓ, aics, bics, comp_stds, comp_intra_stds
 	end
+end
+function _downsize_model(mws, n_comps_tel::Int, n_comps_star::Int, print_stuff::Bool=true)
+	model = SSOF.downsize(mws.om, n_comps_tel, n_comps_star)
+	mws_smol = typeof(mws)(model, mws.d)
+	SSOF.train_OrderModel!(mws_smol; print_stuff=print_stuff)  # 120s
+	SSOF.finalize_scores!(mws_smol)
+	return mws_smol
 end
 
 function estimate_errors(mws; save_fn="")
