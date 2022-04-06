@@ -62,38 +62,44 @@ function fit_var(optim, data_base, interps; n::Int=30)
     return vec(std(results_holder; dims=1)) .^ 2
 end
 
-for desired_order in [60, 81]
+# for desired_order in 4:122
+for desired_order in 60:85
     base_path = neid_save_path * star * "/$(desired_order)/"
     data_path = base_path * "data.jld2"
     save_path = base_path * "summary.jld2"
 
-    # load data
-    @load data_path n_obs data times_nu airmasses
+    if isfile(data_path)
 
-    # daily summary λs
-    log_λ, _ = SSOF.create_λ_template(data.log_λ_obs)
-    log_λ_star = log_λ .- mean(data.log_λ_obs .- data.log_λ_star)
+        # load data
+        @load data_path n_obs data times_nu airmasses
 
-    # get initial daily_flux guess
-    flux_model = ones(length(log_λ), n_obs)
-    vars_model = ones(length(log_λ), n_obs)
-    SSOF._spectra_interp_gp!(flux_model, vars_model, log_λ, data.flux, data.var, data.log_λ_obs)
-    # init = SSOF.make_template(flux_model; use_mean=true)
-    init = [mean(view(flux_model, i, :), AnalyticWeights(1 ./ view(vars_model, i, :))) for i in 1:size(flux_model, 1)]
+        # daily summary λs
+        log_λ, _ = SSOF.create_λ_template(data.log_λ_obs)
+        log_λ_star = log_λ .- mean(data.log_λ_obs .- data.log_λ_star)
 
-    # optimize to get daily_flux
-    # interps = SSOF.oversamp_interp_helper(data.log_λ_obs_bounds, log_λ)
-    interps = SSOF.undersamp_interp_helper(data.log_λ_obs, log_λ)
-    obj = optim_obj(interps, data, init)
-    result = Optim.optimize(obj, init, LBFGS())
-    daily_flux = result.minimizer
+        # get initial daily_flux guess
+        flux_model = ones(length(log_λ), n_obs)
+        vars_model = ones(length(log_λ), n_obs)
+        SSOF._spectra_interp_gp!(flux_model, vars_model, log_λ, data.flux, data.var, data.log_λ_obs)
+        # init = SSOF.make_template(flux_model; use_mean=true)
+        init = [mean(view(flux_model, i, :), AnalyticWeights(1 ./ view(vars_model, i, :))) for i in 1:size(flux_model, 1)]
 
-    # get estimates of variance
-    daily_var = fit_var(daily_flux, data, interps)
+        # optimize to get daily_flux
+        # interps = SSOF.oversamp_interp_helper(data.log_λ_obs_bounds, log_λ)
+        interps = SSOF.undersamp_interp_helper(data.log_λ_obs, log_λ)
+        obj = optim_obj(interps, data, init)
+        result = Optim.optimize(obj, init, LBFGS())
+        daily_flux = result.minimizer
 
-    # last quantities
-    airmass = mean(airmasses)
-    time_nu = mean(times_nu)
+        # get estimates of variance
+        daily_var = fit_var(daily_flux, data, interps)
 
-    @save save_path log_λ log_λ_star daily_flux daily_var time_nu airmass
+        # last quantities
+        airmass = mean(airmasses)
+        time_nu = mean(times_nu)
+
+        @save save_path log_λ log_λ_star daily_flux daily_var time_nu airmass
+    else
+        "order $desired_order not found"
+    end
 end
