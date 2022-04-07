@@ -29,10 +29,12 @@ for date in dates
         append!(airmasses, [airmass])
         append!(times_nu, [time_nu])
         append!(dates_used, [date])
+    else
+        println("$date not found")
     end
 end
-n_obs = length(d)
-data = SSOF.GenericData(d)
+n_obs = length(data)
+data = SSOF.GenericData(data)
 solar_save_path = neid_save_path * "sun/"
 mkdir(solar_save_path)
 @save neid_save_path * "sun/data.jld2" n_obs data times_nu airmasses dates_used
