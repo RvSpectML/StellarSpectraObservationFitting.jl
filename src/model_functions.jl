@@ -84,18 +84,18 @@ function GenericData(d::Vector{<:GenericDatum})
 	flux_obs = ones(len_obs, n_obs)
 	var_obs = Array{Float64}(undef, len_obs, n_obs)
 	log_λ_obs = Array{Float64}(undef, len_obs, n_obs)
-	log_λ_obs_bounds = Array{Float64}(undef, len_obs+1, n_obs)
+	# log_λ_obs_bounds = Array{Float64}(undef, len_obs+1, n_obs)
 	log_λ_star = Array{Float64}(undef, len_obs, n_obs)
-	log_λ_star_bounds = Array{Float64}(undef, len_obs+1, n_obs)
+	# log_λ_star_bounds = Array{Float64}(undef, len_obs+1, n_obs)
 	for i in 1:n_obs # 13s
 		flux_obs[:, i] .= d[i].flux
 		var_obs[:, i] .= d[i].var
 		log_λ_obs[:, i] .= d[i].log_λ_obs
-		log_λ_obs_bounds[:, i] .= d[i].log_λ_obs_bounds
+		# log_λ_obs_bounds[:, i] .= d[i].log_λ_obs_bounds
 		log_λ_star[:, i] .= d[i].log_λ_star
-		log_λ_star_bounds[:, i] .= d[i].log_λ_star_bounds
+		# log_λ_star_bounds[:, i] .= d[i].log_λ_star_bounds
 	end
-	return GenericData(flux_obs, var_obs, log_λ_obs, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds)
+	return GenericData(flux_obs, var_obs, log_λ_obs, log_λ_star)
 end
 
 function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=1.)
