@@ -60,6 +60,44 @@ Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.log_λ
 GenericData(d::LSFData) = GenericData(d.flux, d.var, d.log_λ_obs, d.log_λ_star)
 GenericData(d::GenericData) = d
 
+struct GenericDatum{T<:Number, AV<:AbstractVector{T}, V<:Vector{<:Number}} <: Data
+    flux::AV
+    var::AV
+    log_λ_obs::AV
+	log_λ_obs_bounds::V
+    log_λ_star::AV
+	log_λ_star_bounds::V
+	function GenericDatum(flux::AV, var::AV, log_λ_obs::AV, log_λ_star::AV) where {T<:Number, AV<:AbstractVector{T}}
+		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
+		log_λ_obs_bounds = bounds_generator(log_λ_obs)
+		log_λ_star_bounds = bounds_generator(log_λ_star)
+		return new{T, AV, typeof(log_λ_obs_bounds)}(flux, var, log_λ_obs, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds)
+	end
+end
+(d::GenericDatum)(inds::AbstractVecOrMat) =
+	GenericData(view(d.flux, inds), view(d.var, inds),
+	view(d.log_λ_obs, inds), view(d.log_λ_star, inds))
+Base.copy(d::GenericDatum) = GenericDatum(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star))
+function GenericData(d::Vector{<:GenericDatum})
+	len_obs = length(d[1].flux)
+	n_obs = length(d)
+	flux_obs = ones(len_obs, n_obs)
+	var_obs = Array{Float64}(undef, len_obs, n_obs)
+	log_λ_obs = Array{Float64}(undef, len_obs, n_obs)
+	log_λ_obs_bounds = Array{Float64}(undef, len_obs+1, n_obs)
+	log_λ_star = Array{Float64}(undef, len_obs, n_obs)
+	log_λ_star_bounds = Array{Float64}(undef, len_obs+1, n_obs)
+	for i in 1:n_obs # 13s
+		flux_obs[:, i] .= d[i].flux
+		var_obs[:, i] .= d[i].var
+		log_λ_obs[:, i] .= d[i].log_λ_obs
+		log_λ_obs_bounds[:, i] .= d[i].log_λ_obs_bounds
+		log_λ_star[:, i] .= d[i].log_λ_star
+		log_λ_star_bounds[:, i] .= d[i].log_λ_star_bounds
+	end
+	return SSOF.GenericData(flux_obs, var_obs, log_λ_obs, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds)
+end
+
 function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=1.)
     log_min_wav, log_max_wav = extrema(log_λ_obs)
     Δ_logλ_og = minimum(view(log_λ_obs, size(log_λ_obs, 1), :) .- view(log_λ_obs, 1, :)) / size(log_λ_obs, 1)
