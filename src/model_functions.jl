@@ -95,7 +95,7 @@ function GenericData(d::Vector{<:GenericDatum})
 		log_λ_star[:, i] .= d[i].log_λ_star
 		log_λ_star_bounds[:, i] .= d[i].log_λ_star_bounds
 	end
-	return SSOF.GenericData(flux_obs, var_obs, log_λ_obs, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds)
+	return GenericData(flux_obs, var_obs, log_λ_obs, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds)
 end
 
 function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=1.)
