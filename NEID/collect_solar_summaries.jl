@@ -25,7 +25,7 @@ for date in dates
     save_path = neid_save_path * date * "/$(desired_order)/summary.jld2"
     if isfile(save_path)
         @load save_path log_λ log_λ_star daily_flux daily_var time_nu airmass
-        append!(data, [SSOF.GenericDatum(daily_flux, daily_var, log_λ, log_λ_star)])
+        append!(data, [SSOF.GenericDatum(daily_flux, daily_var, collect(log_λ), collect(log_λ_star))])
         append!(airmasses, [airmass])
         append!(times_nu, [time_nu])
         append!(dates_used, [date])
