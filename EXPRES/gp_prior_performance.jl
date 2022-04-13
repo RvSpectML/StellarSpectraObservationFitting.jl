@@ -31,7 +31,7 @@ using Pkg
         @time model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=8, n_comp_star=8, upscale=model_upscale)
         @time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(model, data; use_gp=true)
         if !use_reg
-            SSOF.rm_regularization(model)
+            SSOF.rm_regularization!(model)
             model.metadata[:todo][:reg_improved] = true
         end
         @save save_path*"results.jld2" model rvs_naive rvs_notel

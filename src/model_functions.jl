@@ -363,13 +363,14 @@ Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv),
 (om::OrderModel)(inds::AbstractVecOrMat) =
 	OrderModel(om.tel(inds), om.star(inds), om.rv(inds), om.reg_tel,
 		om.reg_star, view(om.b2o, inds), view(om.t2o, inds), copy(om.metadata), length(inds))
-function rm_regularization(om::OrderModel)
-	for (key, value) in om.reg_tel
-		delete!(om.reg_tel, key)
+function rm_dict!(d::Dict)
+	for (key, value) in d
+		delete!(d, key)
 	end
-	for (key, value) in om.reg_star
-		delete!(om.reg_star, key)
-	end
+end
+function rm_regularization!(om::OrderModel)
+	rm_dict!(om.reg_tel)
+	rm_dict!(om.reg_star)
 end
 function zero_regularization(om::OrderModel; include_L1_factor::Bool=false)
 	for (key, value) in om.reg_tel
@@ -476,21 +477,23 @@ end
 
 SOAP_gp_params = (var_kernel = 0.2188511770097717, λ = 26063.07237159581)
 SOAP_gp = build_gp(SOAP_gp_params)
+SOAP_gp_var = 1e-6
 LSF_gp_params = (var_kernel = 0.20771264919723142, λ = 114294.15657857814)
 LSF_gp = build_gp(LSF_gp_params)
+LSF_gp_var = 1e-4
 
 # ParameterHandling version
 # SOAP_gp_params = (var_kernel = positive(3.3270754364467443), λ = positive(1 / 9.021560480866474e-5))
 # flat_SOAP_gp_params, unflatten = value_flatten(SOAP_gp_params)
 # # unflatten(flat_SOAP_gp_params) == ParameterHandling.value(SOAP_gp_params)  # true
 # SOAP_gp = build_gp(ParameterHandling.value(SOAP_gp_params))
-function _spectra_interp_gp!(fluxes::Vector, log_λ, flux_obs::Vector, var_obs, log_λ_obs; gp_mean::Number=1., gp_base=SOAP_gp)
+function _spectra_interp_gp!(fluxes::AbstractVector, log_λ, flux_obs::AbstractVector, var_obs, log_λ_obs; gp_mean::Number=1., gp_base=SOAP_gp)
 	gp = get_marginal_GP(gp_base(log_λ_obs, var_obs), flux_obs .- gp_mean, log_λ)
 	fluxes[:] .= mean.(gp) .+ gp_mean
 end
-function _spectra_interp_gp!(fluxes, vars, log_λ, flux_obs, var_obs, log_λ_obs; gp_mean::Number=1.)
+function _spectra_interp_gp!(fluxes, vars, log_λ, flux_obs, var_obs, log_λ_obs; gp_mean::Number=1., gp_base=SOAP_gp)
 	for i in 1:size(flux_obs, 2)
-		gp = get_marginal_GP(SOAP_gp(view(log_λ_obs, :, i), view(var_obs, :, i)), view(flux_obs, :, i) .- gp_mean, log_λ)
+		gp = get_marginal_GP(gp_base(view(log_λ_obs, :, i), view(var_obs, :, i) .+ SOAP_gp_var), view(flux_obs, :, i) .- gp_mean, log_λ)
 		fluxes[:, i] .= mean.(gp) .+ gp_mean
         vars[:, i] .= var.(gp)
 	end
@@ -498,8 +501,8 @@ end
 
 function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix, log_λ::AbstractVector, flux_obs::AbstractMatrix, var_obs::AbstractMatrix, log_λ_obs::AbstractMatrix, flux_other::AbstractMatrix, var_other::AbstractMatrix, log_λ_other::AbstractMatrix; gp_mean::Number=1.)
 	for i in 1:size(flux_obs, 2)
-		gpn = get_marginal_GP(SOAP_gp(view(log_λ_obs, :, i), view(var_obs, :, i)), view(flux_obs, :, i) .- gp_mean, log_λ)
-		gpd = get_marginal_GP(SOAP_gp(view(log_λ_other, :, i), view(var_other, :, i)), view(flux_other, :, i) .- gp_mean, log_λ)
+		gpn = get_marginal_GP(SOAP_gp(view(log_λ_obs, :, i), view(var_obs, :, i) .+ SOAP_gp_var), view(flux_obs, :, i) .- gp_mean, log_λ)
+		gpd = get_marginal_GP(SOAP_gp(view(log_λ_other, :, i), view(var_other, :, i) .+ SOAP_gp_var), view(flux_other, :, i) .- gp_mean, log_λ)
 		gpn_μ = mean.(gpn) .+ gp_mean
 		gpd_μ = mean.(gpd) .+ gp_mean
 		fluxes[:, i] .= gpn_μ ./ gpd_μ

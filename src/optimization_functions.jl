@@ -5,43 +5,36 @@ using Nabla
 import Base.println
 
 abstract type ModelWorkspace end
+abstract type AdamWorkspace<:ModelWorkspace end
 
 _loss_diagnostic(tel, star, rv, d::GenericData) =
 	((total_model(tel, star, rv) .- d.flux) .^ 2) ./ d.var
 _loss_diagnostic(tel, star, rv, d::LSFData) =
     (((d.lsf * total_model(tel, star, rv)) .- d.flux) .^ 2) ./ d.var
 function _loss_diagnostic(o::Output, om::OrderModel, d::Data;
-	tel=nothing, star=nothing, rv=nothing)
+	tel=nothing, star=nothing, rv_s=nothing)
     !isnothing(tel) ? tel_o = spectra_interp(_eval_lm_vec(om, tel), om.t2o) : tel_o = o.tel
     !isnothing(star) ? star_o = spectra_interp(_eval_lm_vec(om, star), om.b2o) : star_o = o.star
-    !isnothing(rv) ? rv_o = spectra_interp(_eval_lm_vec(om, rv), om.b2o) : rv_o = o.rv
+    !isnothing(rv_s) ? rv_o = spectra_interp(_eval_lm(om.rv.lm.M, rv_s), om.b2o) : rv_o = o.rv
     return _loss_diagnostic(tel_o, star_o, rv_o, d)
 end
 _loss_diagnostic(mws::ModelWorkspace; kwargs...) = _loss_diagnostic(mws.o, mws.om, mws.d; kwargs...)
 
 # χ² loss function
-_loss(tel, star, rv, d::GenericData) =
-    sum(((total_model(tel, star, rv) .- d.flux) .^ 2) ./ d.var)
-# χ² loss function broadened by an lsf at each time (about 2x slower)
-# _loss(tel::AbstractMatrix, star::AbstractMatrix, rv::AbstractMatrix, d::LSFData) =
-#     mapreduce(i -> sum((((d.lsf[i] * (view(tel, :, i) .* (view(star, :, i) .+ view(rv, :, i)))) .- view(d.flux, :, i)) .^ 2) ./ view(d.var, :, i)), +, 1:size(tel, 2))
-_loss(tel, star, rv, d::LSFData) =
-    sum((((d.lsf * total_model(tel, star, rv)) .- d.flux) .^ 2) ./ d.var)
+_loss(tel, star, rv, d::Data) = sum(_loss_diagnostic(tel, star, rv, d))
 function _loss(o::Output, om::OrderModel, d::Data;
-	tel=nothing, star=nothing, rv=nothing)
+	tel=nothing, star=nothing, rv_s=nothing)
     !isnothing(tel) ? tel_o = spectra_interp(_eval_lm_vec(om, tel), om.t2o) : tel_o = o.tel
     !isnothing(star) ? star_o = spectra_interp(_eval_lm_vec(om, star), om.b2o) : star_o = o.star
-    !isnothing(rv) ? rv_o = spectra_interp(_eval_lm_vec(om, rv), om.b2o) : rv_o = o.rv
+    !isnothing(rv_s) ? rv_o = spectra_interp(_eval_lm(om.rv.lm.M, rv_s), om.b2o) : rv_o = o.rv
     return _loss(tel_o, star_o, rv_o, d)
 end
 _loss(mws::ModelWorkspace; kwargs...) = _loss(mws.o, mws.om, mws.d; kwargs...)
-function _loss_recalc_rv_basis(om::OrderModel, d::Data, tel, star, rv_s)
+function _loss_recalc_rv_basis(o::Output, om::OrderModel, d::Data; kwargs...)
 	om.rv.lm.M .= calc_doppler_component_RVSKL_Flux(om.star.λ, om.star.lm.μ)
-    return _loss(spectra_interp(_eval_lm_vec(om, tel), om.t2o),
-	        spectra_interp(_eval_lm_vec(om, star), om.b2o),
-			spectra_interp(_eval_lm(om.rv.lm.M, rv_s), om.b2o), d)
+	return _loss(o, om, d; kwargs...)
 end
-_loss_recalc_rv_basis(mws::ModelWorkspace, tel, star, rv_s) = _loss_recalc_rv_basis(mws.om, mws.d, tel, star, rv_s)
+_loss_recalc_rv_basis(mws::ModelWorkspace; kwargs...) = _loss_recalc_rv_basis(mws.o, mws.om, mws.d; kwargs...)
 
 function loss_func(mws::ModelWorkspace; include_priors::Bool=false)
 	if include_priors
@@ -70,14 +63,14 @@ function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
 		return _loss(o, om, d; tel=tel, star=star)
     end
 
-    l_rv(rv_s) = _loss(o, om, d; rv=[om.rv.lm.M, rv_s])
+    l_rv(rv_s) = _loss(o, om, d; rv_s=rv_s)
 
     return l_telstar, l_telstar_s, l_rv
 end
 loss_funcs_telstar(mws::ModelWorkspace) = loss_funcs_telstar(mws.o, mws.om, mws.d)
 function loss_funcs_total(o::Output, om::OrderModel, d::Data)
     l_total(total) =
-		_loss_recalc_rv_basis(om, d, total[1], total[2], total[3]) +
+		_loss_recalc_rv_basis(o, om, d; tel=total[1], star=total[2], rv_s=total[3]) +
 		tel_prior(total[1], om) + star_prior(total[2], om)
 	is_tel_time_variable = is_time_variable(om.tel)
 	is_star_time_variable = is_time_variable(om.star)
@@ -93,13 +86,38 @@ function loss_funcs_total(o::Output, om::OrderModel, d::Data)
 			tel = nothing
 			star = nothing
 		end
-		rv = [om.rv.lm.M, total_s[1+is_star_time_variable+is_tel_time_variable]]
-		return _loss(o, om, d; tel=tel, star=star, rv=rv)
+		return _loss(o, om, d; tel=tel, star=star, rv_s=total_s[1+is_star_time_variable+is_tel_time_variable])
     end
 
     return l_total, l_total_s
 end
 loss_funcs_total(mws::ModelWorkspace) = loss_funcs_total(mws.o, mws.om, mws.d)
+function loss_funcs_frozen_tel(o::Output, om::OrderModel, d::Data)
+	is_tel_time_variable = is_time_variable(om.tel)
+	is_star_time_variable = is_time_variable(om.star)
+	function l_frozen_tel(total)
+		is_tel_time_variable ? tel = [om.tel.lm.M, total[1], om.tel.lm.μ] : tel = nothing
+		star = total[1+is_tel_time_variable]
+		rv_s = total[2+is_tel_time_variable]
+		return _loss(o, om, d; tel=tel, star=star, rv_s=rv_s)
+	end
+    function l_frozen_tel_s(total_s)
+		if is_tel_time_variable
+			tel = [om.tel.lm.M, total_s[1], om.tel.lm.μ]
+			is_star_time_variable ?
+				star = [om.star.lm.M, total_s[2], om.star.lm.μ] : star = nothing
+		elseif is_star_time_variable
+			tel = nothing
+			star = [om.star.lm.M, total_s[1], om.star.lm.μ]
+		else
+			tel = nothing
+			star = nothing
+		end
+		return _loss(o, om, d; tel=tel, star=star, rv_s=total_s[1+is_star_time_variable+is_tel_time_variable])
+    end
+    return l_frozen_tel, l_frozen_tel_s
+end
+loss_funcs_frozen_tel(mws::ModelWorkspace) = loss_funcs_frozen_tel(mws.o, mws.om, mws.d)
 
 ## Adam Version
 
@@ -165,7 +183,6 @@ function iterate!(θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt
 	β2_acc *= β2
 end
 
-# L∞_cust(Δ) = maximum([maximum([maximum(i) for i in j]) for j in Δ])
 function AdamState!_helper(as::AdamState, f::Symbol, val)
 	setfield!(as, Symbol(:δ_,f), val / getfield(as, f))
 	setfield!(as, f, val)
@@ -174,8 +191,8 @@ function AdamState!(as::AdamState, ℓ, Δ)
 	as.iter += 1
 	AdamState!_helper(as, :ℓ, ℓ)
 	flat_Δ = Iterators.flatten(Iterators.flatten(Δ))
-	AdamState!_helper(as, :L1_Δ, sum(abs, flat_Δ))
-	AdamState!_helper(as, :L2_Δ, sum(abs2, flat_Δ))
+	AdamState!_helper(as, :L1_Δ, L1(flat_Δ))
+	AdamState!_helper(as, :L2_Δ, L2(flat_Δ))
 	AdamState!_helper(as, :L∞_Δ, L∞(Δ))
 end
 
@@ -185,24 +202,24 @@ _f_reltol_def = 1e-6
 _g_reltol_def = 1e-3
 _g_L∞tol_def = 1e3
 
-struct AdamWorkspace{T}
+struct AdamSubWorkspace{T}
 	θ::T
 	opt
 	as::AdamState
 	l::Function
 	gl::Function
-	function AdamWorkspace(θ::T, opt, as, l, gl) where T
+	function AdamSubWorkspace(θ::T, opt, as, l, gl) where T
 		@assert typeof(l(θ)) <: Real
 		return new{T}(θ, opt, as, l, gl)
 	end
 end
-function AdamWorkspace(θ, l::Function)
+function AdamSubWorkspace(θ, l::Function)
 	gl = ∇(l; get_output=true)
 	gl(θ)  # compile it
-	return AdamWorkspace(θ, Adams(θ), AdamState(), l, gl)
+	return AdamSubWorkspace(θ, Adams(θ), AdamState(), l, gl)
 end
 
-function update!(aws::AdamWorkspace)
+function update!(aws::AdamSubWorkspace)
     val, Δ = aws.gl(aws.θ)
 	Δ = only(Δ)
 	AdamState!(aws.as, val.val, Δ)
@@ -211,7 +228,7 @@ end
 
 check_converged(as::AdamState, f_reltol::Real, g_reltol::Real, g_L∞tol::Real) = ((max(as.δ_ℓ, 1/as.δ_ℓ) < (1 + abs(f_reltol))) && (max(as.δ_L2_Δ,1/as.δ_L2_Δ) < (1+abs(g_reltol)))) || (as.L∞_Δ < g_L∞tol)
 check_converged(as::AdamState, iter::Int, f_reltol::Real, g_reltol::Real, g_L∞tol::Real) = (as.iter > iter) || check_converged(as, f_reltol, g_reltol, g_L∞tol)
-function train_SubModel!(aws::AdamWorkspace; iter=_iter_def, f_reltol = _f_reltol_def, g_reltol = _g_reltol_def, g_L∞tol = _g_L∞tol_def, cb::Function=()->(), kwargs...)
+function train_SubModel!(aws::AdamSubWorkspace; iter=_iter_def, f_reltol = _f_reltol_def, g_reltol = _g_reltol_def, g_L∞tol = _g_L∞tol_def, cb::Function=()->(), kwargs...)
 	converged = false  # check_converged(aws.as, iter, f_tol, g_tol)
 	while !converged
 		update!(aws)
@@ -241,66 +258,8 @@ function scale_α_helper!(opts::Vector, α_ratio::Real, θs, α::Real, scale_α:
 end
 _scale_α_def = false
 
-struct TelStarWorkspace <: ModelWorkspace
-	telstar::AdamWorkspace
-	rv::AdamWorkspace
-	om::OrderModel
-	o::Output
-	d::Data
-	only_s::Bool
-end
-function TelStarWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def)
-	loss_telstar, loss_telstar_s, loss_rv = loss_funcs_telstar(o, om, d)
-	only_s ?
-		telstar = AdamWorkspace([om.tel.lm.s, om.star.lm.s], loss_telstar_s) :
-		telstar = AdamWorkspace([vec(om.tel.lm), vec(om.star.lm)], loss_telstar)
-	rv = AdamWorkspace(om.rv.lm.s, loss_rv)
-	α_ratio = α * sqrt(length(om.tel.lm.μ)) # = α / rel_step_size(om.tel.lm.M) assuming M starts as L2 normalized basis vectors. Need to use this instead because TemplateModels don't have basis vectors
-	scale_α_helper!(telstar.opt, α_ratio, telstar.θ, α, scale_α)
-	scale_α_helper!(rv.opt, α_ratio, rv.θ, α, true)
-	return TelStarWorkspace(telstar, rv, om, o, d, only_s)
-end
-TelStarWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
-	TelStarWorkspace(om(inds), d(inds); kwargs...)
-TelStarWorkspace(om::OrderModel, d::Data; kwargs...) =
-	TelStarWorkspace(Output(om, d), om, d; kwargs...)
-
-_telstar_iters_per_loop = 50
-function train_OrderModel!(mws::TelStarWorkspace; train_telstar::Bool=true, ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, iters_per_loop::Int=_telstar_iters_per_loop, iter=_iter_def, kwargs...)
-
-    if ignore_regularization
-        reg_tel_holder = copy(mws.om.reg_tel)
-        reg_star_holder = copy(mws.om.reg_star)
-        rm_regularization(mws.om)
-    end
-	n_loop = Int(ceil(iter//iters_per_loop))
-	for i in 1:n_loop
-		i == n_loop ? current_iter = iter % iters_per_loop : current_iter = iters_per_loop
-	    if train_telstar
-			cb_telstar = default_cb(mws.telstar.as; print_stuff)
-			result_telstar = train_SubModel!(mws.telstar; cb=cb_telstar, iter=current_iter, kwargs...)
-			mws.telstar.as.iter = 0
-	        mws.o.star .= star_model(mws.om)
-	        mws.o.tel .= tel_model(mws.om)
-	    end
-		mws.om.rv.lm.M .= calc_doppler_component_RVSKL(mws.om.star.λ, mws.om.star.lm.μ)
-		cb_rv = default_cb(mws.rv.as; print_stuff)
-		result_rv = train_SubModel!(mws.rv; cb=cb_rv, iter=current_iter, kwargs...)
-	    mws.rv.as.iter = 0
-		mws.o.rv .= rv_model(mws.om)
-	end
-	recalc_total!(mws.o, mws.d)
-
-    if ignore_regularization
-        copy_dict!(mws.om.reg_tel, reg_tel_holder)
-        copy_dict!(mws.om.reg_star, reg_star_holder)
-    end
-	# return result_telstar, result_rv
-end
-
-
-struct TotalWorkspace <: ModelWorkspace
-	total::AdamWorkspace
+struct TotalWorkspace <: AdamWorkspace
+	total::AdamSubWorkspace
 	om::OrderModel
 	o::Output
 	d::Data
@@ -315,17 +274,17 @@ function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, 
 	if only_s
 		if is_tel_time_variable
 			if is_star_time_variable
-				total = AdamWorkspace([om.tel.lm.s, om.star.lm.s, om.rv.lm.s], l_total_s)
+				total = AdamSubWorkspace([om.tel.lm.s, om.star.lm.s, om.rv.lm.s], l_total_s)
 			else
-				total = AdamWorkspace([om.tel.lm.s, om.rv.lm.s], l_total_s)
+				total = AdamSubWorkspace([om.tel.lm.s, om.rv.lm.s], l_total_s)
 			end
 		elseif is_star_time_variable
-			total = AdamWorkspace([om.star.lm.s, om.rv.lm.s], l_total_s)
+			total = AdamSubWorkspace([om.star.lm.s, om.rv.lm.s], l_total_s)
 		else
-			total = AdamWorkspace([om.rv.lm.s], l_total_s)
+			total = AdamSubWorkspace([om.rv.lm.s], l_total_s)
 		end
 	else
-		total = AdamWorkspace([vec(om.tel.lm), vec(om.star.lm), om.rv.lm.s], l_total)
+		total = AdamSubWorkspace([vec(om.tel.lm), vec(om.star.lm), om.rv.lm.s], l_total)
 	end
 	if is_tel_time_variable || is_star_time_variable
 		scale_α_helper!(total.opt[1:(is_tel_time_variable+is_star_time_variable)], α_ratio, total.θ, α, scale_α)
@@ -338,7 +297,47 @@ TotalWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
 TotalWorkspace(om::OrderModel, d::Data; kwargs...) =
 	TotalWorkspace(Output(om, d), om, d; kwargs...)
 
-function train_OrderModel!(mws::TotalWorkspace; ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, kwargs...)
+
+struct FrozenTelWorkspace <: AdamWorkspace
+	total::AdamSubWorkspace
+	om::OrderModel
+	o::Output
+	d::Data
+	only_s::Bool
+end
+
+function FrozenTelWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def)
+	l_frozen_tel, l_frozen_tel_s = loss_funcs_frozen_tel(o, om, d)
+	α_ratio = α * sqrt(length(om.tel.lm.μ)) # = α / rel_step_size(om.tel.lm.M) assuming M starts as L2 normalized basis vectors. Need to use this instead because TemplateModels don't have basis vectors
+	is_tel_time_variable = is_time_variable(om.tel)
+	is_star_time_variable = is_time_variable(om.star)
+	if only_s
+		if is_tel_time_variable
+			if is_star_time_variable
+				total = AdamSubWorkspace([om.tel.lm.s, om.star.lm.s, om.rv.lm.s], l_frozen_tel_s)
+			else
+				total = AdamSubWorkspace([om.tel.lm.s, om.rv.lm.s], l_frozen_tel_s)
+			end
+		elseif is_star_time_variable
+			total = AdamSubWorkspace([om.star.lm.s, om.rv.lm.s], l_frozen_tel_s)
+		else
+			total = AdamSubWorkspace([om.rv.lm.s], l_frozen_tel_s)
+		end
+	else
+		total = AdamSubWorkspace([om.tel.lm.s, vec(om.star.lm), om.rv.lm.s], l_frozen_tel)
+	end
+	if is_tel_time_variable || is_star_time_variable
+		scale_α_helper!(total.opt[1:(is_tel_time_variable+is_star_time_variable)], α_ratio, total.θ, α, scale_α)
+	end
+	scale_α_helper!(total.opt[end], α_ratio, total.θ[end], α, true)
+	return FrozenTelWorkspace(total, om, o, d, only_s)
+end
+FrozenTelWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
+	FrozenTelWorkspace(om(inds), d(inds); kwargs...)
+FrozenTelWorkspace(om::OrderModel, d::Data; kwargs...) =
+	FrozenTelWorkspace(Output(om, d), om, d; kwargs...)
+
+function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, kwargs...)
 
     if ignore_regularization
         reg_tel_holder = copy(mws.om.reg_tel)
@@ -466,7 +465,7 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
     if ignore_regularization
         reg_tel_holder = copy(ow.om.reg_tel)
         reg_star_holder = copy(ow.om.reg_star)
-        rm_regularization(ow.om)
+        rm_regularization!(ow.om)
     end
 
     if train_telstar
@@ -522,7 +521,7 @@ function finalize_scores_setup(mws::ModelWorkspace; print_stuff::Bool=_print_stu
 		return score_trainer
 	end
 	optim_cb=optim_cb_f(; print_stuff=print_stuff)
-	loss_rv(rv_s) = _loss(mws.o, mws.om, mws.d; rv=[mws.om.rv.lm.M, rv_s])
+	loss_rv(rv_s) = _loss(mws; rv_s=rv_s)
 	rv_ws = OptimSubWorkspace(mws.om.rv.lm.s, loss_rv; use_cg=true)
 	score_trainer_template() = train_rvs_optim!(rv_ws, mws.om.rv, mws.om.star, optim_cb, kwargs...)
 	return score_trainer_template

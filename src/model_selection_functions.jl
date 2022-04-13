@@ -1,7 +1,6 @@
 total_length(x::Vector{<:AbstractArray}) = sum(total_length.(x))
 total_length(x::AbstractArray) = length(x)
-total_length(mws::TelStarWorkspace) = total_length(mws.telstar.θ) + total_length(mws.rv.θ)
-total_length(mws::TotalWorkspace) = total_length(mws.total.θ)
+total_length(mws::AdamWorkspace) = total_length(mws.total.θ)
 total_length(mws::OptimWorkspace) = length(mws.telstar.p0) + length(mws.rv.p0)
 function effective_length(x; return_mask::Bool=false, masked_val::Real = Inf)
     mask = x .!= masked_val

@@ -11,8 +11,8 @@ using JLD2
 
 ## Setting up necessary variables
 
-stars = ["10700", "2021/12/10", "2021/12/19", "2021/12/20", "2021/12/23"]
-star_choice = SSOF.parse_args(1, Int, 3)
+stars = ["10700", "sun"]
+star_choice = SSOF.parse_args(1, Int, 2)
 solar = star_choice > 1
 star = stars[star_choice]
 interactive = length(ARGS) == 0
@@ -34,7 +34,7 @@ if solar
 else
     model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc)
 end
-mws = SSOFU.create_workspace(model, data, opt)
+mws = SSOFU.create_workspace(model, data, opt; seeded=solar)
 SSOFU.improve_regularization!(mws; save_fn=save_path)
 SSOFU.improve_model!(mws; show_plot=interactive, save_fn=save_path)
 mws, _, _, _, _, _ = SSOFU.downsize_model(mws, times_nu; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path)

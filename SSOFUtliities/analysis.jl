@@ -24,6 +24,7 @@ function create_model(
 
 	# save_path = save_path_base * star * "/$(desired_order)/"
 	@load data_fn n_obs data times_nu airmasses
+	data.var[data.var .== 0] .= Inf
 
 	# takes a couple mins now
 	if isfile(save_fn) && !recalc
@@ -35,11 +36,20 @@ function create_model(
 	    model = SSOF.OrderModel(data, instrument, desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, oversamp=oversamp)
 	    SSOF.initialize!(model, data)
 		if seeded
-			SSOF._spectra_interp_gp!(model.tel.lm.μ, model.tel.log_λ, seed.tel.lm.μ, 1e-4, seed.tel.log_λ; gp_base=SSOF.LSF_gp)
-			SSOF._spectra_interp_gp!(model.star.lm.μ, model.star.log_λ, seed.star.lm.μ, 1e-6, seed.star.log_λ; gp_base=SSOF.SOAP_gp)
+			SSOF._spectra_interp_gp!(model.star.lm.μ, model.star.log_λ, seed.star.lm.μ, SSOF.SOAP_gp_var, seed.star.log_λ; gp_base=SSOF.SOAP_gp)
+			SSOF._spectra_interp_gp!(model.tel.lm.μ, model.tel.log_λ, seed.tel.lm.μ, SSOF.LSF_gp_var, seed.tel.log_λ; gp_base=SSOF.LSF_gp)
+			if SSOF.is_time_variable(seed.tel)
+				n_comp_tel = size(seed.tel.lm.M, 2)
+				model = SSOF.downsize(model, n_comp_tel, max_components)
+				for i in 1:n_comp_tel
+					SSOF._spectra_interp_gp!(view(model.tel.lm.M, :, i), model.tel.log_λ, view(seed.tel.lm.M, :, i), SSOF.LSF_gp_var, seed.tel.log_λ; gp_mean=0., gp_base=SSOF.LSF_gp)
+				end
+			else
+				model = SSOF.downsize(model, 0, max_components)
+			end
 		end
 		if !use_reg
-			SSOF.rm_regularization(model)
+			SSOF.rm_regularization!(model)
 			model.metadata[:todo][:reg_improved] = true
 		end
 		if save; @save save_fn model end
@@ -47,10 +57,12 @@ function create_model(
 	return model, data, times_nu, airmasses
 end
 
-function create_workspace(model, data, opt::String)
+function create_workspace(model, data, opt::String; seeded::Bool=false)
 	@assert opt in valid_optimizers
 	if opt == "l-bfgs"
 		mws = SSOF.OptimWorkspace(model, data)
+	elseif seeded
+		mws = SSOF.FrozenTelWorkspace(model, data)
 	else
 		mws = SSOF.TotalWorkspace(model, data)
 	end
