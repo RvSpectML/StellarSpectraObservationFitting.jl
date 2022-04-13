@@ -16,3 +16,4 @@ outputs/
 *.jld2
 *.txt
 alex_stuff/
+*scrap.jl

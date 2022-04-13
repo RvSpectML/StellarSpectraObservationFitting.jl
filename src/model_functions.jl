@@ -490,6 +490,7 @@ LSF_gp_var = 1e-4
 function _spectra_interp_gp!(fluxes::AbstractVector, log_λ, flux_obs::AbstractVector, var_obs, log_λ_obs; gp_mean::Number=1., gp_base=SOAP_gp)
 	gp = get_marginal_GP(gp_base(log_λ_obs, var_obs), flux_obs .- gp_mean, log_λ)
 	fluxes[:] .= mean.(gp) .+ gp_mean
+	return fluxes
 end
 function _spectra_interp_gp!(fluxes, vars, log_λ, flux_obs, var_obs, log_λ_obs; gp_mean::Number=1., gp_base=SOAP_gp)
 	for i in 1:size(flux_obs, 2)
