@@ -35,30 +35,41 @@ function create_model(
 	    end
 	else
 	    model = SSOF.OrderModel(data, instrument, desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, oversamp=oversamp)
-	    SSOF.initialize!(model, data)
-		if seeded
-			SSOF._spectra_interp_gp!(model.star.lm.μ, model.star.log_λ, seed.star.lm.μ, SSOF.SOAP_gp_var, seed.star.log_λ; gp_base=SSOF.SOAP_gp)
-			pix = model.tel.log_λ.step.hi
-			proposed_shifts = -2pix:pix/10:2pix
-			holder = zeros(size(model.tel.lm.M[:,1]))
-			tel_shift_loss(s, shift) = SSOF.L2(s * view(model.tel.lm.M, :,1) - SSOF._spectra_interp_gp!(holder, model.tel.log_λ, view(seed.tel.lm.M, :, 1), SSOF.LSF_gp_var, seed.tel.log_λ .+ shift; gp_mean=0., gp_base=SSOF.LSF_gp))
-			pm = 2. * (tel_shift_loss(1., 0.) > tel_shift_loss(-1., 0.)) - 1.
-			losses = [tel_shift_loss(pm, shift) for shift in proposed_shifts]
-			ws = SSOF.ordinary_lst_sq(losses, 2; x=proposed_shifts)
-			proposed_shift_tel = -ws[2] / (2 * ws[3])
-			println()
-			println("shifted seeded tellurics by $(round(proposed_shift_tel*SSOF.light_speed_nu; digits=3)) m/s (~$(round(proposed_shift_tel/pix; digits=3)) model pix)")
-			SSOF._spectra_interp_gp!(model.tel.lm.μ, model.tel.log_λ, seed.tel.lm.μ, SSOF.LSF_gp_var, seed.tel.log_λ .+ proposed_shift_tel; gp_base=SSOF.LSF_gp)
-			if SSOF.is_time_variable(seed.tel)
-				n_comp_tel = size(seed.tel.lm.M, 2)
-				model = SSOF.downsize(model, n_comp_tel, max_components)
-				for i in 1:n_comp_tel
-					SSOF._spectra_interp_gp!(view(model.tel.lm.M, :, i), model.tel.log_λ, view(seed.tel.lm.M, :, i), SSOF.LSF_gp_var, seed.tel.log_λ .+ proposed_shift_tel; gp_mean=0., gp_base=SSOF.LSF_gp)
-				end
-			else
-				model = SSOF.downsize(model, 0, max_components)
-			end
-		end
+	    model, _, _, _, _ = SSOF.initialize!(model, data; seed=seed)
+		# if seeded
+		# 	pix = model.tel.log_λ.step.hi
+		# 	proposed_shifts = -2pix:pix/10:2pix
+		# 	holder = zeros(size(model.tel.lm.M[:,1]))
+		# 	tel_shift_loss(s, shift) = SSOF.L2(s * view(model.tel.lm.M, :,1) - SSOF._spectra_interp_gp!(holder, model.tel.log_λ, view(seed.tel.lm.M, :, 1), SSOF.LSF_gp_var, seed.tel.log_λ .+ shift; gp_mean=0., gp_base=SSOF.LSF_gp))
+		# 	pm = 2. * (tel_shift_loss(1., 0.) > tel_shift_loss(-1., 0.)) - 1.
+		# 	losses = [tel_shift_loss(pm, shift) for shift in proposed_shifts]
+		# 	ws = SSOF.ordinary_lst_sq(losses, 2; x=proposed_shifts)
+		# 	proposed_shift_tel = -ws[2] / (2 * ws[3])
+		# 	println()
+		# 	println("shifted seeded tellurics by $(round(proposed_shift_tel*SSOF.light_speed_nu; digits=3)) m/s (~$(round(proposed_shift_tel/pix; digits=3)) model pix)")
+		#
+		# 	# pix = model.star.log_λ.step.hi
+		# 	# proposed_shifts = -2pix:pix/10:2pix
+		# 	# holder = zeros(size(model.star.lm.μ))
+		# 	# star_shift_loss(shift) = SSOF.L2(model.star.lm.μ - SSOF._spectra_interp_gp!(holder, model.star.log_λ, seed.star.lm.μ, SSOF.SOAP_gp_var, seed.star.log_λ .+ shift; gp_base=SSOF.SOAP_gp))
+		# 	# losses = [star_shift_loss(shift) for shift in proposed_shifts]
+		# 	# ws = SSOF.ordinary_lst_sq(losses, 2; x=proposed_shifts)
+		# 	# proposed_shift_star = -ws[2] / (2 * ws[3])
+		# 	# println()
+		# 	# println("shifted seeded star by $(round(proposed_shift_star*SSOF.light_speed_nu; digits=3)) m/s (~$(round(proposed_shift_star/pix; digits=3)) model pix)")
+		#
+		# 	SSOF._spectra_interp_gp!(model.star.lm.μ, model.star.log_λ, seed.star.lm.μ, SSOF.SOAP_gp_var, seed.star.log_λ .+ proposed_shift_star; gp_base=SSOF.SOAP_gp)
+		# 	SSOF._spectra_interp_gp!(model.tel.lm.μ, model.tel.log_λ, seed.tel.lm.μ, SSOF.LSF_gp_var, seed.tel.log_λ .+ proposed_shift_tel; gp_base=SSOF.LSF_gp)
+		# 	if SSOF.is_time_variable(seed.tel)
+		# 		n_comp_tel = size(seed.tel.lm.M, 2)
+		# 		model = SSOF.downsize(model, n_comp_tel, max_components)
+		# 		for i in 1:n_comp_tel
+		# 			SSOF._spectra_interp_gp!(view(model.tel.lm.M, :, i), model.tel.log_λ, view(seed.tel.lm.M, :, i), SSOF.LSF_gp_var, seed.tel.log_λ .+ proposed_shift_tel; gp_mean=0., gp_base=SSOF.LSF_gp)
+		# 		end
+		# 	else
+		# 		model = SSOF.downsize(model, 0, max_components)
+		# 	end
+		# end
 		if !use_reg
 			SSOF.rm_regularization!(model)
 			model.metadata[:todo][:reg_improved] = true

@@ -38,7 +38,7 @@ function _fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol
         for field in reg_fields
             getfield(om, field)[reg_key] = reg_hold[2]
         end
-        end_ℓ = ℓs[2]
+        last_checked_ℓ, end_ℓ = ℓs
     # need to try increasing regularization
     else
         while (ℓs[1] > ℓs[2]) && (reg_min < reg_hold[2] < reg_max)
@@ -50,14 +50,17 @@ function _fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol
         for field in reg_fields
             getfield(om, field)[reg_key] = reg_hold[1]
         end
-        end_ℓ = ℓs[1]
+        end_ℓ, last_checked_ℓ = ℓs
     end
-    return start_ℓ, end_ℓ
+    return start_ℓ, end_ℓ, last_checked_ℓ
 end
 function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol, start::Real, before_ℓ::Real, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; kwargs...)
     if haskey(getfield(mws.om, reg_fields[1]), reg_key)
-        start_ℓ, end_ℓ = _fit_regularization_helper!(reg_fields, reg_key, start, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
+        start_ℓ, end_ℓ, last_checked_ℓ = _fit_regularization_helper!(reg_fields, reg_key, start, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
         println("$(reg_fields[1])[:$reg_key] : $start -> $(getfield(mws.om, reg_fields[1])[reg_key])")
+        if isapprox(end_ℓ, last_checked_ℓ; rtol=1e-3)
+            @warn "weak local minimum $end_ℓ vs. $last_checked_ℓ"
+        end
         println("test χ²: $start_ℓ -> $end_ℓ ($(round(end_ℓ/start_ℓ; digits=3)))")
         if end_ℓ > (1.1 * before_ℓ)
             for field in reg_fields

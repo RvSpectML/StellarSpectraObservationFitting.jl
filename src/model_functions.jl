@@ -517,14 +517,16 @@ end
 #     return findfirst(s_var ./ sum(s_var) .< threshold)[1] - 1
 # end
 
-function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2)
+function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2,
+	seed::Union{OrderModel, Nothing}=nothing)
+
+	seeded = !isnothing(seed)
 
 	μ_min = min + 0.05
 	μ_max = max - 0.05
 
 	n_obs = size(d.flux, 2)
-	n_comp_star = size(om.star.lm.M, 2) + 1
-	n_comp_tel = size(om.tel.lm.M, 2)
+	n_comp_star = size(om.star.lm.M, 2)
 
 	star_log_λ_tel = _shift_log_λ_model(d.log_λ_obs, d.log_λ_star, om.star.log_λ)
 	tel_log_λ_star = _shift_log_λ_model(d.log_λ_star, d.log_λ_obs, om.tel.log_λ)
@@ -550,13 +552,33 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2)
 	tel_s_1 = ones(1, size(om.tel.lm.s, 2))
 	EMPCA!(tel_M_1, Xtmp, tel_s_1, 1 ./ vars_tel)
 
+	# seeding tellurics (with a shift if necessary)
+	if seeded && is_time_variable(seed.tel)
+		pix = om.tel.log_λ.step.hi
+		proposed_shifts = -2pix:pix/10:2pix
+		holder = zeros(length(tel_M_1))
+		tel_shift_loss(s, shift) = L2(s * view(tel_M_1, :, 1) - _spectra_interp_gp!(holder, om.tel.log_λ, view(seed.tel.lm.M, :, 1), LSF_gp_var, seed.tel.log_λ .+ shift; gp_mean=0., gp_base=LSF_gp))
+		pm = 2. * (tel_shift_loss(1., 0.) < tel_shift_loss(-1., 0.)) - 1.
+		losses = [tel_shift_loss(pm, shift) for shift in proposed_shifts]
+		ws = ordinary_lst_sq(losses, 2; x=proposed_shifts)
+		proposed_shift_tel = -ws[2] / (2 * ws[3])
+
+		n_comp_tel = size(seed.tel.lm.M, 2)
+		om = downsize(om, n_comp_tel, n_comp_star)
+		_spectra_interp_gp!(om.tel.lm.μ, om.tel.log_λ, seed.tel.lm.μ, LSF_gp_var, seed.tel.log_λ .+ proposed_shift_tel; gp_base=LSF_gp)
+		_spectra_interp_gp!(view(tel_M_1, :, 1), om.tel.log_λ, view(seed.tel.lm.M, :, 1), LSF_gp_var, seed.tel.log_λ .+ proposed_shift_tel; gp_mean=0., gp_base=LSF_gp)
+		tel_s_1 .*= pm
+		println()
+		println("shifted seeded tellurics by $(round(proposed_shift_tel*light_speed_nu; digits=3)) m/s (~$(round(proposed_shift_tel/pix; digits=3)) model pix)")
+	end
+
 	# stellar model with 1 basis telluric model
 	flux_tel .= (tel_M_1 * tel_s_1) .+ om.tel.lm.μ
 	_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
 
 	om.star.lm.μ[:] = make_template(flux_star; min=μ_min, max=μ_max)
 	_, M_star, s_star, rvs_notel =
-		DEMPCA(flux_star, om.star.λ, 1 ./ vars_star; template=om.star.lm.μ, num_components=n_comp_star)
+		DEMPCA(flux_star, om.star.λ, 1 ./ vars_star; template=om.star.lm.μ, num_components=n_comp_star + 1)
 	fracvar_star = fracvar(flux_star .- om.star.lm.μ, M_star, s_star, 1 ./ vars_star)
 
 	om.star.lm.M .= view(M_star, :, 2:size(M_star, 2))
@@ -576,7 +598,7 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2)
 	fix_FullLinearModel_s!(om.star.lm, min, max)
 	fix_FullLinearModel_s!(om.tel.lm, min, max)
 
-	return rvs_notel, rvs_naive, fracvar_tel, fracvar_star
+	return om, rvs_notel, rvs_naive, fracvar_tel, fracvar_star
 end
 
 L1(a) = sum(abs, a)

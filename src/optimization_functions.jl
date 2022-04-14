@@ -330,6 +330,7 @@ function FrozenTelWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=fal
 		scale_α_helper!(total.opt[1:(is_tel_time_variable+is_star_time_variable)], α_ratio, total.θ, α, scale_α)
 	end
 	scale_α_helper!(total.opt[end], α_ratio, total.θ[end], α, true)
+	rm_dict!(om.reg_tel)
 	return FrozenTelWorkspace(total, om, o, d, only_s)
 end
 FrozenTelWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
