@@ -15,7 +15,7 @@ SSOFU = SSOFUtilities
 stars = ["10700", "185144", "89269", "9407", "sun"]
 star_choice = SSOF.parse_args(1, Int, 1)
 star = stars[star_choice]
-solar = star_choice < length(stars)
+solar = star_choice == length(stars)
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
 target_subdir = star * "/"  # needed for param.jl
 if solar
