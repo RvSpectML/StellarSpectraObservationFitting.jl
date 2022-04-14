@@ -3,20 +3,7 @@
 global max_spectra_to_use = 150
 global fits_target_str
 
-
-if fits_target_str == "HD 10700"
-   global espresso_mask_filename = "G8.espresso.mas"
-   global ccf_mid_velocity = -16640.0
-   global df_files
-   global df_files_use = df_files |>
-      @filter( _.target == fits_target_str ) |>
-      @take(max_spectra_to_use) |>
-      DataFrame
-end
-
 if fits_target_str == "Solar" || fits_target_str == "Sun"
-	global espresso_mask_filename = "G2.espresso.mas"
-	global ccf_mid_velocity = 0
 	global df_files
 
 	# is the right star
@@ -88,5 +75,12 @@ if fits_target_str == "Solar" || fits_target_str == "Sun"
 	  	@orderby(_.bjd) |>
 	  	@take(max_spectra_to_use) |>
 	  	DataFrame
-	println("# Found ", size(df_files_use,1), " files of ",  size(df_files,1), " to process.")
+else
+	global df_files
+	global df_files_use = df_files |>
+	   @filter( _.target == fits_target_str ) |>
+	   @take(max_spectra_to_use) |>
+	   DataFrame
 end
+
+println("# Found ", size(df_files_use,1), " files of ",  size(df_files,1), " to process.")
