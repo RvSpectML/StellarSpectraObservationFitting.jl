@@ -4,7 +4,7 @@ using JLD2
 using Statistics
 import StatsBase
 
-valid_optimizers = ["adam", "l-bfgs"]
+valid_optimizers = ["adam", "l-bfgs", "frozen-tel"]
 
 function create_model(
 	data_fn::String,
@@ -79,11 +79,11 @@ function create_model(
 	return model, data, times_nu, airmasses
 end
 
-function create_workspace(model, data, opt::String; seeded::Bool=false)
+function create_workspace(model, data, opt::String)
 	@assert opt in valid_optimizers
 	if opt == "l-bfgs"
 		mws = SSOF.OptimWorkspace(model, data)
-	elseif seeded
+	elseif opt == "frozen-tel"
 		mws = SSOF.FrozenTelWorkspace(model, data)
 	else
 		mws = SSOF.TotalWorkspace(model, data)

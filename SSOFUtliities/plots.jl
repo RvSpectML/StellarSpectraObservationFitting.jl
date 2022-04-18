@@ -131,32 +131,31 @@ end
 plot_model(mws::SSOF.ModelWorkspace, airmasses::Vector, times_nu::Vector; kwargs...) =
 	plot_model(mws.om, airmasses, times_nu; d=mws.d, o=mws.o, kwargs...)
 
-function status_plot(mws::SSOF.ModelWorkspace; plot_epoch::Int=10, tracker::Int=0, display_plt::Bool=true, include_χ²::Bool=true, kwargs...)
+function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool=true, include_χ²::Bool=true, kwargs...)
     o = mws.o
 	d = mws.d
-	obs_mask = .!(isinf.(d.var[:, plot_epoch]))
-    obs_λ = exp.(d.log_λ_obs[:, plot_epoch])
-    plot_star_λs = exp.(d.log_λ_star[:, plot_epoch])
+	time_average(a) = mean(a; dims=2)
+	obs_mask = vec(all(.!(isinf.(d.var)); dims=2))
+    obs_λ = time_average(exp.(d.log_λ_obs))
+    plot_star_λs = time_average(exp.(d.log_λ_star))
 	include_χ² ?
-		plt = plot_spectrum(; legend = :bottomright, layout = grid(3, 1, heights=[0.6, 0.2, 0.2]), kwargs...) :
+		plt = plot_spectrum(; legend = :bottomright, layout = grid(3, 1, heights=[0.6, 0.2, 0.2]), ylabel="Flux + Constant Shift", kwargs...) :
 		plt = plot_spectrum(; legend = :bottomright, layout = grid(2, 1, heights=[0.85, 0.15]), kwargs...)
 
-    plot!(plt[1], obs_λ, o.tel[:, plot_epoch], label="Telluric Model")
+	tel_model = time_average(o.tel)
+    plot!(plt[1], obs_λ, tel_model, label="Mean Telluric Model")
 
-    shift = 1.1 - minimum(o.tel[:, plot_epoch])
-    star_model = o.star[:, plot_epoch] + o.rv[:, plot_epoch]
-    plot!(plt[1], obs_λ, star_model .- shift, label="Stellar Model")
+    shift = 1.1 - minimum(tel_model)
+    star_model = time_average(o.star + o.rv)
+    plot!(plt[1], obs_λ, star_model .- shift, label="Mean Stellar Model")
 
     shift += 1.1 - minimum(star_model)
-    _scatter!(plt[1], obs_λ[obs_mask], d.flux[obs_mask, plot_epoch] .- shift, label="Observed Data", color=:white, alpha=0.1, xlabel="")
-    plot!(plt[1], obs_λ, o.total[:, plot_epoch] .- shift, label="Full Model", ls=:dash, color=:white)
-    # plot!(plt[1], obs_λ, o.tel[:, plot_epoch] .* star_model .- shift, label="Full Model", ls=:dash, color=:white)
+    plot!(plt[1], obs_λ, time_average(o.total) .- shift, label="Mean Full Model", color=:white)
 
-    _scatter!(plt[2], obs_λ[obs_mask], d.flux[obs_mask, plot_epoch] - o.total[obs_mask, plot_epoch], ylabel="Residuals", label="", alpha=0.1, color=:white, xlabel="")
-    # _scatter!(plt[2], obs_λ, d.flux[:, plot_epoch] - (o.tel[:, plot_epoch] .* star_model), ylabel="Residuals", label="", alpha=0.1, color=:white)
+    _scatter!(plt[2], obs_λ[obs_mask], time_average(abs.(view(d.flux, obs_mask, :) - view(o.total, obs_mask, :))), ylabel="MAD", label="", alpha=0.5, color=:white, xlabel="", ms=1.5)
 
 	if include_χ²
-		_scatter!(plt[3], obs_λ[obs_mask], -sum(SSOF._loss_diagnostic(mws); dims=2)[obs_mask], ylabel="Remaining χ²", label="", alpha=0.1, color=:white)
+		_scatter!(plt[3], obs_λ, -sum(SSOF._loss_diagnostic(mws); dims=2), ylabel="Remaining χ²", label="", alpha=0.5, color=:white, xlabel="", ms=1.5)
 	end
 
     if display_plt; display(plt) end

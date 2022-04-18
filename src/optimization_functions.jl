@@ -7,10 +7,12 @@ import Base.println
 abstract type ModelWorkspace end
 abstract type AdamWorkspace<:ModelWorkspace end
 
+_χ²_loss(model, data, variance) = ((model .- data) .^ 2) ./ variance
+_χ²_loss(model, data::Data) = ((model .- data.flux) .^ 2) ./ data.var
 _loss_diagnostic(tel, star, rv, d::GenericData) =
-	((total_model(tel, star, rv) .- d.flux) .^ 2) ./ d.var
+	_χ²_loss(total_model(tel, star, rv), d)
 _loss_diagnostic(tel, star, rv, d::LSFData) =
-    (((d.lsf * total_model(tel, star, rv)) .- d.flux) .^ 2) ./ d.var
+	_χ²_loss(d.lsf * total_model(tel, star, rv), d)
 function _loss_diagnostic(o::Output, om::OrderModel, d::Data;
 	tel=nothing, star=nothing, rv_s=nothing)
     !isnothing(tel) ? tel_o = spectra_interp(_eval_lm_vec(om, tel), om.t2o) : tel_o = o.tel
