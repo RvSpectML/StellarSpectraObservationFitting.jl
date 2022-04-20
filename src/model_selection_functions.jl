@@ -10,7 +10,18 @@ function effective_length(x; return_mask::Bool=false, masked_val::Real = Inf)
         return sum(mask)
     end
 end
-intra_night_std(rvs::Vector, times::Vector) = median([std(rvs[i]) for i in observation_night_inds(times) if length(i)>3])
+function intra_night_std(rvs::Vector, times::Vector)
+    intra_night_stds = [std(rvs[i]) for i in observation_night_inds(times) if length(i)>3]
+    if length(intra_night_stds) > 2
+        return median(intra_night_stds)
+    elseif length(intra_night_stds) > 2
+        @warn "only a couple of nights to base the intra night std of the RVs on"
+        return median(intra_night_stds)
+    else
+        @warn "no nights to base the intra night std of the RVs on. Returning the std of all of the observations"
+        return std(rvs)
+    end
+end
 
 function test_ℓ_for_n_comps_basic(n_comps::Vector, mws_inp::ModelWorkspace; return_inters::Bool=false, iter=50, kwargs...)
     mws = typeof(mws_inp)(downsize(mws_inp.om, n_comps[1], n_comps[2]), mws_inp.d)
