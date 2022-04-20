@@ -41,7 +41,9 @@ function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector,
 
     if ans_aic != ans_bic; @warn "AIC and BIC gave different answers" end
 
-    n_comps = [test_n_comp_tel[ans_aic[1]], test_n_comp_star[ans_aic[2]]]
+    use_aic ?
+        n_comps = [test_n_comp_tel[ans_aic[1]], test_n_comp_star[ans_aic[2]]] :
+        n_comps = [test_n_comp_tel[ans_bic[1]], test_n_comp_star[ans_bic[2]]]
     if return_inters
         return n_comps, ℓ, aic, bic
     else

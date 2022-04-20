@@ -111,7 +111,7 @@ function downsize_model(mws, times; save_fn::String="", decision_fn::String="", 
 	    if save_md; @save decision_fn comp_ls ℓ aics bics ks test_n_comp_tel test_n_comp_star comp_stds comp_intra_stds end
 
 	    model_large = copy(model)
-		mws_smol = _downsize_model(mws, n_comps_best[1], n_comps_best[2], print_stuff=print_stuff)
+		mws_smol = _downsize_model(mws, n_comps_best[1], n_comps_best[2]; print_stuff=print_stuff)
 	    model = mws_smol.om
 	    model.metadata[:todo][:downsized] = true
 	    model.metadata[:todo][:reg_improved] = true
@@ -130,7 +130,7 @@ function downsize_model(mws, times; save_fn::String="", decision_fn::String="", 
 		return mws_smol, ℓ, aics, bics, comp_stds, comp_intra_stds
 	end
 end
-function _downsize_model(mws, n_comps_tel::Int, n_comps_star::Int, print_stuff::Bool=true)
+function _downsize_model(mws, n_comps_tel::Int, n_comps_star::Int; print_stuff::Bool=true)
 	model = SSOF.downsize(mws.om, n_comps_tel, n_comps_star)
 	mws_smol = typeof(mws)(model, mws.d)
 	SSOF.train_OrderModel!(mws_smol; print_stuff=print_stuff)  # 120s
