@@ -345,7 +345,7 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
     if ignore_regularization
         reg_tel_holder = copy(mws.om.reg_tel)
         reg_star_holder = copy(mws.om.reg_star)
-        rm_regularization(mws.om)
+        rm_regularization!(mws.om)
     end
 
 	cb = default_cb(mws.total.as; print_stuff)

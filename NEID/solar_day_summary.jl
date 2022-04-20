@@ -80,7 +80,7 @@ for desired_order in 60:85
         # get initial daily_flux guess
         flux_model = ones(length(log_λ), n_obs)
         vars_model = ones(length(log_λ), n_obs)
-        SSOF._spectra_interp_gp!(flux_model, vars_model, log_λ, data.flux, data.var, data.log_λ_obs)
+        SSOF._spectra_interp_gp!(flux_model, vars_model, log_λ, data.flux, data.var .+ SSOF.SOAP_gp_var, data.log_λ_obs, gp_mean=1.)
         # init = SSOF.make_template(flux_model; use_mean=true)
         init = [mean(view(flux_model, i, :), AnalyticWeights(1 ./ view(vars_model, i, :))) for i in 1:size(flux_model, 1)]
 
