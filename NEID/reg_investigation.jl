@@ -22,7 +22,7 @@ save_path = neid_save_path * star * "/$(desired_order)/"
 @load save_path * "data.jld2" n_obs data times_nu airmasses
 
 @time model = SSOF.OrderModel(data, "NEID", desired_order, star; n_comp_tel=max_components, n_comp_star=max_components)
-@time rvs_notel, rvs_naive, fracvar_tel, fracvar_star = SSOF.initialize!(model, data)
+@time rvs_notel, fracvar_tel, fracvar_star = SSOF.initialize!(model, data)
 mws = SSOF.OptimWorkspace(model, data)
 @time SSOF.train_OrderModel!(mws; print_stuff=true, ignore_regularization=true)  # 45s
 

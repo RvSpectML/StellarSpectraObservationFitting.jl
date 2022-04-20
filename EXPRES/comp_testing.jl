@@ -26,7 +26,7 @@ if !use_reg
 end
 
 @time test_model = SSOF.OrderModel(data, "EXPRES", desired_order, star; n_comp_tel=2, n_comp_star=2)
-@time rvs_notel, rvs_naive, _, _ = SSOF.initialize!(test_model, data; use_gp=true)
+@time rvs_notel, _, _ = SSOF.initialize!(test_model, data; use_gp=true)
 if !use_reg
     SSOF.rm_regularization!(test_model)
     test_model.metadata[:todo][:reg_improved] = true
