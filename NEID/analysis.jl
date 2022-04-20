@@ -19,7 +19,7 @@ interactive = length(ARGS) == 0
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 desired_order = SSOF.parse_args(2, Int, 60)  # 81 has a bunch of tels, 60 has very few
 use_reg = SSOF.parse_args(3, Bool, true)
-which_opt = SSOF.parse_args(4, Int, 3)
+which_opt = SSOF.parse_args(4, Int, 1)
 recalc = SSOF.parse_args(5, Bool, false)
 opt = SSOFU.valid_optimizers[which_opt]
 
