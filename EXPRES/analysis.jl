@@ -7,17 +7,20 @@ SSOF_path = dirname(dirname(pathof(SSOF)))
 include(SSOF_path * "/SSOFUtliities/SSOFUtilities.jl")
 SSOFU = SSOFUtilities
 using Statistics
+using JLD2
+using Plots
 
 ## Setting up necessary variables
 
 stars = ["10700", "26965", "34411"]
-star = stars[SSOF.parse_args(1, Int, 2)]
+star_choice = SSOF.parse_args(1, Int, 2)
+star = stars[star_choice]
 interactive = length(ARGS) == 0
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 desired_order = SSOF.parse_args(2, Int, 67)  # 68 has a bunch of tels, 47 has very few
 use_reg = SSOF.parse_args(3, Bool, true)
 which_opt = SSOF.parse_args(4, Int, 1)
-recalc = SSOF.parse_args(4, Bool, false)
+recalc = SSOF.parse_args(5, Bool, false)
 opt = SSOFU.valid_optimizers[which_opt]
 
 ## Loading in data and initializing model

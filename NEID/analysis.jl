@@ -14,15 +14,16 @@ using Plots
 
 stars = ["10700", "9407", "2021/12/19"]
 star_choice = SSOF.parse_args(1, Int, 1)
-solar = star_choice > 2
 star = stars[star_choice]
 interactive = length(ARGS) == 0
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
-desired_order = SSOF.parse_args(2, Int, 81)  # 81 has a bunch of tels, 60 has very few
+desired_order = SSOF.parse_args(2, Int, 60)  # 81 has a bunch of tels, 60 has very few
 use_reg = SSOF.parse_args(3, Bool, true)
-which_opt = SSOF.parse_args(4, Int, 1)
-recalc = SSOF.parse_args(4, Bool, false)
+which_opt = SSOF.parse_args(4, Int, 3)
+recalc = SSOF.parse_args(5, Bool, false)
 opt = SSOFU.valid_optimizers[which_opt]
+
+solar = star_choice > 2
 
 ## Loading in data and initializing model
 base_path = neid_save_path * star * "/$(desired_order)/"
