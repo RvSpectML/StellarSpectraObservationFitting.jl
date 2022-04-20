@@ -326,7 +326,9 @@ function FrozenTelWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=fal
 			total = AdamSubWorkspace([om.rv.lm.s], l_frozen_tel_s)
 		end
 	else
-		total = AdamSubWorkspace([om.tel.lm.s, vec(om.star.lm), om.rv.lm.s], l_frozen_tel)
+		is_tel_time_variable ?
+			total = AdamSubWorkspace([om.tel.lm.s, vec(om.star.lm), om.rv.lm.s], l_frozen_tel) :
+			total = AdamSubWorkspace([vec(om.star.lm), om.rv.lm.s], l_frozen_tel)
 	end
 	if is_tel_time_variable || is_star_time_variable
 		scale_α_helper!(total.opt[1:(is_tel_time_variable+is_star_time_variable)], α_ratio, total.θ, α, scale_α)

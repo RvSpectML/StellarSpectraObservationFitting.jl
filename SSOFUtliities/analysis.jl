@@ -89,7 +89,7 @@ function improve_model!(mws; print_stuff::Bool=true, show_plot::Bool=false, save
 	end
 end
 
-function downsize_model(mws, times; save_fn::String="", decision_fn::String="", print_stuff::Bool=true, plots_fn::String="")
+function downsize_model(mws, times; save_fn::String="", decision_fn::String="", print_stuff::Bool=true, plots_fn::String="", kwargs...)
 	save = save_fn!=""
 	save_md = decision_fn!=""
 	save_plots = plots_fn!=""
@@ -107,16 +107,14 @@ function downsize_model(mws, times; save_fn::String="", decision_fn::String="", 
 	            comp_ls[i, j], ks[i, j], comp_stds[i, j], comp_intra_stds[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star], mws, times)
 	        end
 	    end
-	    n_comps_best, ℓ, aics, bics = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, mws.d.var; return_inters=true)
+	    n_comps_best, ℓ, aics, bics = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, mws.d.var; return_inters=true, kwargs...)
 	    if save_md; @save decision_fn comp_ls ℓ aics bics ks test_n_comp_tel test_n_comp_star comp_stds comp_intra_stds end
 
 	    model_large = copy(model)
-	    model = SSOF.downsize(model, n_comps_best[1], n_comps_best[2])
+		mws_smol = _downsize_model(mws, n_comps_best[1], n_comps_best[2], print_stuff=print_stuff)
+	    model = mws_smol.om
 	    model.metadata[:todo][:downsized] = true
 	    model.metadata[:todo][:reg_improved] = true
-	    mws_smol = typeof(mws)(model, mws.d)
-	    SSOF.train_OrderModel!(mws_smol; print_stuff=print_stuff)  # 120s
-	    SSOF.finalize_scores!(mws_smol)
 	    model.metadata[:todo][:optimized] = true
 	    if save; @save save_fn model model_large end
 
@@ -163,6 +161,10 @@ function estimate_errors(mws; save_fn="")
 	    rv_errors = vec(std(rv_holder; dims=1))
 	    model.metadata[:todo][:err_estimated] = true
 	    if save; @save save_fn model rvs rv_errors end
+		return rvs, rv_errors
+	else
+		println("loading rvs")
+		if save; @load save_fn rvs rv_errors end
 		return rvs, rv_errors
 	end
 end

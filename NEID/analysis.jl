@@ -11,9 +11,9 @@ using JLD2
 
 ## Setting up necessary variables
 
-stars = ["10700", "185144", "89269", "9407", "sun"]
 star_choice = SSOF.parse_args(1, Int, 2)
-solar = star_choice == length(stars)
+stars = ["10700", "185144", "89269", "9407", "2021/12/19"]
+solar = star_choice > 4
 star = stars[star_choice]
 interactive = length(ARGS) == 0
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
@@ -38,8 +38,7 @@ end
 mws = SSOFU.create_workspace(model, data, opt)
 SSOFU.improve_regularization!(mws; save_fn=save_path)
 SSOFU.improve_model!(mws; show_plot=interactive, save_fn=save_path)
-mws, _, _, _, _, _ = SSOFU.downsize_model(mws, times_nu; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path)
-# SSOFU.improve_regularization!(mws; save_fn=save_path, redo=true)
+mws, _, _, _, _, _ = SSOFU.downsize_model(mws, times_nu; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path, use_aic=!solar)
 rvs, rv_errors = SSOFU.estimate_errors(mws; save_fn=save_path)
 
 ## Plots

@@ -17,3 +17,4 @@ outputs/
 *.txt
 alex_stuff/
 *scrap.jl
+NEID/testing.jl

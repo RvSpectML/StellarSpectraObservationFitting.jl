@@ -26,7 +26,7 @@ function test_ℓ_for_n_comps(n_comps::Vector, mws_inp::ModelWorkspace, times::V
     return l, len, std(model_rvs), intra_night_std(model_rvs, times)
 end
 
-function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector, var::AbstractMatrix; return_inters::Bool=false)
+function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector, var::AbstractMatrix; return_inters::Bool=false, use_aic::Bool=true)
 
     ## max likelihood
     # ans_ml = argmin(ls)

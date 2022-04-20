@@ -165,6 +165,7 @@ end
 function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector; size=(_plt_size[1],_plt_size[2]*1.5), ylabel="ℓ")
     plt = _plot(; ylabel=ylabel, layout=grid(2, 1), size=size)
 	lims = [maximum(ys[2:end, 2:end]), minimum(ys[2:end, 2:end])]
+	ylabel=="ℓ" ? lims[1] = maximum(ys) : lims[2] = minimum(ys)
 	buffer = 0.5 * (lims[1] - lims[2])
 	ylims!(plt, lims[2] - buffer, lims[1] + buffer)
     for i in eachindex(test_n_comp_tel)

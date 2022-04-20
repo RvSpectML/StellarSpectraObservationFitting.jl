@@ -303,6 +303,7 @@ oversamp_interp_helper(to_bounds::AbstractMatrix, from_x::AbstractVector) =
 
 function undersamp_interp_helper(to_x::AbstractVector, from_x::AbstractVector)
 	ans = spzeros(length(to_x), length(from_x))
+	# ans = sparse(Float64[],Float64[],Float64[],length(to_x),length(from_x))
 	to_inds = searchsortednearest(from_x, to_x; lower=true)
 	for i in 1:size(ans, 1)
 		x_new = to_x[i]
@@ -416,6 +417,10 @@ function downsize(lm::FullLinearModel, n_comp::Int)
 end
 downsize(lm::BaseLinearModel, n_comp::Int) =
 	BaseLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :])
+function downsize(lm::TemplateModel, n_comp::Int)
+	@assert n_comp==0
+	return TemplateModel(lm.μ[:], lm.n)
+end
 downsize(sm::Submodel, n_comp::Int) =
 	Submodel(copy(sm.log_λ), copy(sm.λ), downsize(sm.lm, n_comp), copy(sm.A_sde), copy(sm.Σ_sde), copy(sm.Δℓ_coeff))
 downsize(m::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
