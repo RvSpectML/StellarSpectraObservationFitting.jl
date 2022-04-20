@@ -12,9 +12,9 @@ using Plots
 
 ## Setting up necessary variables
 
-star_choice = SSOF.parse_args(1, Int, 2)
-stars = ["10700", "185144", "89269", "9407", "2021/12/19"]
-solar = star_choice > 4
+stars = ["10700", "9407", "2021/12/19"]
+star_choice = SSOF.parse_args(1, Int, 1)
+solar = star_choice > 2
 star = stars[star_choice]
 interactive = length(ARGS) == 0
 include("data_locs.jl")  # defines expres_data_path and expres_save_path

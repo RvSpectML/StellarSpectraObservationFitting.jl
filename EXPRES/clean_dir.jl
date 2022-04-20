@@ -20,13 +20,17 @@ delete = SSOF.parse_args(2, Bool, false)
 
 function clean(order::Int, star::String)
     dir = expres_save_path*star*"/$(order)/"
-    ls = readdir(dir)
-    println(order)
-    for file in ls
-        if file != "data.jld2" && !isdir(dir * file) && (mtime(dir * file) < datetime2unix(cutoff))
-            println(file)
-            if delete; rm(dir * file) end
+    if isdir(dir)
+        ls = readdir(dir)
+        println(order)
+        for file in ls
+            if file != "data.jld2" && !isdir(dir * file) && (mtime(dir * file) < datetime2unix(cutoff))
+                println(file)
+                if delete; rm(dir * file) end
+            end
         end
+    else
+        println("couldn't find " * dir)
     end
 end
 
