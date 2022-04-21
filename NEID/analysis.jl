@@ -12,7 +12,7 @@ using Plots
 
 ## Setting up necessary variables
 
-stars = ["10700", "9407", "2021/12/19"]
+stars = ["10700", "9407", "2021/12/19", "2021/12/20", "2021/12/23"]
 star_choice = SSOF.parse_args(1, Int, 1)
 star = stars[star_choice]
 interactive = length(ARGS) == 0

@@ -10,9 +10,9 @@ import StellarSpectraObservationFitting as SSOF
 
 input_ind = SSOF.parse_args(1, Int, 0)
 
-stars = ["10700"]
-input_ind == 0 ? star_inds = (1:1) : star_inds = input_ind
-orders_list = [4:122]
+stars = ["10700", "9407", "2021/12/19", "2021/12/20", "2021/12/23"]
+input_ind == 0 ? star_inds = (1:5) : star_inds = input_ind
+orders_list = [4:122, 4:122, 4:122, 4:122, 4:122]
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
 # prep_str = "noreg_"
 prep_str = ""
