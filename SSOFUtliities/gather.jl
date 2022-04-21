@@ -38,7 +38,7 @@ function retrieve_all_rvs(n_obs::Int, fns::Vector{String})
     rvs_σ = Inf .* ones(n_ord, n_obs)
     for i in 1:n_ord
         try
-            rvs[i, :], rvs_σ[i, :] = SSOFU._retrieve_rvs(fns[i])
+            rvs[i, :], rvs_σ[i, :] = _retrieve_rvs(fns[i])
         catch err
             if isa(err, SystemError)
                 println("order $(orders[i]) is missing")
