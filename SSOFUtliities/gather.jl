@@ -41,7 +41,7 @@ function retrieve_all_rvs(n_obs::Int, fns::Vector{String})
             rvs[i, :], rvs_σ[i, :] = _retrieve_rvs(fns[i])
         catch err
             if isa(err, SystemError)
-                println("order $(orders[i]) is missing")
+                println("orders[$i] is missing")
             else
                 rethrow()
             end
