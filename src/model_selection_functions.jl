@@ -14,8 +14,11 @@ function intra_night_std(rvs::Vector, times::Vector)
     intra_night_stds = [std(rvs[i]) for i in observation_night_inds(times) if length(i)>3]
     if length(intra_night_stds) > 2
         return median(intra_night_stds)
-    elseif length(intra_night_stds) > 2
+    elseif length(intra_night_stds) > 1
         @warn "only a couple of nights to base the intra night std of the RVs on"
+        return median(intra_night_stds)
+    elseif length(intra_night_stds) > 0
+        @warn "only one night to base the intra night std of the RVs on"
         return median(intra_night_stds)
     else
         @warn "no nights to base the intra night std of the RVs on. Returning the std of all of the observations"

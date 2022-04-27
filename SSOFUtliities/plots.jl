@@ -8,6 +8,7 @@ _plt_size = (1920,1080)
 _thickness_scaling = 2
 # _theme = :default
 _theme = :juno
+_theme == :juno ? base_color = :white : base_color=:black
 _plot(; dpi = _plt_dpi, size = _plt_size, thickness_scaling=_thickness_scaling, kwargs...) =
     plot(; dpi=dpi, size=size, thickness_scaling=thickness_scaling, kwargs...)
 plot_spectrum(; xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const", kwargs...) =
@@ -31,9 +32,9 @@ function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat
     ervs = inst_rvs .- median(inst_rvs)
     mrvs = model_rvs .- median(model_rvs)
     plot_model_rvs!(plt[1], inst_times, ervs, inst_rvs_σ; label="Instrument", kwargs...)
-    plot_model_rvs!(plt[1], times_nu, mrvs, model_rvs_σ; label="Model", kwargs...)
+    plot_model_rvs!(plt[1], times_nu, mrvs, model_rvs_σ; label="SSOF", kwargs...)
     resids = mrvs - ervs
-    _scatter!(plt[2], times_nu, resids, ylabel="model - Instrument (m/s)", yerror=sqrt.(model_rvs_σ .^ 2 + inst_rvs_σ .^ 2), alpha = 0.5, label="std: $(round(std(resids), digits=3))", markerstrokewidth=1)
+    _scatter!(plt[2], times_nu, resids, ylabel="SSOF - Instrument (m/s)", yerror=sqrt.(model_rvs_σ .^ 2 + inst_rvs_σ .^ 2), alpha = 0.5, label="std: $(round(std(resids), digits=3))", markerstrokewidth=1)
     if display_plt; display(plt) end
     return plt
 end
@@ -45,7 +46,7 @@ function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat
 end
 
 c_ind_f(i) = ((i + 3) % 19) + 1
-function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; display_plt::Bool=true, d::Union{SSOF.Data, Nothing}=nothing, o::Union{SSOF.Output, Nothing}=nothing, kwargs...)
+function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; display_plt::Bool=true, d::Union{SSOF.Data, Nothing}=nothing, o::Union{SSOF.Output, Nothing}=nothing, incl_χ²::Bool=true, kwargs...)
 	plot_stellar = SSOF.is_time_variable(om.star)
 	plot_telluric = SSOF.is_time_variable(om.tel)
 	# plot the two templates if there is no time variation
@@ -60,13 +61,13 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 	n_plots = plot_stellar + plot_telluric
 	plt = _plot(; layout=grid(2, n_plots), size=(n_plots * _plt_size[1],_plt_size[2]*1.5))
 	shift_M = 0.2
-	incl_χ² = !isnothing(d) && !isnothing(o)
+	incl_χ² = incl_χ² && !isnothing(d) && !isnothing(o)
 	if incl_χ²; χ²_base = SSOF._loss(o, om, d) end
 	if plot_telluric
 		inds = 1:size(om.tel.lm.M, 2)
 
 		# basis plot
-		plot!(plt[1, 1], om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ", alpha=0.3, color=:white, title="Telluric Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
+		plot!(plt[1, 1], om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ", alpha=0.3, color=base_color, title="Telluric Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
 		plot!(plt[1, 1], om.tel.λ, om.tel.lm.μ; label="μₜₑₗ")
 
 		_scatter!(plt[2, 1], times_nu, airmasses; label="Airmasses", color=plt_colors[1])
@@ -99,7 +100,7 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 		inds = 1:size(om.star.lm.M, 2)
 
 		# basis plot
-		plot!(plt[1, n_plots], om.tel.λ, om.tel.lm.μ; label="μₜₑₗ", alpha=0.3, color=:white, title="Stellar Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
+		plot!(plt[1, n_plots], om.tel.λ, om.tel.lm.μ; label="μₜₑₗ", alpha=0.3, color=base_color, title="Stellar Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
 		plot!(plt[1, n_plots], om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ")
 
 		shift_s = ceil(10 * maximum([std(om.star.lm.s[inds[i], :] .* norm(om.star.lm.M[:, inds[i]])) for i in inds])) / 2
@@ -150,12 +151,12 @@ function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool
     plot!(plt[1], obs_λ, star_model .- shift, label="Mean Stellar Model")
 
     shift += 1.1 - minimum(star_model)
-    plot!(plt[1], obs_λ, time_average(o.total) .- shift, label="Mean Full Model", color=:white)
+    plot!(plt[1], obs_λ, time_average(o.total) .- shift, label="Mean Full Model", color=base_color)
 
-    _scatter!(plt[2], obs_λ[obs_mask], time_average(abs.(view(d.flux, obs_mask, :) - view(o.total, obs_mask, :))), ylabel="MAD", label="", alpha=0.5, color=:white, xlabel="", ms=1.5)
+    _scatter!(plt[2], obs_λ[obs_mask], time_average(abs.(view(d.flux, obs_mask, :) - view(o.total, obs_mask, :))), ylabel="MAD", label="", alpha=0.5, color=base_color, xlabel="", ms=1.5)
 
 	if include_χ²
-		_scatter!(plt[3], obs_λ, -sum(SSOF._loss_diagnostic(mws); dims=2), ylabel="Remaining χ²", label="", alpha=0.5, color=:white, xlabel="", ms=1.5)
+		_scatter!(plt[3], obs_λ, -sum(SSOF._loss_diagnostic(mws); dims=2), ylabel="Remaining χ²", label="", alpha=0.5, color=base_color, xlabel="", ms=1.5)
 	end
 
     if display_plt; display(plt) end
@@ -178,10 +179,10 @@ function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n
     return plt
 end
 
-function save_model_plots(mws, airmasses, times_nu, save_path::String; display_plt::Bool=true)
-	plt = plot_model(mws, airmasses, times_nu; display_plt=display_plt);
+function save_model_plots(mws, airmasses, times_nu, save_path::String; display_plt::Bool=true, incl_χ²::Bool=true, kwargs...)
+	plt = plot_model(mws, airmasses, times_nu; display_plt=display_plt, incl_χ²=incl_χ², kwargs...);
 	png(plt, save_path * "model.png")
 
-	plt = status_plot(mws; display_plt=display_plt);
+	plt = status_plot(mws; display_plt=display_plt, kwargs...);
 	png(plt, save_path * "status_plot.png")
 end

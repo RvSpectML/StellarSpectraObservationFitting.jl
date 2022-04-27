@@ -11,7 +11,7 @@ SSOFU = SSOFUtilities
 
 ## Setting up necessary variables
 
-input_ind = SSOF.parse_args(1, Int, 3)
+input_ind = SSOF.parse_args(1, Int, 0)
 
 stars = ["10700", "9407", "2021/12/19", "2021/12/20", "2021/12/23"]
 input_ind == 0 ? star_inds = (1:length(stars)) : star_inds = input_ind:input_ind
