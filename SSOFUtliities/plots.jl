@@ -6,8 +6,8 @@ import StellarSpectraObservationFitting as SSOF
 _plt_dpi = 400
 _plt_size = (1920,1080)
 _thickness_scaling = 2
-# _theme = :default
-_theme = :juno
+_theme = :default
+# _theme = :juno
 _theme == :juno ? base_color = :white : base_color=:black
 _plot(; dpi = _plt_dpi, size = _plt_size, thickness_scaling=_thickness_scaling, kwargs...) =
     plot(; dpi=dpi, size=size, thickness_scaling=thickness_scaling, kwargs...)
