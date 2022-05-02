@@ -4,6 +4,7 @@ using StaticArrays
 import TemporalGPs; TGP = TemporalGPs
 
 @assert typeof(SOAP_gp.f.kernel.kernel.kernel) <: Matern52Kernel
+@assert typeof(LSF_gp.f.kernel.kernel.kernel) <: Matern52Kernel
 
 ## Defining necessary params
 
