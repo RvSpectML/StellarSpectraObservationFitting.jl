@@ -344,11 +344,11 @@ function OrderModel(
 	rv = Submodel(d.log_λ_star, 1; include_mean=false, kwargs...)
 
 	n_obs = size(d.log_λ_obs, 2)
-	star_dop = [d.log_λ_star[1, i] - d.log_λ_obs[1, i] for i in 1:n_obs]
-	star_log_λ_tel = ones(length(star.log_λ), n_obs)
-	for i in 1:n_obs
-		star_log_λ_tel[:, i] .= star.log_λ .+ star_dop[i]
-	end
+	# star_dop = [median(d.log_λ_star[:, i] - d.log_λ_obs[:, i]) for i in 1:n_obs]
+	# star_log_λ_tel = ones(length(star.log_λ), n_obs)
+	# for i in 1:n_obs
+	# 	star_log_λ_tel[:, i] .= star.log_λ .+ star_dop[i]
+	# end
 	todo = Dict([(:reg_improved, false), (:downsized, false), (:optimized, false), (:err_estimated, false)])
 	metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
 	if oversamp
