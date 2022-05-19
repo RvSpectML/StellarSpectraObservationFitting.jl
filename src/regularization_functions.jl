@@ -61,7 +61,8 @@ function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol,
         if isapprox(end_ℓ, last_checked_ℓ; rtol=1e-3)
             @warn "weak local minimum $end_ℓ vs. $last_checked_ℓ"
         end
-        println("test χ²: $start_ℓ -> $end_ℓ ($(round(end_ℓ/start_ℓ; digits=3)))")
+        println("$(reg_fields[1])[:$reg_key] χ²: $start_ℓ -> $end_ℓ ($(round(end_ℓ/start_ℓ; digits=3)))")
+        println("overall χ² change: $before_ℓ -> $end_ℓ ($(round(end_ℓ/before_ℓ; digits=3)))")
         if end_ℓ > (1.1 * before_ℓ)
             for field in reg_fields
                 getfield(mws.om, field)[reg_key] = 0.

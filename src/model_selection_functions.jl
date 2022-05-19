@@ -1,6 +1,7 @@
 total_length(x::Vector{<:AbstractArray}) = sum(total_length.(x))
 total_length(x::AbstractArray) = length(x)
-total_length(mws::AdamWorkspace) = total_length(mws.total.θ)
+total_length(mws::FrozenTelWorkspace) = total_length(mws.total.θ) - is_time_variable(mws.om.tel) * length(mws.total.θ[1][1]) - length(mws.total.θ[1][end])
+total_length(mws::TotalWorkspace) = total_length(mws.total.θ)
 total_length(mws::OptimWorkspace) = length(mws.telstar.p0) + length(mws.rv.p0)
 function effective_length(x; return_mask::Bool=false, masked_val::Real = Inf)
     mask = x .!= masked_val
@@ -23,16 +24,28 @@ function intra_night_std(rvs::Vector, times::Vector)
     return median(intra_night_stds)
 end
 
+n_negligible(x::AbstractVecOrMat) = sum(abs.(x) .< (1e-4 * sqrt(sum(abs2, x))))
+function n_negligible(x::Submodel)
+    n = n_negligible(x.lm.μ)
+    if is_time_variable(x); n += n_negligible(x.lm.M) end
+    return n
+end
+function n_negligible(mws::ModelWorkspace)
+    n = n_negligible(mws.om.star)
+    if !(typeof(mws) <: FrozenTelWorkspace); n += n_negligible(mws.om.tel) end
+    return n
+end
 function test_ℓ_for_n_comps_basic(n_comps::Vector, mws_inp::ModelWorkspace; return_inters::Bool=false, iter=50, kwargs...)
     mws = typeof(mws_inp)(downsize(mws_inp.om, n_comps[1], n_comps[2]), mws_inp.d)
     train_OrderModel!(mws; iter=iter, kwargs...)  # 16s
+    n = total_length(mws) - n_negligible(mws)
     if return_inters
-        return mws, _loss(mws), total_length(mws)
+        return mws, _loss(mws), n
     end
-    return _loss(mws), total_length(mws)
+    return _loss(mws), n
 end
 function test_ℓ_for_n_comps(n_comps::Vector, mws_inp::ModelWorkspace, times::Vector; return_inters::Bool=false, iter=50, kwargs...)
-    mws, l, len = test_ℓ_for_n_comps_basic(n_comps, mws_inp; return_inters=true)
+    mws, l, len = test_ℓ_for_n_comps_basic(n_comps, mws_inp; return_inters=true, iter=iter, kwargs...)
     model_rvs = rvs(mws.om)
     return l, len, std(model_rvs), intra_night_std(model_rvs, times)
 end

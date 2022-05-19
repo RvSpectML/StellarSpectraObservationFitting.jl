@@ -138,6 +138,8 @@ function process!(d; kwargs...)
 	median_normalize!(d)
 	mask_low_pixels!(d)
 	mask_bad_edges!(d)
-	continuum_normalize!(d; kwargs...)
+	valid = (sum(isinf.(d.var)) / length(d.var)) < 0.5
+	if valid; continuum_normalize!(d; kwargs...) end
 	mask_high_pixels!(d)
+	return valid
 end
