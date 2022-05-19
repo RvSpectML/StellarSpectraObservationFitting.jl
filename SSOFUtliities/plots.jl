@@ -143,16 +143,16 @@ function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool
 		plt = plot_spectrum(; legend = :bottomright, layout = grid(3, 1, heights=[0.6, 0.2, 0.2]), ylabel="Flux + Constant Shift", kwargs...) :
 		plt = plot_spectrum(; legend = :bottomright, layout = grid(2, 1, heights=[0.85, 0.15]), kwargs...)
 
-	tel_model = time_average(o.tel)
-    plot!(plt[1], obs_λ, tel_model, label="Mean Telluric Model")
-
+	tel_model = time_average(mws.om.tel())
+    plot!(plt[1], mws.om.tel.λ, tel_model, label="Mean Telluric Model")
     shift = 1.1 - minimum(tel_model)
 
-	typeof(mws.om) <: SSOF.OrderModelWobble ?
-		star_model = time_average(o.star) :
-		star_model = time_average(o.star + o.rv)
+	star_model = time_average(mws.om.star())
+	# typeof(mws.om) <: SSOF.OrderModelWobble ?
+	# 	star_model = time_average(mws.om.star()) :
+	# 	star_model = time_average(mws.om.star() + mws.om.rv())
 
-    plot!(plt[1], obs_λ, star_model .- shift, label="Mean Stellar Model")
+    plot!(plt[1], mws.om.star.λ, star_model .- shift, label="Mean Stellar Model")
 
     shift += 1.1 - minimum(star_model)
     plot!(plt[1], obs_λ, time_average(o.total) .- shift, label="Mean Full Model", color=base_color)
