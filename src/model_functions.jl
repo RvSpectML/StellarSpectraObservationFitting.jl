@@ -14,9 +14,85 @@ using SpecialFunctions
 using StaticArrays
 using Nabla
 
+abstract type OrderModel end
+abstract type Output end
 abstract type Data end
 
 _current_matrix_modifier = SparseMatrixCSC
+
+function D_to_rv(D)
+	x = exp.(2 .* D)
+	return light_speed_nu .* ((1 .- x) ./ (1 .+ x))
+end
+rv_to_D(v) = log.((1 .- v ./ light_speed_nu) ./ (1 .+ v ./ light_speed_nu)) ./ 2
+function _lower_inds(model_log_λ::AbstractVector{<:Real}, rvs, log_λ_obs::AbstractMatrix)
+	n_obs = length(rvs)
+	len = size(log_λ_obs, 1)
+	lower_inds = Array{Int64}(undef, len, n_obs)
+	lower_inds_adj = Array{Int64}(undef, len, n_obs)
+	log_λ_holder = Array{Float64}(undef, len)
+	len_model = length(model_log_λ)
+	for i in 1:n_obs
+		log_λ_holder[:] .= view(log_λ_obs, :, i) .+ rv_to_D(rvs[i])
+		lower_inds[:, i] .= searchsortednearest(model_log_λ, log_λ_holder; lower=true)
+		for j in 1:len
+			if lower_inds[j, i] >= len_model
+				lower_inds[j, i] = len_model - 1
+			elseif lower_inds[j, i] < 1
+				lower_inds[j, i] = 1
+			end
+		end
+		lower_inds_adj[:, i] .= ((i - 1) * len_model) .+ view(lower_inds, :, i)
+	end
+	return lower_inds, lower_inds_adj
+end
+
+struct StellarInterpolationHelper{T1<:Real, T2<:Int}
+    log_λ_obs_m_model_log_λ_lo::AbstractMatrix{T1}
+	model_log_λ_hi_m_lo::T1
+	lower_inds::AbstractMatrix{T2}
+	lower_inds_p1::AbstractMatrix{T2}
+	function StellarInterpolationHelper(
+		log_λ_obs_m_model_log_λ_lo::AbstractMatrix{T1},
+		model_log_λ_hi_m_lo::T1,
+		lower_inds::AbstractMatrix{T2},
+		lower_inds_p1::AbstractMatrix{T2}) where {T1<:Real, T2<:Int}
+		# @assert some issorted thing?
+		return new{T1, T2}(log_λ_obs_m_model_log_λ_lo, model_log_λ_hi_m_lo, lower_inds, lower_inds_p1)
+	end
+end
+function StellarInterpolationHelper(
+	model_log_λ::StepRangeLen,
+	bary_rvs::AbstractVector{T},
+	log_λ_obs::AbstractMatrix{T}) where {T<:Real}
+
+	lower_inds, lower_inds_adj = _lower_inds(model_log_λ, bary_rvs, log_λ_obs)
+	# @assert some issorted thing?
+	return StellarInterpolationHelper(log_λ_obs - (view(model_log_λ, lower_inds)), model_log_λ.step.hi, lower_inds_adj, lower_inds_adj .+ 1)
+end
+function (sih::StellarInterpolationHelper)(inds::AbstractVecOrMat, len_model::Int)
+	lower_inds = copy(sih.lower_inds)
+	for i in 1:length(inds)
+		j = inds[i]
+		lower_inds[:, j] .+= (i - j) * len_model
+	end
+	return StellarInterpolationHelper(
+		view(sih.log_λ_obs_m_model_log_λ_lo, :, inds),
+		sih.model_log_λ_hi_m_lo,
+		lower_inds[:, inds],
+		lower_inds[:, inds] .+ 1)
+end
+
+function spectra_interp(model_flux::AbstractMatrix, rvs::AbstractVector, sih::StellarInterpolationHelper)
+	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_hi_m_lo
+	return (view(model_flux, sih.lower_inds).* (1 .- ratios)) + (view(model_flux, sih.lower_inds_p1) .* ratios)
+end
+function spectra_interp_nabla(model_flux, rvs, sih::StellarInterpolationHelper)
+	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_hi_m_lo
+	return (model_flux[sih.lower_inds] .* (1 .- ratios)) + (model_flux[sih.lower_inds_p1] .* ratios)
+end
+spectra_interp(model_flux, rvs, sih::StellarInterpolationHelper) =
+	spectra_interp_nabla(model_flux, rvs, sih)
 
 struct LSFData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
     flux::AM
@@ -318,13 +394,25 @@ end
 undersamp_interp_helper(to_x::AbstractMatrix, from_x::AbstractVector) =
 	[undersamp_interp_helper(view(to_x, :, i), from_x) for i in 1:size(to_x, 2)]
 
-struct OrderModel{T<:Number}
+struct OrderModelDPCA{T<:Number} <: OrderModel
     tel::Submodel
     star::Submodel
 	rv::Submodel
 	reg_tel::Dict{Symbol, T}
 	reg_star::Dict{Symbol, T}
 	b2o::AbstractVector{<:_current_matrix_modifier}
+	t2o::AbstractVector{<:_current_matrix_modifier}
+	metadata::Dict{Symbol, Any}
+	n::Int
+end
+struct OrderModelWobble{T<:Number} <: OrderModel
+    tel::Submodel
+    star::Submodel
+	rv::AbstractVector
+	reg_tel::Dict{Symbol, T}
+	reg_star::Dict{Symbol, T}
+	b2o::StellarInterpolationHelper
+	bary_rvs::AbstractVector{<:Real}
 	t2o::AbstractVector{<:_current_matrix_modifier}
 	metadata::Dict{Symbol, Any}
 	n::Int
@@ -337,33 +425,47 @@ function OrderModel(
 	n_comp_tel::Int=2,
 	n_comp_star::Int=2,
 	oversamp::Bool=true,
+	dpca::Bool=true,
 	kwargs...)
 
 	tel = Submodel(d.log_λ_obs, n_comp_tel; type=:tel, kwargs...)
 	star = Submodel(d.log_λ_star, n_comp_star; type=:star, kwargs...)
-	rv = Submodel(d.log_λ_star, 1; include_mean=false, kwargs...)
-
 	n_obs = size(d.log_λ_obs, 2)
-	# star_dop = [median(d.log_λ_star[:, i] - d.log_λ_obs[:, i]) for i in 1:n_obs]
-	# star_log_λ_tel = ones(length(star.log_λ), n_obs)
-	# for i in 1:n_obs
-	# 	star_log_λ_tel[:, i] .= star.log_λ .+ star_dop[i]
-	# end
+	dpca ?
+		rv = Submodel(d.log_λ_star, 1; include_mean=false, kwargs...) :
+		rv = zeros(n_obs)
+
+	bary_rvs = D_to_rv.([median(d.log_λ_star[:, i] - d.log_λ_obs[:, i]) for i in 1:n_obs])
 	todo = Dict([(:reg_improved, false), (:downsized, false), (:optimized, false), (:err_estimated, false)])
 	metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
-	if oversamp
-		b2o = oversamp_interp_helper(d.log_λ_star_bounds, star.log_λ)
-		t2o = oversamp_interp_helper(d.log_λ_obs_bounds, tel.log_λ)
+	if dpca
+		if oversamp
+			b2o = oversamp_interp_helper(d.log_λ_star_bounds, star.log_λ)
+			t2o = oversamp_interp_helper(d.log_λ_obs_bounds, tel.log_λ)
+		else
+			b2o = undersamp_interp_helper(d.log_λ_star, star.log_λ)
+			t2o = undersamp_interp_helper(d.log_λ_obs, tel.log_λ)
+		end
+		return OrderModelDPCA(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), b2o, t2o, metadata, n_obs)
 	else
-		b2o = undersamp_interp_helper(d.log_λ_star, star.log_λ)
-		t2o = undersamp_interp_helper(d.log_λ_obs, tel.log_λ)
+		b2o = StellarInterpolationHelper(star.log_λ, bary_rvs, d.log_λ_obs)
+		if oversamp
+			t2o = oversamp_interp_helper(d.log_λ_obs_bounds, tel.log_λ)
+		else
+			t2o = undersamp_interp_helper(d.log_λ_obs, tel.log_λ)
+		end
+		return OrderModelWobble(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), b2o, bary_rvs, t2o, metadata, n_obs)
 	end
-	return OrderModel(tel, star, rv, copy(default_reg_tel), copy(default_reg_star), b2o, t2o, metadata, n_obs)
 end
-Base.copy(om::OrderModel) = OrderModel(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.b2o, om.t2o, copy(om.metadata), om.n)
-(om::OrderModel)(inds::AbstractVecOrMat) =
-	OrderModel(om.tel(inds), om.star(inds), om.rv(inds), om.reg_tel,
+Base.copy(om::OrderModelDPCA) = OrderModelDPCA(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.b2o, om.t2o, copy(om.metadata), om.n)
+(om::OrderModelDPCA)(inds::AbstractVecOrMat) =
+	OrderModelDPCA(om.tel(inds), om.star(inds), om.rv(inds), om.reg_tel,
 		om.reg_star, view(om.b2o, inds), view(om.t2o, inds), copy(om.metadata), length(inds))
+Base.copy(om::OrderModelWobble) = OrderModelWobble(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.b2o, om.bary_rvs, om.t2o, copy(om.metadata), om.n)
+(om::OrderModelWobble)(inds::AbstractVecOrMat) =
+	OrderModelWobble(om.tel(inds), om.star(inds), view(om.rv, inds), om.reg_tel,
+		om.reg_star, om.b2o(inds, length(om.star.lm.μ)), view(om.bary_rvs, inds), view(om.t2o, inds), copy(om.metadata), length(inds))
+
 function rm_dict!(d::Dict)
 	for (key, value) in d
 		delete!(d, key)
@@ -406,7 +508,8 @@ function _eval_lm_vec(om::OrderModel, v)
 end
 
 # I have no idea why the negative sign needs to be here
-rvs(model::OrderModel) = vec(model.rv.lm.s .* -light_speed_nu)
+rvs(model::OrderModelDPCA) = vec(model.rv.lm.s .* -light_speed_nu)
+rvs(model::OrderModelWobble) = model.rv
 
 function downsize(lm::FullLinearModel, n_comp::Int)
 	if n_comp > 0
@@ -423,11 +526,16 @@ function downsize(lm::TemplateModel, n_comp::Int)
 end
 downsize(sm::Submodel, n_comp::Int) =
 	Submodel(copy(sm.log_λ), copy(sm.λ), downsize(sm.lm, n_comp), copy(sm.A_sde), copy(sm.Σ_sde), copy(sm.Δℓ_coeff))
-downsize(m::OrderModel, n_comp_tel::Int, n_comp_star::Int) =
-	OrderModel(
+downsize(m::OrderModelDPCA, n_comp_tel::Int, n_comp_star::Int) =
+	OrderModelDPCA(
 		downsize(m.tel, n_comp_tel),
 		downsize(m.star, n_comp_star),
 		m.rv, m.reg_tel, m.reg_star, m.b2o, m.t2o, m.metadata, m.n)
+downsize(m::OrderModelWobble, n_comp_tel::Int, n_comp_star::Int) =
+	OrderModelWobble(
+		downsize(m.tel, n_comp_tel),
+		downsize(m.star, n_comp_star),
+		m.rv, m.reg_tel, m.reg_star, m.b2o, m.bary_rvs, m.t2o, m.metadata, m.n)
 
 spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
 	hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
@@ -441,9 +549,9 @@ Nabla.∇(::typeof(spectra_interp), ::Type{Arg{1}}, _, y, ȳ, model, interp_hel
 	hcat([interp_helper[i]' * view(ȳ, :, i) for i in 1:size(model, 2)]...)
 
 tel_model(om::OrderModel; lm=om.tel.lm::LinearModel) = spectra_interp(lm(), om.t2o)
-star_model(om::OrderModel; lm=om.star.lm::LinearModel) = spectra_interp(lm(), om.b2o)
-rv_model(om::OrderModel; lm=om.rv.lm::LinearModel) = spectra_interp(lm(), om.b2o)
-
+star_model(om::OrderModelDPCA; lm=om.star.lm::LinearModel) = spectra_interp(lm(), om.b2o)
+rv_model(om::OrderModelDPCA; lm=om.rv.lm::LinearModel) = spectra_interp(lm(), om.b2o)
+star_model(om::OrderModelWobble; lm=om.star.lm::LinearModel) = spectra_interp(lm(), om.rv .+ om.bary_rvs, om.b2o)
 
 function fix_FullLinearModel_s!(flm, min::Number, max::Number)
 	@assert all(min .< flm.μ .< max)
@@ -635,8 +743,12 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2,
 
 	om.star.lm.M .= view(M_star, :, 2:size(M_star, 2))
 	om.star.lm.s[:] = view(s_star, 2:size(s_star, 1), :)
-	om.rv.lm.M .= view(M_star, :, 1)
-	om.rv.lm.s[:] = view(s_star, 1, :)
+	if typeof(om) <: OrderModelDPCA
+		om.rv.lm.M .= view(M_star, :, 1)
+		om.rv.lm.s[:] = view(s_star, 1, :)
+	else
+		om.rv[:] .= view(s_star, 1, :) .* -light_speed_nu #TODO check if this is correct
+	end
 
 	if is_time_variable(om.tel)
 		# telluric model with updated stellar template
@@ -707,36 +819,66 @@ star_prior(om::OrderModel) = star_prior(om.star.lm, om)
 star_prior(lm, om::OrderModel) = model_prior(lm, om, :star)
 
 total_model(tel, star, rv) = tel .* (star .+ rv)
+total_model(tel, star) = tel .* star
 
-struct Output{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}}
+struct OutputDPCA{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}} <: Output
 	tel::AM
 	star::AM
 	rv::AM
 	total::M
-	function Output(tel::AM, star::AM, rv::AM, total::M) where {T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}}
+	function OutputDPCA(tel::AM, star::AM, rv::AM, total::M) where {T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}}
 		@assert size(tel) == size(star) == size(rv) == size(total)
 		new{T, AM, M}(tel, star, rv, total)
 	end
 end
-function Output(om::OrderModel, d::Data)
+function Output(om::OrderModelDPCA, d::Data)
 	@assert size(om.b2o[1], 1) == size(d.flux, 1)
-	return Output(tel_model(om), star_model(om), rv_model(om), d)
+	return OutputDPCA(tel_model(om), star_model(om), rv_model(om), d)
 end
-Output(tel, star, rv, d::GenericData) =
-	Output(tel, star, rv, total_model(tel, star, rv))
-Output(tel, star, rv, d::LSFData) =
-	Output(tel, star, rv, d.lsf * total_model(tel, star, rv))
-Base.copy(o::Output) = Output(copy(tel), copy(star), copy(rv))
-function recalc_total!(o::Output, d::GenericData)
+OutputDPCA(tel, star, rv, d::GenericData) =
+	OutputDPCA(tel, star, rv, total_model(tel, star, rv))
+OutputDPCA(tel, star, rv, d::LSFData) =
+	OutputDPCA(tel, star, rv, d.lsf * total_model(tel, star, rv))
+Base.copy(o::OutputDPCA) = OutputDPCA(copy(tel), copy(star), copy(rv))
+function recalc_total!(o::OutputDPCA, d::GenericData)
 	o.total .= total_model(o.tel, o.star, o.rv)
 end
-function recalc_total!(o::Output, d::LSFData)
+function recalc_total!(o::OutputDPCA, d::LSFData)
 	o.total .= d.lsf * total_model(o.tel, o.star, o.rv)
 end
-function Output!(o::Output, om::OrderModel, d::Data)
+function Output!(o::OutputDPCA, om::OrderModelDPCA, d::Data)
 	o.tel .= tel_model(om)
 	o.star .= star_model(om)
 	o.rv .= rv_model(om)
+	recalc_total!(o, d)
+end
+struct OutputWobble{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}} <: Output
+	tel::AM
+	star::AM
+	total::M
+	function OutputWobble(tel::AM, star::AM, total::M) where {T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}}
+		@assert size(tel) == size(star) == size(total)
+		new{T, AM, M}(tel, star, total)
+	end
+end
+function Output(om::OrderModelWobble, d::Data)
+	@assert size(om.t2o[1], 1) == size(d.flux, 1)
+	return OutputWobble(tel_model(om), star_model(om), d)
+end
+OutputWobble(tel, star, d::GenericData) =
+	OutputWobble(tel, star, total_model(tel, star))
+OutputWobble(tel, star, d::LSFData) =
+	OutputWobble(tel, star, d.lsf * total_model(tel, star))
+Base.copy(o::OutputWobble) = OutputWobble(copy(tel), copy(star))
+function recalc_total!(o::OutputWobble, d::GenericData)
+	o.total .= total_model(o.tel, o.star)
+end
+function recalc_total!(o::OutputWobble, d::LSFData)
+	o.total .= d.lsf * total_model(o.tel, o.star)
+end
+function Output!(o::OutputWobble, om::OrderModelWobble, d::Data)
+	o.tel .= tel_model(om)
+	o.star .= star_model(om)
 	recalc_total!(o, d)
 end
 

@@ -147,7 +147,11 @@ function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool
     plot!(plt[1], obs_λ, tel_model, label="Mean Telluric Model")
 
     shift = 1.1 - minimum(tel_model)
-    star_model = time_average(o.star + o.rv)
+
+	typeof(mws.om) <: OrderModelWobble ?
+		star_model = time_average(o.star) :
+		star_model = time_average(o.star + o.rv)
+
     plot!(plt[1], obs_λ, star_model .- shift, label="Mean Stellar Model")
 
     shift += 1.1 - minimum(star_model)

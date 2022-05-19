@@ -103,9 +103,9 @@ function reformat_spectra(
 				data = SSOF.LSFData(flux_obs, var_obs, log_λ_obs, log_λ_star, lsf_f(exp.(log_λ_obs))) :
 				data = SSOF.GenericData(flux_obs, var_obs, log_λ_obs, log_λ_star)
 			# data_backup = copy(data)
-			SSOF.process!(data; order=2)
-			@save save_path*"data.jld2" n_obs data times_nu airmasses
 
+			proccessing_valid = SSOF.process!(data; order=2)
+			if proccessing_valid; @save save_path*"data.jld2" n_obs data times_nu airmasses end
 			# plt = _plot(;size=(2 * _plt_size[1],_plt_size[2]), legend=:bottom)
 			# for j in 1:size(data_backup.flux, 2)
 			# 	ys = data_backup.flux[:, j]
@@ -113,10 +113,12 @@ function reformat_spectra(
 			# 	ys ./= median(ys[nanmask])
 			# 	plot!(plt, xs, ys ./ data.flux[:, j]; label="")
 			# end
+			proccessing_valid ?
+				println("finished order $order") :
+				println("unable to process order $order")
 		else
 			println("order $order skipped for being only $(length(mask_inds)) useful pixels wide")
 		end
-		println("finished order $order")
 	end
 
 	if is_NEID

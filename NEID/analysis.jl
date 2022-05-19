@@ -12,8 +12,8 @@ using Plots
 
 ## Setting up necessary variables
 
-stars = ["10700", "9407", "2021/12/19", "2021/12/20", "2021/12/23"]
-star_choice = SSOF.parse_args(1, Int, 1)
+stars = ["10700", "26965", "9407", "185144", "2021/12/19", "2021/12/20", "2021/12/23"]
+star_choice = SSOF.parse_args(1, Int, 4)
 star = stars[star_choice]
 interactive = length(ARGS) == 0
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
@@ -21,9 +21,10 @@ desired_order = SSOF.parse_args(2, Int, 81)  # 81 has a bunch of tels, 60 has ve
 use_reg = SSOF.parse_args(3, Bool, true)
 which_opt = SSOF.parse_args(4, Int, 1)
 recalc = SSOF.parse_args(5, Bool, false)
+dpca = SSOF.parse_args(6, Bool, true)
 opt = SSOFU.valid_optimizers[which_opt]
 
-solar = star_choice > 2
+solar = star_choice > 4
 
 ## Loading in data and initializing model
 base_path = neid_save_path * star * "/$(desired_order)/"
@@ -33,9 +34,9 @@ save_path = base_path * "results.jld2"
 if solar
     @load neid_save_path * "10700/$(desired_order)/results.jld2" model
 	seed = model
-    model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, seed=seed)
+    model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, seed=seed, dpca=dpca)
 else
-    model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc)
+    model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, dpca=dpca)
 end
 mws = SSOFU.create_workspace(model, data, opt)
 SSOFU.improve_regularization!(mws; save_fn=save_path)

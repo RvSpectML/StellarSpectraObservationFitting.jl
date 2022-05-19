@@ -16,6 +16,7 @@ function create_model(
 	use_reg::Bool=true,
 	save_fn::String="",
 	recalc::Bool=false,
+	dpca::Bool=true,
 	seed::Union{SSOF.OrderModel, Nothing}=nothing
 	)
 
@@ -34,7 +35,7 @@ function create_model(
 	        @load save_fn rv_errors
 	    end
 	else
-	    model = SSOF.OrderModel(data, instrument, desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, oversamp=oversamp)
+	    model = SSOF.OrderModel(data, instrument, desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, oversamp=oversamp, dpca=dpca)
 	    model, _, _, _ = SSOF.initialize!(model, data; seed=seed)
 		if !use_reg
 			SSOF.rm_regularization!(model)
@@ -149,7 +150,10 @@ function estimate_errors(mws; save_fn="")
 
 		rvs = SSOF.rvs(model)
 	    n = 50
-	    rv_holder = Array{Float64}(undef, n, length(model.rv.lm.s))
+	    typeof(mws.om) <: OrderModelWobble ?
+		 	rv_holder = Array{Float64}(undef, n, length(model.rv)) :
+			rv_holder = Array{Float64}(undef, n, length(model.rv.lm.s))
+
 	    _mws = typeof(mws)(copy(model), copy(data))
 	    _mws_score_finalizer() = SSOF.finalize_scores_setup(_mws)
 	    for i in 1:n
