@@ -148,7 +148,7 @@ function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool
 
     shift = 1.1 - minimum(tel_model)
 
-	typeof(mws.om) <: OrderModelWobble ?
+	typeof(mws.om) <: SSOF.OrderModelWobble ?
 		star_model = time_average(o.star) :
 		star_model = time_average(o.star + o.rv)
 
