@@ -11,8 +11,8 @@ function effective_length(x; return_mask::Bool=false, masked_val::Real = Inf)
         return sum(mask)
     end
 end
-function intra_night_std(rvs::Vector, times::Vector)
-    intra_night_stds = [std(rvs[i]) for i in observation_night_inds(times) if length(i)>3]
+function intra_night_std(rvs::Vector, times::Vector; thres::Int=3)
+    intra_night_stds = [std(rvs[i]) for i in observation_night_inds(times) if length(i)>(thres-1)]
     if length(intra_night_stds) < 1
         @warn "no nights to base the intra night std of the RVs on. Returning the std of all of the observations"
         return std(rvs)

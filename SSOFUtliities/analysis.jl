@@ -58,7 +58,7 @@ function create_workspace(model, data, opt::String)
 	return mws
 end
 
-function improve_regularization!(mws; redo::Bool=false, print_stuff::Bool=true, testing_ratio::Real=0.25, save_fn::String="")
+function improve_regularization!(mws::SSOF.ModelWorkspace; redo::Bool=false, print_stuff::Bool=true, testing_ratio::Real=0.25, save_fn::String="")
 
 	save = save_fn!=""
 
@@ -78,7 +78,7 @@ function improve_regularization!(mws; redo::Bool=false, print_stuff::Bool=true, 
 	end
 end
 
-function improve_model!(mws; print_stuff::Bool=true, show_plot::Bool=false, save_fn::String="", kwargs...)
+function improve_model!(mws::SSOF.ModelWorkspace; print_stuff::Bool=true, show_plot::Bool=false, save_fn::String="", kwargs...)
 	save = save_fn!=""
 	model = mws.om
 	if !model.metadata[:todo][:optimized]
@@ -89,8 +89,12 @@ function improve_model!(mws; print_stuff::Bool=true, show_plot::Bool=false, save
 	    if save; @save save_fn model end
 	end
 end
+function improve_model!(mws::SSOF.ModelWorkspace, airmasses::AbstractVector, times::AbstractVector; show_plot::Bool=false, kwargs...)
+	improve_model!(mws; show_plot=show_plot, kwargs...)
+	if show_plot; plot_model(mws, airmasses, times) end
+end
 
-function downsize_model(mws, times; save_fn::String="", decision_fn::String="", print_stuff::Bool=true, plots_fn::String="", kwargs...)
+function downsize_model(mws::SSOF.ModelWorkspace, times; save_fn::String="", decision_fn::String="", print_stuff::Bool=true, plots_fn::String="", kwargs...)
 	save = save_fn!=""
 	save_md = decision_fn!=""
 	save_plots = plots_fn!=""
@@ -131,7 +135,7 @@ function downsize_model(mws, times; save_fn::String="", decision_fn::String="", 
 		return mws_smol, ℓ, aics, bics, comp_stds, comp_intra_stds
 	end
 end
-function _downsize_model(mws, n_comps_tel::Int, n_comps_star::Int; print_stuff::Bool=true)
+function _downsize_model(mws::SSOF.ModelWorkspace, n_comps_tel::Int, n_comps_star::Int; print_stuff::Bool=true)
 	model = SSOF.downsize(mws.om, n_comps_tel, n_comps_star)
 	mws_smol = typeof(mws)(model, mws.d)
 	SSOF.train_OrderModel!(mws_smol; print_stuff=print_stuff)  # 120s
@@ -139,7 +143,7 @@ function _downsize_model(mws, n_comps_tel::Int, n_comps_star::Int; print_stuff::
 	return mws_smol
 end
 
-function estimate_errors(mws; save_fn="")
+function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="")
 	save = save_fn!=""
 	model = mws.om
 	data = mws.d
@@ -150,7 +154,7 @@ function estimate_errors(mws; save_fn="")
 
 		rvs = SSOF.rvs(model)
 	    n = 50
-	    typeof(mws.om) <: OrderModelWobble ?
+	    typeof(mws.om) <: SSOF.OrderModelWobble ?
 		 	rv_holder = Array{Float64}(undef, n, length(model.rv)) :
 			rv_holder = Array{Float64}(undef, n, length(model.rv.lm.s))
 

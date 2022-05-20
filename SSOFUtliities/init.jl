@@ -136,7 +136,6 @@ function reformat_spectra(
 				neid_order_rv[i, j] = ccf_header["CCFRV"*n2s(j)] * 1000  # m/s
 			end
 		end
-		ord_has_rvs = vec(all(.!iszero.(neid_order_rv); dims=2))
-		@save save_path_base * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs
+		@save save_path_base * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv
 	end
 end

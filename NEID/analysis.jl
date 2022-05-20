@@ -40,12 +40,12 @@ else
 end
 mws = SSOFU.create_workspace(model, data, opt)
 SSOFU.improve_regularization!(mws; save_fn=save_path)
-SSOFU.improve_model!(mws; show_plot=interactive, save_fn=save_path)
+SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path)
 mws, _, _, _, _, _ = SSOFU.downsize_model(mws, times_nu; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path, use_aic=!solar)
 rvs, rv_errors = SSOFU.estimate_errors(mws; save_fn=save_path)
 
 ## Plots
-@load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv ord_has_rvs
+@load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv
 
 # Compare RV differences to actual RVs from activity
 plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
@@ -53,7 +53,7 @@ png(plt, base_path * "model_rvs.png")
 
 SSOFU.save_model_plots(mws, airmasses, times_nu, base_path; display_plt=interactive)
 
-if ord_has_rvs[desired_order]
-    plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, neid_order_rv[:, desired_order], zeros(length(times_nu)); display_plt=interactive, markerstrokewidth=1, title="$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+if all(.!iszero.(view(neid_order_rv, :, desired_order)))
+    plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, view(neid_order_rv, :, desired_order), zeros(length(times_nu)); display_plt=interactive, markerstrokewidth=1, title="$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
     png(plt, base_path * "model_rvs_order.png")
 end
