@@ -103,9 +103,32 @@ function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
     return l_telstar, l_telstar_s, l_rv
 end
 loss_funcs_telstar(mws::ModelWorkspace) = loss_funcs_telstar(mws.o, mws.om, mws.d)
-function loss_funcs_total(o::Output, om::OrderModel, d::Data)
+function loss_funcs_total(o::Output, om::OrderModelDPCA, d::Data)
     l_total(total) =
 		_loss_recalc_rv_basis(o, om, d; tel=total[1], star=total[2], rv=total[3]) +
+		tel_prior(total[1], om) + star_prior(total[2], om)
+	is_tel_time_variable = is_time_variable(om.tel)
+	is_star_time_variable = is_time_variable(om.star)
+    function l_total_s(total_s)
+		if is_tel_time_variable
+			tel = [om.tel.lm.M, total_s[1], om.tel.lm.μ]
+			is_star_time_variable ?
+				star = [om.star.lm.M, total_s[2], om.star.lm.μ] : star = nothing
+		elseif is_star_time_variable
+			tel = nothing
+			star = [om.star.lm.M, total_s[1], om.star.lm.μ]
+		else
+			tel = nothing
+			star = nothing
+		end
+		return _loss(o, om, d; tel=tel, star=star, rv=total_s[1+is_star_time_variable+is_tel_time_variable])
+    end
+
+    return l_total, l_total_s
+end
+function loss_funcs_total(o::Output, om::OrderModelWobble, d::Data)
+	l_total(total) =
+		_loss(o, om, d; tel=total[1], star=total[2], rv=total[3]) +
 		tel_prior(total[1], om) + star_prior(total[2], om)
 	is_tel_time_variable = is_time_variable(om.tel)
 	is_star_time_variable = is_time_variable(om.star)
@@ -532,9 +555,11 @@ function train_OrderModel!(ow::OptimWorkspace; print_stuff::Bool=_print_stuff_de
 
     # optimize RVs
 	result_rv = train_rvs_optim!(ow, optim_cb, kwargs...)
-    typeof(ow.om) <: OrderModelDPCA ?
-		ow.o.rv .= rv_model(ow.om) :
+    if typeof(ow.om) <: OrderModelDPCA
+		ow.o.rv .= rv_model(ow.om)
+	else
 		ow.o.star .= star_model(ow.om)
+	end
 
 	recalc_total!(ow.o, ow.d)
     if ignore_regularization
@@ -550,8 +575,16 @@ function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::Submodel, star::Submodel
 	rv.lm.s[:] = rv_ws.unflatten(rv_ws.p0)
 	return result_rv
 end
+function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::AbstractVector, optim_cb::Function, kwargs...)
+	options = Optim.Options(; callback=optim_cb, g_tol=1e-2, kwargs...)
+	result_rv = _OSW_optimize!(rv_ws, options)
+	rv[:] = rv_ws.unflatten(rv_ws.p0)
+	return result_rv
+end
 train_rvs_optim!(ow::OptimWorkspace, optim_cb::Function, kwargs...) =
-	train_rvs_optim!(ow.rv, ow.om.rv, ow.om.star, optim_cb, kwargs...)
+	typeof(ow.om) <: OrderModelDPCA ?
+		train_rvs_optim!(ow.rv, ow.om.rv, ow.om.star, optim_cb, kwargs...) :
+		train_rvs_optim!(ow.rv, ow.om.rv, optim_cb, kwargs...)
 
 fine_train_OrderModel!(mws::ModelWorkspace; iter=3*_iter_def, kwargs...) =
 	train_OrderModel!(mws; iter=iter, kwargs...)
@@ -567,8 +600,8 @@ function finalize_scores_setup(mws::ModelWorkspace; print_stuff::Bool=_print_stu
 	typeof(mws.om) <: OrderModelDPCA ?
 		rv_ws = OptimSubWorkspace(mws.om.rv.lm.s, loss_rv; use_cg=true) :
 		rv_ws = OptimSubWorkspace(mws.om.rv, loss_rv; use_cg=true)
-	score_trainer_template() = train_rvs_optim!(rv_ws, mws.om.rv, mws.om.star, optim_cb, kwargs...)
-	return score_trainer_template
+	rv_trainer() = train_rvs_optim!(rv_ws, mws.om.rv, mws.om.star, optim_cb, kwargs...)
+	return rv_trainer
 end
 function finalize_scores!(score_trainer::Function, mws::ModelWorkspace)
 	score_trainer()
