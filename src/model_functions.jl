@@ -763,8 +763,8 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2,
 		fracvar_tel = Float64[]
 	end
 
-	fix_FullLinearModel_s!(om.star.lm, min, max)
-	fix_FullLinearModel_s!(om.tel.lm, min, max)
+	# fix_FullLinearModel_s!(om.star.lm, min, max)
+	# fix_FullLinearModel_s!(om.tel.lm, min, max)
 
 	return om, rvs_notel, fracvar_tel, fracvar_star
 end
