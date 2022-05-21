@@ -24,7 +24,7 @@ function intra_night_std(rvs::Vector, times::Vector; thres::Int=3)
     return median(intra_night_stds)
 end
 
-n_negligible(x::AbstractVecOrMat) = sum(abs.(x) .< (1e-4 * sqrt(sum(abs2, x))))
+n_negligible(x::AbstractVecOrMat) = sum(abs.(x) .< (1e-5 * sqrt(sum(abs2, x))))
 function n_negligible(x::Submodel)
     n = n_negligible(x.lm.μ)
     if is_time_variable(x); n += n_negligible(x.lm.M) end

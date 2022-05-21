@@ -138,8 +138,8 @@ function process!(d; kwargs...)
 	median_normalize!(d)
 	mask_low_pixels!(d)
 	mask_bad_edges!(d)
-	valid = (sum(isinf.(d.var)) / length(d.var)) < 0.5
-	if valid; continuum_normalize!(d; kwargs...) end
+	red_enough = minimum(d.log_λ_obs) > log(4410)  # is there likely to even be a continuum
+	enough_points = (sum(isinf.(d.var)) / length(d.var)) < 0.5
+	if (red_enough && enough_points); continuum_normalize!(d; kwargs...) end
 	mask_high_pixels!(d)
-	return valid
 end

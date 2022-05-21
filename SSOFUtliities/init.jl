@@ -105,7 +105,7 @@ function reformat_spectra(
 			# data_backup = copy(data)
 
 			SSOF.process!(data; order=2)
-			@save save_path*"data.jld2" n_obs data times_nu airmasses end
+			@save save_path*"data.jld2" n_obs data times_nu airmasses
 			# plt = _plot(;size=(2 * _plt_size[1],_plt_size[2]), legend=:bottom)
 			# for j in 1:size(data_backup.flux, 2)
 			# 	ys = data_backup.flux[:, j]
@@ -113,7 +113,7 @@ function reformat_spectra(
 			# 	ys ./= median(ys[nanmask])
 			# 	plot!(plt, xs, ys ./ data.flux[:, j]; label="")
 			# end
-			println("finished order $order") :
+			println("finished order $order")
 		else
 			println("order $order skipped for being only $(length(mask_inds)) useful pixels wide")
 		end
