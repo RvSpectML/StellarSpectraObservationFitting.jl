@@ -29,6 +29,10 @@ solar = star_choice > 4
 ## Loading in data and initializing model
 base_path = neid_save_path * star * "/$(desired_order)/"
 data_path = base_path * "data.jld2"
+if !dpca
+	base_path *= "wobble/"
+	mkpath(base_path)
+end
 save_path = base_path * "results.jld2"
 
 if solar

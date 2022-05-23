@@ -1,6 +1,7 @@
 # Heavily inspired (if not blatantly ripped of from) the functions at
 # https://github.com/megbedell/wobble/blob/master/wobble/data.py
 using LinearAlgebra
+using Statistics
 
 # using Plots
 # These were initially defined to act on all of the orders of the spectra at a
@@ -126,16 +127,16 @@ function mask_bad_edges!(d; kwargs...)
 	end
 end
 
-function median_normalize!(d; kwargs...)
+function flat_normalize!(d; kwargs...)
 	for i in 1:size(d.log_λ_obs, 2)
-		continuum = median(view(d.flux, :, i)[.!(isnan.(view(d.flux, :, i)))])
+		continuum = quantile(view(d.flux, .!(isnan.(view(d.flux, :, i))), i), 0.9)
 		d.flux[:, i] ./= continuum
 		d.var[:, i] ./= continuum * continuum
 	end
 end
 
 function process!(d; kwargs...)
-	median_normalize!(d)
+	flat_normalize!(d)
 	mask_low_pixels!(d)
 	mask_bad_edges!(d)
 	red_enough = minimum(d.log_λ_obs) > log(4410)  # is there likely to even be a continuum

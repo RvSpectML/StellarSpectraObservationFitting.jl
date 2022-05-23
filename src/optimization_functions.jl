@@ -597,10 +597,16 @@ function finalize_scores_setup(mws::ModelWorkspace; print_stuff::Bool=_print_stu
 	end
 	optim_cb=optim_cb_f(; print_stuff=print_stuff)
 	loss_rv(rv) = _loss(mws; rv=rv)
-	typeof(mws.om) <: OrderModelDPCA ?
-		rv_ws = OptimSubWorkspace(mws.om.rv.lm.s, loss_rv; use_cg=true) :
-		rv_ws = OptimSubWorkspace(mws.om.rv, loss_rv; use_cg=true)
+	return _finalize_scores_setup(mws, mws.om, loss_rv, optim_cb; kwargs...)
+end
+function _finalize_scores_setup(mws::ModelWorkspace, om::OrderModelDPCA, loss_rv::Function, optim_cb::Function; kwargs...)
+	rv_ws = OptimSubWorkspace(mws.om.rv.lm.s, loss_rv; use_cg=true)
 	rv_trainer() = train_rvs_optim!(rv_ws, mws.om.rv, mws.om.star, optim_cb, kwargs...)
+	return rv_trainer
+end
+function _finalize_scores_setup(mws::ModelWorkspace, om::OrderModelWobble, loss_rv::Function, optim_cb::Function; kwargs...)
+	rv_ws = OptimSubWorkspace(mws.om.rv, loss_rv; use_cg=true)
+	rv_trainer() = train_rvs_optim!(rv_ws, mws.om.rv, optim_cb, kwargs...)
 	return rv_trainer
 end
 function finalize_scores!(score_trainer::Function, mws::ModelWorkspace)
