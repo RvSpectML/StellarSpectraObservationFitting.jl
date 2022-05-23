@@ -10,14 +10,14 @@ using CSV, DataFrames
 ## Setting up necessary variables
 
 SSOF_path = dirname(dirname(pathof(SSOF)))
-stars = ["10700", "9407", "2021_12_19", "2021/12/20", "2021/12/23"]
+stars = ["10700", "26965", "9407", "185144", "2021/12/19", "2021/12/20", "2021/12/23"]
 orders2inds(selected_orders::AbstractVector) = [searchsortedfirst(orders, order) for order in selected_orders]
 # prep_str = "noreg_"
 prep_str = ""
 
 # for star_ind in 1:2
-star_ind = SSOF.parse_args(1, Int, 3)
-orders_list = [4:122, 4:122, 4:122, 4:122, 4:122]
+star_ind = SSOF.parse_args(1, Int, 2)
+orders_list = repeat([4:122], length(stars))
 star = stars[star_ind]
 orders = orders_list[star_ind]
 
