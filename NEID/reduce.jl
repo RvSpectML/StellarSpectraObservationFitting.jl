@@ -12,7 +12,7 @@ using CSV, DataFrames
 SSOF_path = dirname(dirname(pathof(SSOF)))
 stars = ["10700", "26965", "9407", "185144", "2021/12/19", "2021/12/20", "2021/12/23"]
 orders2inds(selected_orders::AbstractVector) = [searchsortedfirst(orders, order) for order in selected_orders]
-# prep_str = "noreg_"
+# prep_str = "wobble_"
 prep_str = ""
 
 # for star_ind in 1:2
@@ -93,7 +93,7 @@ plt = SSOFU._scatter(orders, std(rvs; dims=2) ./ med_rvs_σ; legend=:topleft, la
 png(plt, "neid_" * prep_str * star * "_order_rv_ratio")
 
 annot = text.(orders[sortperm(χ²)], :center, :black, 4)
-plt = SSOFU._scatter(1:length(χ²), sort(χ²); label="χ²", series_annotations=annot, legend=:topleft, title=prep_str * star * "_χ²") #, yaxis=:log)
+plt = SSOFU._scatter(1:length(χ²), sort(χ²); label="χ²", series_annotations=annot, legend=:topleft, title=prep_str * star * "_χ²", size=(SSOFU._plt_size[1]*(length(orders) / 80),SSOFU._plt_size[2]), markerstrokewidth=0) #, yaxis=:log)
 png(plt, "neid_" * prep_str * star * "_χ²")
 
 # Compare RV differences to actual RVs from activity
