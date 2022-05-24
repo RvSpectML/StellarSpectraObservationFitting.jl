@@ -39,7 +39,17 @@ function retrieve_all_rvs(n_obs::Int, fns::Vector{String})
     rvs = zeros(n_ord,  n_obs)
     rvs_σ = Inf .* ones(n_ord, n_obs)
     for i in 1:n_ord
-        rvs[i, :], rvs_σ[i, :] = retrieve_rvs(fns[i]; pre_string="orders[$i]")
+        try
+            rvs[i, :], rvs_σ[i, :] = _retrieve_rvs(fns[i])
+        catch err
+            if isa(err, SystemError)
+                println("orders[$i] is missing")
+            elseif isa(err, KeyError)
+                println("orders[$i] analysis is incomplete")
+            else
+                rethrow()
+            end
+        end
     end
     return rvs, rvs_σ
 end
