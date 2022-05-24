@@ -40,6 +40,7 @@ function retrieve_all_rvs(n_obs::Int, fns::Vector{String})
     rvs_σ = Inf .* ones(n_ord, n_obs)
     for i in 1:n_ord
         rvs[i, :], rvs_σ[i, :] = retrieve_rvs(fns[i]; pre_string="orders[$i]")
+    end
     return rvs, rvs_σ
 end
 
