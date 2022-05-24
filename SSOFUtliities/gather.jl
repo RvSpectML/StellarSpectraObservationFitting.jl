@@ -2,12 +2,14 @@
 import StellarSpectraObservationFitting as SSOF
 using JLD2
 
-function safe_retrieve(retrieve_f, args...; kwargs...)
+function safe_retrieve(retrieve_f, args...; pre_string="order", kwargs...)
     try
         return retrieve_f(args...; kwargs...)
     catch err
         if isa(err, SystemError)
-            println("order is missing")
+            println(pre_string * " is missing")
+        elseif isa(err, KeyError)
+            println(pre_string * " analysis is incomplete")
         else
             rethrow()
         end
@@ -37,16 +39,7 @@ function retrieve_all_rvs(n_obs::Int, fns::Vector{String})
     rvs = zeros(n_ord,  n_obs)
     rvs_σ = Inf .* ones(n_ord, n_obs)
     for i in 1:n_ord
-        try
-            rvs[i, :], rvs_σ[i, :] = _retrieve_rvs(fns[i])
-        catch err
-            if isa(err, SystemError)
-                println("orders[$i] is missing")
-            else
-                rethrow()
-            end
-        end
-    end
+        rvs[i, :], rvs_σ[i, :] = retrieve_rvs(fns[i]; pre_string="orders[$i]")
     return rvs, rvs_σ
 end
 
