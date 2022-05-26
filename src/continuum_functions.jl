@@ -57,7 +57,7 @@ function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVecto
 	end
     return μ
 end
-function continuum_normalize!(d; kwargs...)
+function continuum_normalize!(d::Data; kwargs...)
 	continuum = ones(size(d.log_λ_obs, 1))
 	for i in 1:size(d.log_λ_obs, 2)
 		continuum[:] = fit_continuum(view(d.log_λ_obs, :, i), view(d.flux, :, i), view(d.var, :, i); kwargs...)
@@ -78,7 +78,7 @@ function mask_low_pixels!(y::AbstractVector, σ²::AbstractVector; min_flux::Rea
 	end
 	σ²[bad] .= Inf
 end
-function mask_low_pixels!(d; kwargs...)
+function mask_low_pixels!(d::Data; kwargs...)
 	for i in 1:size(d.log_λ_obs, 2)
 		mask_low_pixels!(view(d.flux, :, i), view(d.var, :, i); kwargs...)
 	end
@@ -96,7 +96,7 @@ function mask_high_pixels!(y::AbstractVector, σ²::AbstractVector; max_flux::Re
 	end
 	σ²[bad] .= Inf
 end
-function mask_high_pixels!(d; kwargs...)
+function mask_high_pixels!(d::Data; kwargs...)
 	for i in 1:size(d.log_λ_obs, 2)
 		mask_high_pixels!(view(d.flux, :, i), view(d.var, :, i); kwargs...)
 	end
@@ -121,17 +121,33 @@ function mask_bad_edges!(y::AbstractVector, σ²::AbstractVector; window_width::
 		end
 	end
 end
-function mask_bad_edges!(d; kwargs...)
+function mask_bad_edges!(d::Data; kwargs...)
 	for i in 1:size(d.log_λ_obs, 2)
 		mask_bad_edges!(view(d.flux, :, i), view(d.var, :, i); kwargs...)
 	end
 end
 
-function flat_normalize!(d; kwargs...)
+function flat_normalize!(d::Data; kwargs...)
 	for i in 1:size(d.log_λ_obs, 2)
 		continuum = quantile(view(d.flux, .!(isnan.(view(d.flux, :, i))), i), 0.9)
 		d.flux[:, i] ./= continuum
 		d.var[:, i] ./= continuum * continuum
+	end
+end
+
+function outlier_mask(v::AbstractVector; thres::Real=5)
+	μ = mean(v)
+	σ = stdm(v, μ)
+	return (v .< (μ + thres * σ)) .&& (v .> (μ - thres * σ))
+end
+
+function mask_bad_normalization!(d::Data; kwargs...)
+	mask = outlier_mask([mean(view(d.var, .!isinf.(view(d.var, :, i)), i)) for i in 1:size(d.var, 2)]; kwargs...) .|| outlier_mask(vec(std(d.flux; dims=1)); kwargs...)
+	for i in 1:size(d.log_λ_obs, 2)
+		if !mask[i]
+			d.var[:, i] .= Inf
+			println("spectrum $i masked for having a weird continuum normalization, consider removing it from your analysis")
+		end
 	end
 end
 
@@ -143,4 +159,5 @@ function process!(d; kwargs...)
 	enough_points = (sum(isinf.(d.var)) / length(d.var)) < 0.5
 	if (red_enough && enough_points); continuum_normalize!(d; kwargs...) end
 	mask_high_pixels!(d)
+	mask_bad_normalization!(d)
 end
