@@ -737,8 +737,9 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2,
 		om.star.lm.μ[:] = make_template(flux_star; min=μ_min, max=μ_max, use_mean=seeded)
 	end
 
-	_, M_star, s_star, rvs_notel =
-		DEMPCA(flux_star, om.star.λ, 1 ./ vars_star; template=om.star.lm.μ, num_components=n_comp_star + 1)
+	M_star = zeros(size(om.star.lm.M, 1), n_comp_star + 1)
+	s_star = zeros(n_comp_star + 1, size(om.star.lm.s, 2))
+	rvs_notel = DEMPCA!(flux_star, om.star.λ, M_star, s_star, 1 ./ vars_star; template=om.star.lm.μ)
 	fracvar_star = fracvar(flux_star .- om.star.lm.μ, M_star, s_star, 1 ./ vars_star)
 
 	om.star.lm.M .= view(M_star, :, 2:size(M_star, 2))

@@ -169,36 +169,18 @@ function EMPCA!(M::AbstractMatrix, Xtmp::AbstractMatrix, scores::AbstractMatrix,
 	scores[inds, :] .= m.coeff'
 end
 
-
-"""
-modified code shamelessly stolen from RvSpectraKitLearn.jl/src/generalized_pca.jl
-Compute first num_components basis vectors for PCA, after subtracting projection onto fixed_comp
-"""
-function fit_empca_rv(X::Matrix{T}, fixed_comp::Vector{T}, weights::Matrix{T}; mu::Vector{T}=vec(mean(X, dims=2)), num_components::Integer=3, kwargs...) where {T<:Real}
-
-	# initializing relevant quantities
-	num_lambda = size(X, 1)
-    num_spectra = size(X, 2)
-    M = rand(T, (num_lambda, num_components))  # random initialization is part of algorithm (i.e., not zeros)
-    scores = zeros(num_components, num_spectra)
-
-    Xtmp = X .- mu  # perform PCA after subtracting off mean
-
-	# doppler component calculations
-	rvs = project_doppler_comp!(M, Xtmp, scores, fixed_comp)
-
-	if num_components > 1
-		EMPCA!(M, Xtmp, scores, weights; inds=2:size(M, 2), kwargs...)
-	end
-
-	return (mu, M, scores, rvs)
+function DEMPCA!(spectra::Matrix{T}, λs::Vector{T}, M::AbstractMatrix, scores::AbstractMatrix, weights::Matrix{T};
+	template::Vector{T}=make_template(spectra), kwargs...) where {T<:Real}
+	doppler_comp = calc_doppler_component_RVSKL(λs, template)
+    return DEMPCA!(M, spectra .- template, scores, weights, doppler_comp; kwargs...)
 end
 
-function DEMPCA(spectra::Matrix{T}, λs::Vector{T}, weights::Matrix{T};
-	template::Vector{T}=make_template(spectra), kwargs...) where {T<:Real}
-
-	doppler_comp = calc_doppler_component_RVSKL(λs, template)
-    return fit_empca_rv(spectra, doppler_comp, weights; mu=template, kwargs...)
+function DEMPCA!(M::AbstractMatrix, Xtmp::AbstractMatrix, scores::AbstractMatrix, weights::AbstractMatrix, doppler_comp::Vector{T}; kwargs...) where {T<:Real}
+	rvs = project_doppler_comp!(M, Xtmp, scores, doppler_comp)
+	if size(M, 2) > 1
+		EMPCA!(M, Xtmp, scores, weights; inds=2:size(M, 2), kwargs...)
+	end
+	return rvs
 end
 
 _fracvar(X::AbstractVecOrMat, Y::AbstractVecOrMat; var_tot=sum(abs2, X)) =
