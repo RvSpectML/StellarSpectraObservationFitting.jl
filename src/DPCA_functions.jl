@@ -74,7 +74,7 @@ end
 
 function EMPCA!(M::AbstractMatrix, Xtmp::AbstractMatrix, scores::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(M, 2), niter::Int=100)
 	@assert inds[1] > 0
-	M[:, inds], scores[inds, :] = _empca(Xtmp, weights, nvec=length(inds), niter=niter)
+	_empca!(view(M, :, inds), view(scores, inds, :), Xtmp, weights, nvec=length(inds), niter=niter)
 end
 
 function DEMPCA!(spectra::Matrix{T}, λs::Vector{T}, M::AbstractMatrix, scores::AbstractMatrix, weights::Matrix{T};
@@ -166,17 +166,17 @@ function _solve(
     return (dm' * (w .* dm)) \ (dm' * (w .* data))
 end
 
-
-function _empca(data::AbstractMatrix, weights::AbstractMatrix; niter::Int=100, nvec::Int=5)
+function _empca!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; niter::Int=100, nvec::Int=5)
 
     #- Basic dimensions
     nvar, nobs = size(data)
     @assert size(data) == size(weights)
+	@assert size(coeff, 1) == size(eigvec, 2) == nvec
+	@assert size(coeff, 2) == nobs
+	@assert size(eigvec, 1) == nvar
 
     #- Starting random guess
-    eigvec = _random_orthonormal(nvar, nvec)
-	coeff = zeros(nvec, nobs)
-	model = zeros(nvar, nobs)
+    eigvec .= _random_orthonormal(nvar, nvec)
 
 	_solve_coeffs!(data, weights, eigvec, coeff)
 
