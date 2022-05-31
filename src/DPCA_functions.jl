@@ -1,6 +1,5 @@
 # functions related to calculating the PCA scores of time series spectra
 using LinearAlgebra
-using EMPCA
 
 """
 modified code shamelessly stolen from RvSpectraKitLearn.jl/src/deriv_spectra_simple.jl
@@ -59,32 +58,6 @@ function calc_doppler_component_RVSKL_Flux(lambda::Vector{T}, flux::Matrix{T}, k
 end
 
 
-"""
-modified code shamelessly stolen from RvSpectraKitLearn.jl/src/generalized_pca.jl
-Compute the PCA component with the largest eigenvalue
-X is data, r is vector of random numbers, s is preallocated memory
-r && s  are of same length as each data point
-"""
-function compute_pca_component_RVSKL!(X::Matrix{T}, r::AbstractArray{T, 1}, s::Vector{T}; tol::Float64=1e-12, max_it::Int64=20) where {T<:Real}
-	num_lambda = size(X, 1)
-    num_spectra = size(X, 2)
-    @assert length(r) == num_lambda
-    #rand!(r)  # assume r is already randomized
-    last_mag_s = 0.0
-    for j in 1:max_it
-		s[:] = zeros(T, num_lambda)
-		for i in 1:num_spectra
-			BLAS.axpy!(dot(view(X, :, i), r), view(X, :, i), s)  # s += dot(X[:,i],r)*X[:,i]
-		end
-		mag_s = norm(s)
-		r[:]  = s / mag_s
-		if abs(mag_s - last_mag_s) < (tol * mag_s); break end
-		last_mag_s = mag_s
-	end
-	return r
-end
-
-
 function project_doppler_comp!(M::AbstractMatrix, Xtmp::AbstractMatrix, scores::AbstractMatrix, fixed_comp::AbstractVector)
 	M[:, 1] = fixed_comp  # Force fixed (i.e., Doppler) component to replace first PCA component
 	fixed_comp_norm2 = sum(abs2, fixed_comp)
@@ -99,74 +72,9 @@ function project_doppler_comp!(M::AbstractMatrix, Xtmp::AbstractMatrix, scores::
 	return rvs
 end
 
-function find_PCA_comps!(M::AbstractMatrix, Xtmp::AbstractMatrix, scores::AbstractMatrix, s::AbstractVector; inds::UnitRange{<:Int}=1:size(M, 2), kwargs...)
-	println(inds)
+function EMPCA!(M::AbstractMatrix, Xtmp::AbstractMatrix, scores::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(M, 2), niter::Int=100)
 	@assert inds[1] > 0
-	# remaining component calculations
-	for j in inds
-		compute_pca_component_RVSKL!(Xtmp, view(M, :, j), s; kwargs...)
-		for i in 1:size(Xtmp, 2)
-			scores[j, i] = dot(view(Xtmp, :, i), view(M, :, j)) #/sum(abs2,view(M,:,j-1))
-			Xtmp[:,i] .-= scores[j, i] * view(M, :, j)
-		end
-	end
-end
-
-"""
-modified code shamelessly stolen from RvSpectraKitLearn.jl/src/generalized_pca.jl
-Compute first num_components basis vectors for PCA, after subtracting projection onto fixed_comp
-"""
-function fit_gen_pca_rv_RVSKL(X::Matrix{T}, fixed_comp::Vector{T}; mu::Vector{T}=vec(mean(X, dims=2)), num_components::Integer=3, kwargs...) where {T<:Real}
-
-	# initializing relevant quantities
-	num_lambda = size(X, 1)
-    num_spectra = size(X, 2)
-    M = rand(T, (num_lambda, num_components))  # random initialization is part of algorithm (i.e., not zeros)
-    s = zeros(T, num_lambda)  # pre-allocated memory for compute_pca_component
-    scores = zeros(num_components, num_spectra)
-
-    Xtmp = X .- mu  # perform PCA after subtracting off mean
-
-	# doppler component calculations
-	rvs = project_doppler_comp!(M, Xtmp, scores, fixed_comp)
-
-	if num_components>1
-		find_PCA_comps!(M, Xtmp, scores, s; inds=2:num_components)
-	end
-
-	return (mu, M, scores, rvs)
-end
-
-
-function fit_gen_pca(X::Matrix{T}; mu::Vector{T}=vec(mean(X, dims=2)), num_components::Integer=2) where {T<:Real}
-
-	# initializing relevant quantities
-	num_lambda = size(X, 1)
-    num_spectra = size(X, 2)
-    M = rand(T, (num_lambda, num_components))  # random initialization is part of algorithm (i.e., not zeros)
-    s = zeros(T, num_lambda)  # pre-allocated memory for compute_pca_component
-    scores = zeros(num_components, num_spectra)
-
-    Xtmp = X .- mu  # perform PCA after subtracting off mean
-
-	find_PCA_comps!(M, Xtmp, scores, s)
-
-	return (mu, M, scores)
-end
-
-function DPCA(spectra::Matrix{T}, λs::Vector{T};
-	template::Vector{T}=make_template(spectra), kwargs...) where {T<:Real}
-
-	doppler_comp = calc_doppler_component_RVSKL(λs, template)
-    return fit_gen_pca_rv_RVSKL(spectra, doppler_comp; mu=template, kwargs...)
-end
-
-
-function EMPCA!(M::AbstractMatrix, Xtmp::AbstractMatrix, scores::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(M, 2), kwargs...)
-	@assert inds[1] > 0
-	m = empca.empca(Xtmp', weights', nvec=length(inds), silent=true, kwargs...)
-	M[:, inds] .= m.eigvec'
-	scores[inds, :] .= m.coeff'
+	M[:, inds], scores[inds, :] = _empca(Xtmp, weights, nvec=length(inds), niter=niter)
 end
 
 function DEMPCA!(spectra::Matrix{T}, λs::Vector{T}, M::AbstractMatrix, scores::AbstractMatrix, weights::Matrix{T};
@@ -194,4 +102,88 @@ end
 function fracvar(X::AbstractVecOrMat, M::AbstractVecOrMat, s::AbstractVecOrMat, weights::AbstractVecOrMat)
 	var_tot = sum(abs2, X .* weights)
 	return [_fracvar(X, view(M, :, 1:i) * view(s, 1:i, :), weights; var_tot=var_tot) for i in 1:size(M, 2)]
+end
+
+
+## EMPCA implementation
+
+function _solve_coeffs!(data, weights, eigvec, coeff)
+	nobs = size(data, 2)
+	for i in 1:nobs
+		coeff[:, i] .= _solve(eigvec, view(data, :, i), view(weights, :, i))
+	end
+	# solve_model!(model, eigvec, coeff)
+end
+
+function _solve_eigenvectors!(_data, weights, eigvec, coeff)
+	data = copy(_data)
+	nvar, nvec = size(eigvec)
+	cw = Array{Float64}(undef, size(data, 2))
+	for i in 1:nvec
+		c = view(coeff, i, :)
+		for j in 1:nvar
+			cw .= c .* view(weights, j, :)
+			eigvec[j, i] = dot(view(data, j, :), cw) / dot(c, cw)
+		end
+		data .-= view(eigvec, :, i) * c'
+	end
+	#- Renormalize and re-orthogonalize the answer
+	eigvec[:, 1] ./= norm(view(eigvec, :, 1))
+	for k in 2:nvec
+		for kx in 1:(k-1)
+			c = dot(view(eigvec, :, k), view(eigvec, :, kx))
+			eigvec[:, k] .-=  c .* view(eigvec, :, kx)
+		end
+		eigvec[:, k] ./= norm(view(eigvec, :, k))
+	end
+	# solve_model!(model, eigvec, coeff)
+end
+
+function _random_orthonormal(nvar, nvec)
+	A = Array{Float64}(undef, nvar, nvec)
+	keep_going = true
+	i = 0
+	while keep_going
+		i += 1
+		A .= randn(nvar, nvec)
+		A[1, :] ./= norm(view(A, :, 1))
+		for i in 2:nvec
+			for j in 1:i
+				A[:, i] .-= dot(view(A, :, j), view(A, :, i)) .* view(A, :, j)
+				A[:, i] ./= norm(view(A, :, i))
+			end
+		end
+		keep_going = any(isnan.(A)) && (i < 100)
+	end
+	if i > 99; println("_random_orthonormal() in empca failed for some reason") end
+	return A
+end
+
+function _solve(
+    dm::AbstractMatrix{T},
+    data::AbstractVector,
+    w::AbstractVector) where {T<:Real}
+    return (dm' * (w .* dm)) \ (dm' * (w .* data))
+end
+
+
+function _empca(data::AbstractMatrix, weights::AbstractMatrix; niter::Int=100, nvec::Int=5)
+
+    #- Basic dimensions
+    nvar, nobs = size(data)
+    @assert size(data) == size(weights)
+
+    #- Starting random guess
+    eigvec = _random_orthonormal(nvar, nvec)
+	coeff = zeros(nvec, nobs)
+	model = zeros(nvar, nobs)
+
+	_solve_coeffs!(data, weights, eigvec, coeff)
+
+    for k in 1:niter
+		_solve_eigenvectors!(data, weights, eigvec, coeff)
+        _solve_coeffs!(data, weights, eigvec, coeff)
+	end
+
+    return eigvec, coeff
 end
