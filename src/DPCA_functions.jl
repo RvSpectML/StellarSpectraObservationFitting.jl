@@ -115,15 +115,15 @@ function _solve_coeffs!(data, weights, eigvec, coeff)
 	# solve_model!(model, eigvec, coeff)
 end
 
-function _solve_eigenvectors!(_data, weights, eigvec, coeff)
-	data = copy(_data)
+function _solve_eigenvectors!(data, weights, eigvec, coeff)
 	nvar, nvec = size(eigvec)
 	cw = Array{Float64}(undef, size(data, 2))
 	for i in 1:nvec
 		c = view(coeff, i, :)
 		for j in 1:nvar
 			cw .= c .* view(weights, j, :)
-			eigvec[j, i] = dot(view(data, j, :), cw) / dot(c, cw)
+			cwc = dot(c, cw)
+			iszero(cwc) ? eigvec[j, i] = 0 : eigvec[j, i] = dot(view(data, j, :), cw) / cwc
 		end
 		data .-= view(eigvec, :, i) * c'
 	end
@@ -179,9 +179,10 @@ function _empca!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMa
     eigvec .= _random_orthonormal(nvar, nvec)
 
 	_solve_coeffs!(data, weights, eigvec, coeff)
-
+	_data = copy(data)
     for k in 1:niter
 		_solve_eigenvectors!(data, weights, eigvec, coeff)
+		_data .= data
         _solve_coeffs!(data, weights, eigvec, coeff)
 	end
 

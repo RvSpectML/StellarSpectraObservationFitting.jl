@@ -44,6 +44,21 @@ function make_template(matrix::Matrix; use_mean::Bool=false, kwargs...)
 	clip_vector!(result; kwargs...)
 	return result
 end
+function make_template(matrix::Matrix, σ²::Matrix; default::Real=1., use_mean::Bool=false, kwargs...)
+	if use_mean
+		result = weighted_mean(matrix, σ²; default=default)
+	else
+		result = Array{Float64}(undef, size(matrix, 1))
+		for i in 1:length(result)
+			mask = .!(isinf.(view(σ², i, :)))
+			any(mask) ?
+				result[i] = median(view(matrix, i, mask)) :
+				result[i] = default
+		end
+	end
+	clip_vector!(result; kwargs...)
+	return result
+end
 
 function shift_log_λ(v::Unitful.Velocity, log_λ::Vector{T}) where {T<:Real}
 	return log_λ .+ (log((1.0 + v / light_speed) / (1.0 - v / light_speed)) / 2)
@@ -244,3 +259,9 @@ vector_zero(θ::Vector{<:AbstractArray}) = [vector_zero(i) for i in θ]
 
 flatten_ranges(ranges::AbstractVector) = maximum([range[1] for range in ranges]):minimum([range[end] for range in ranges])
 flatten_ranges(ranges::AbstractMatrix) = [flatten_ranges(view(ranges, :, i)) for i in 1:size(ranges, 2)]
+
+function weighted_mean(x::AbstractMatrix, σ²::AbstractMatrix; default::Real=0.)
+	ans = vec(sum(x ./ σ²; dims=2) ./ sum(1 ./ σ²; dims=2))
+	ans[isnan.(ans)] .= default
+	return ans
+end

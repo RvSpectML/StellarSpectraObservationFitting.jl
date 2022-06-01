@@ -605,9 +605,25 @@ function _spectra_interp_gp!(fluxes::AbstractVector, log_λ, flux_obs::AbstractV
 	fluxes[:] .= mean.(gp) .+ gp_mean
 	return gp
 end
-function _spectra_interp_gp!(fluxes::AbstractVector, vars, log_λ, flux_obs::AbstractVector, var_obs, log_λ_obs; kwargs...)
+function _spectra_interp_gp!(fluxes::AbstractVector, vars, log_λ, flux_obs::AbstractVector, var_obs, log_λ_obs; keep_mask::Bool=true, kwargs...)
 	gp = _spectra_interp_gp!(fluxes, log_λ, flux_obs, var_obs, log_λ_obs; kwargs...)
 	vars[:] .= var.(gp)
+	if keep_mask
+		inds = searchsortednearest(log_λ_obs, log_λ; lower=true)
+		for i in 1:length(inds)
+			if log_λ[i] < log_λ_obs[1]
+				if isinf(var_obs[1])
+					vars[i] = Inf
+				end
+			elseif log_λ[i] > log_λ_obs[end]
+				if isinf(var_obs[end])
+					vars[i] = Inf
+				end
+			elseif isinf(var_obs[inds[i]]) && isinf(var_obs[inds[i]+1])
+				vars[i] = Inf
+			end
+		end
+	end
 	return gp
 end
 function _spectra_interp_gp!(fluxes::AbstractMatrix, log_λ, flux_obs, var_obs, log_λ_obs; kwargs...)
@@ -621,7 +637,7 @@ function _spectra_interp_gp!(fluxes::AbstractMatrix, vars, log_λ, flux_obs, var
 	end
 end
 
-function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix, log_λ::AbstractVector, flux_obs::AbstractMatrix, var_obs::AbstractMatrix, log_λ_obs::AbstractMatrix, flux_other::AbstractMatrix, var_other::AbstractMatrix, log_λ_other::AbstractMatrix; gp_mean::Number=1., gp_base=SOAP_gp, gp_var=SOAP_gp_var)
+function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix, log_λ::AbstractVector, flux_obs::AbstractMatrix, var_obs::AbstractMatrix, log_λ_obs::AbstractMatrix, flux_other::AbstractMatrix, var_other::AbstractMatrix, log_λ_other::AbstractMatrix; gp_mean::Number=1., gp_base=SOAP_gp, gp_var=SOAP_gp_var, keep_mask::Bool=true)
 	for i in 1:size(flux_obs, 2)
 		gpn = get_marginal_GP(gp_base(view(log_λ_obs, :, i), view(var_obs, :, i) .+ gp_var), view(flux_obs, :, i) .- gp_mean, log_λ)
 		gpd = get_marginal_GP(gp_base(view(log_λ_other, :, i), view(var_other, :, i) .+ gp_var), view(flux_other, :, i) .- gp_mean, log_λ)
@@ -629,6 +645,22 @@ function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix
 		gpd_μ = mean.(gpd) .+ gp_mean
 		fluxes[:, i] .= gpn_μ ./ gpd_μ
         vars[:, i] .= (var.(gpn) .+ ((gpn_μ .^ 2 .* var.(gpd)) ./ (gpd_μ .^2))) ./ (gpd_μ .^2)
+		if keep_mask
+			inds = searchsortednearest(view(log_λ_obs, :, i), log_λ; lower=true)
+			for j in 1:length(inds)
+				if log_λ[j] < log_λ_obs[1, i]
+					if isinf(var_obs[1, i])
+						vars[j, i] = Inf
+					end
+				elseif log_λ[j] > log_λ_obs[end, i]
+					if isinf(var_obs[end, i])
+						vars[j, i] = Inf
+					end
+				elseif isinf(var_obs[inds[j], i]) && isinf(var_obs[inds[j]+1, i])
+					vars[j, i] = Inf
+				end
+			end
+		end
 	end
 end
 
