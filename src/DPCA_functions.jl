@@ -72,9 +72,9 @@ function project_doppler_comp!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::
 	return rvs
 end
 
-function EMPCA!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(M, 2), niter::Int=100)
+function EMPCA!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(M, 2), kwargs...)
 	@assert inds[1] > 0
-	_empca!(view(M, :, inds), view(scores, inds, :), Xtmp, weights, nvec=length(inds), niter=niter)
+	_empca!(view(M, :, inds), view(scores, inds, :), Xtmp, weights; nvec=length(inds), kwargs...)
 end
 
 function DEMPCA!(spectra::Matrix{T}, λs::Vector{T}, M::AbstractMatrix, scores::AbstractMatrix, weights::Matrix{T};
@@ -108,8 +108,7 @@ end
 ## EMPCA implementation
 
 function _solve_coeffs!(eigvec, coeff, data, weights)
-	nobs = size(data, 2)
-	for i in 1:nobs
+	for i in 1:size(data, 2)
 		coeff[:, i] .= _solve(eigvec, view(data, :, i), view(weights, :, i))
 	end
 	# solve_model!(model, eigvec, coeff)
@@ -139,14 +138,21 @@ function _solve_eigenvectors!(eigvec, coeff, data, weights)
 	# solve_model!(model, eigvec, coeff)
 end
 
-function _random_orthonormal(nvar, nvec)
+function _random_orthonormal(nvar::Int, nvec::Int; log_λ::Union{Nothing, AbstractVector}=nothing)
 	A = Array{Float64}(undef, nvar, nvec)
 	keep_going = true
 	i = 0
 	while keep_going
 		i += 1
-		A .= randn(nvar, nvec)
-		A[1, :] ./= norm(view(A, :, 1))
+		if log_λ != nothing
+			fx = SOAP_gp(log_λ, SOAP_gp_var)
+			for i in 1:nvec
+				A[:, i] = rand(fx)
+			end
+		else
+			A .= randn(nvar, nvec)
+		end
+		A[:, 1] ./= norm(view(A, :, 1))
 		for i in 2:nvec
 			for j in 1:i
 				A[:, i] .-= dot(view(A, :, j), view(A, :, i)) .* view(A, :, j)
@@ -166,7 +172,7 @@ function _solve(
     return (dm' * (w .* dm)) \ (dm' * (w .* data))
 end
 
-function _empca!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; niter::Int=100, nvec::Int=5)
+function _empca!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; niter::Int=100, nvec::Int=5, kwargs...)
 
     #- Basic dimensions
     nvar, nobs = size(data)
@@ -176,7 +182,7 @@ function _empca!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMa
 	@assert size(eigvec, 1) == nvar
 
     #- Starting random guess
-    eigvec .= _random_orthonormal(nvar, nvec)
+    eigvec .= _random_orthonormal(nvar, nvec; kwargs...)
 
 	_solve_coeffs!(eigvec, coeff, data, weights)
 	_data = copy(data)
