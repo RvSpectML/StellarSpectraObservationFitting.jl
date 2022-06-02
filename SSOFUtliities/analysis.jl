@@ -132,8 +132,9 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 
 		if save; @save save_fn model model_large end
 
-		return mws_smol, ℓ, aics, bics, comp_stds, comp_intra_stds
+		return mws_smol#, ℓ, aics, bics, comp_stds, comp_intra_stds
 	end
+	return mws
 end
 function _finish_downsizing(mws::SSOF.ModelWorkspace, model::SSOF.OrderModel; kwargs...)
 	mws_smol = typeof(mws)(model, mws.d)
