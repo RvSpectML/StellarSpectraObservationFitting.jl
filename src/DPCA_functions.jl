@@ -58,7 +58,7 @@ function calc_doppler_component_RVSKL_Flux(lambda::Vector{T}, flux::Matrix{T}, k
 end
 
 
-function project_doppler_comp!(M::AbstractMatrix, Xtmp::AbstractMatrix, scores::AbstractMatrix, fixed_comp::AbstractVector)
+function project_doppler_comp!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, fixed_comp::AbstractVector)
 	M[:, 1] = fixed_comp  # Force fixed (i.e., Doppler) component to replace first PCA component
 	fixed_comp_norm2 = sum(abs2, fixed_comp)
 	for i in 1:size(Xtmp, 2)
@@ -72,7 +72,7 @@ function project_doppler_comp!(M::AbstractMatrix, Xtmp::AbstractMatrix, scores::
 	return rvs
 end
 
-function EMPCA!(M::AbstractMatrix, Xtmp::AbstractMatrix, scores::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(M, 2), niter::Int=100)
+function EMPCA!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(M, 2), niter::Int=100)
 	@assert inds[1] > 0
 	_empca!(view(M, :, inds), view(scores, inds, :), Xtmp, weights, nvec=length(inds), niter=niter)
 end
@@ -80,13 +80,13 @@ end
 function DEMPCA!(spectra::Matrix{T}, λs::Vector{T}, M::AbstractMatrix, scores::AbstractMatrix, weights::Matrix{T};
 	template::Vector{T}=make_template(spectra), kwargs...) where {T<:Real}
 	doppler_comp = calc_doppler_component_RVSKL(λs, template)
-    return DEMPCA!(M, spectra .- template, scores, weights, doppler_comp; kwargs...)
+    return DEMPCA!(M, scores, spectra .- template, weights, doppler_comp; kwargs...)
 end
 
-function DEMPCA!(M::AbstractMatrix, Xtmp::AbstractMatrix, scores::AbstractMatrix, weights::AbstractMatrix, doppler_comp::Vector{T}; kwargs...) where {T<:Real}
-	rvs = project_doppler_comp!(M, Xtmp, scores, doppler_comp)
+function DEMPCA!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, weights::AbstractMatrix, doppler_comp::Vector{T}; kwargs...) where {T<:Real}
+	rvs = project_doppler_comp!(M, scores, Xtmp, doppler_comp)
 	if size(M, 2) > 1
-		EMPCA!(M, Xtmp, scores, weights; inds=2:size(M, 2), kwargs...)
+		EMPCA!(M, scores, Xtmp, weights; inds=2:size(M, 2), kwargs...)
 	end
 	return rvs
 end
@@ -107,7 +107,7 @@ end
 
 ## EMPCA implementation
 
-function _solve_coeffs!(data, weights, eigvec, coeff)
+function _solve_coeffs!(eigvec, coeff, data, weights)
 	nobs = size(data, 2)
 	for i in 1:nobs
 		coeff[:, i] .= _solve(eigvec, view(data, :, i), view(weights, :, i))
@@ -115,7 +115,7 @@ function _solve_coeffs!(data, weights, eigvec, coeff)
 	# solve_model!(model, eigvec, coeff)
 end
 
-function _solve_eigenvectors!(data, weights, eigvec, coeff)
+function _solve_eigenvectors!(eigvec, coeff, data, weights)
 	nvar, nvec = size(eigvec)
 	cw = Array{Float64}(undef, size(data, 2))
 	for i in 1:nvec
@@ -178,12 +178,12 @@ function _empca!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMa
     #- Starting random guess
     eigvec .= _random_orthonormal(nvar, nvec)
 
-	_solve_coeffs!(data, weights, eigvec, coeff)
+	_solve_coeffs!(eigvec, coeff, data, weights)
 	_data = copy(data)
     for k in 1:niter
-		_solve_eigenvectors!(data, weights, eigvec, coeff)
+		_solve_eigenvectors!(eigvec, coeff, data, weights)
 		_data .= data
-        _solve_coeffs!(data, weights, eigvec, coeff)
+        _solve_coeffs!(eigvec, coeff, data, weights)
 	end
 
     return eigvec, coeff

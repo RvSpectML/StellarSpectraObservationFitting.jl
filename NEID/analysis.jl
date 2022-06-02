@@ -38,14 +38,14 @@ save_path = base_path * "results.jld2"
 if solar
     @load neid_save_path * "10700/$(desired_order)/results.jld2" model
 	seed = model
-    model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, seed=seed, dpca=dpca)
+    model, data, times_nu, airmasses, lm_tel, lm_star = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, seed=seed, dpca=dpca)
 else
-    model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, dpca=dpca)
+    model, data, times_nu, airmasses, lm_tel, lm_star = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, dpca=dpca)
 end
 mws = SSOFU.create_workspace(model, data, opt)
+mws, _, _, _, _, _ = SSOFU.downsize_model(mws, times_nu, lm_tel, lm_star; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path, use_aic=!solar)
 SSOFU.improve_regularization!(mws; save_fn=save_path)
 SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path)
-mws, _, _, _, _, _ = SSOFU.downsize_model(mws, times_nu; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path, use_aic=!solar)
 rvs, rv_errors = SSOFU.estimate_errors(mws; save_fn=save_path)
 
 ## Plots

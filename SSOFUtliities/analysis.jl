@@ -36,14 +36,14 @@ function create_model(
 	    end
 	else
 	    model = SSOF.OrderModel(data, instrument, desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, oversamp=oversamp, dpca=dpca)
-	    model, _, _, _ = SSOF.initialize!(model, data; seed=seed)
+	    lm_tel, lm_star = SSOF.initializations!(model, data; seed=seed)
 		if !use_reg
 			SSOF.rm_regularization!(model)
 			model.metadata[:todo][:reg_improved] = true
 		end
 		if save; @save save_fn model end
 	end
-	return model, data, times_nu, airmasses
+	return model, data, times_nu, airmasses, lm_tel, lm_star
 end
 
 function create_workspace(model, data, opt::String)
@@ -94,34 +94,31 @@ function improve_model!(mws::SSOF.ModelWorkspace, airmasses::AbstractVector, tim
 	if show_plot; plot_model(mws, airmasses, times) end
 end
 
-function downsize_model(mws::SSOF.ModelWorkspace, times; save_fn::String="", decision_fn::String="", print_stuff::Bool=true, plots_fn::String="", kwargs...)
-	save = save_fn!=""
-	save_md = decision_fn!=""
-	save_plots = plots_fn!=""
+function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel::Vector{<:SSOF.LinearModel}, lm_star::Vector{<:SSOF.LinearModel}; save_fn::String="", decision_fn::String="", print_stuff::Bool=true, plots_fn::String="", iter::Int=50, ignore_regularization::Bool=true, kwargs...)
 	model = mws.om
 
 	if !model.metadata[:todo][:downsized]  # 1.5 hrs (for 9x9)
+		save = save_fn!=""
+		save_md = decision_fn!=""
+		save_plots = plots_fn!=""
+
 	    test_n_comp_tel = 0:size(model.tel.lm.M, 2)
 	    test_n_comp_star = 0:size(model.star.lm.M, 2)
 	    ks = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
 	    comp_ls = zeros(length(test_n_comp_tel), length(test_n_comp_star))
 	    comp_stds = zeros(length(test_n_comp_tel), length(test_n_comp_star))
 	    comp_intra_stds = zeros(length(test_n_comp_tel), length(test_n_comp_star))
+		better_models = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
 	    for (i, n_tel) in enumerate(test_n_comp_tel)
 	        for (j, n_star) in enumerate(test_n_comp_star)
-	            comp_ls[i, j], ks[i, j], comp_stds[i, j], comp_intra_stds[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star], mws, times)
+	            comp_ls[i, j], ks[i, j], comp_stds[i, j], comp_intra_stds[i, j], better_models[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star], mws, times, lm_tel, lm_star; iter=iter, ignore_regularization=ignore_regularization)
 	        end
 	    end
-	    n_comps_best, ℓ, aics, bics = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, mws.d.var; return_inters=true, kwargs...)
-	    if save_md; @save decision_fn comp_ls ℓ aics bics ks test_n_comp_tel test_n_comp_star comp_stds comp_intra_stds end
+	    n_comps_best, ℓ, aics, bics, best_ind = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, mws.d.var; return_inters=true, kwargs...)
+	    if save_md; @save decision_fn comp_ls ℓ aics bics best_ind ks test_n_comp_tel test_n_comp_star comp_stds comp_intra_stds better_models end
 
 	    model_large = copy(model)
-		mws_smol = _downsize_model(mws, n_comps_best[1], n_comps_best[2]; print_stuff=print_stuff)
-	    model = mws_smol.om
-	    model.metadata[:todo][:downsized] = true
-	    model.metadata[:todo][:reg_improved] = true
-	    model.metadata[:todo][:optimized] = true
-	    if save; @save save_fn model model_large end
+		mws_smol = _downsize_model(mws, n_comps_best, better_models[best_ind], lm_tel, lm_star; print_stuff=print_stuff, iter=iter, ignore_regularization=ignore_regularization)
 
 		if save_plots
 			diagnostics = [ℓ, aics, bics, comp_stds, comp_intra_stds]
@@ -132,16 +129,32 @@ function downsize_model(mws::SSOF.ModelWorkspace, times; save_fn::String="", dec
 				png(plt, plots_fn * diagnostics_fn[i] * "_choice.png")
 			end
 		end
+
+		if save; @save save_fn model model_large end
+
 		return mws_smol, ℓ, aics, bics, comp_stds, comp_intra_stds
 	end
 end
-function _downsize_model(mws::SSOF.ModelWorkspace, n_comps_tel::Int, n_comps_star::Int; print_stuff::Bool=true)
-	model = SSOF.downsize(mws.om, n_comps_tel, n_comps_star)
+function _finish_downsizing(mws::SSOF.ModelWorkspace, model::SSOF.OrderModel; kwargs...)
 	mws_smol = typeof(mws)(model, mws.d)
-	SSOF.train_OrderModel!(mws_smol; print_stuff=print_stuff)  # 120s
+	SSOF.train_OrderModel!(mws_smol; kwargs...)  # 120s
 	SSOF.finalize_scores!(mws_smol)
+	# model.metadata[:todo][:reg_improved] = true
+	model.metadata[:todo][:optimized] = true
 	return mws_smol
 end
+function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}, better_model::Int, lm_tel::Vector{<:SSOF.LinearModel}, lm_star::Vector{<:SSOF.LinearModel}; kwargs...)
+	model = SSOF.downsize(mws.om, n_comps[1], n_comps[2])
+	model.metadata[:todo][:downsized] = true
+	if all(n_comps .> 0); SSOF._fill_model!(model, n_comps, better_model, lm_tel, lm_star) end
+	return _finish_downsizing(mws, model; kwargs...)
+end
+function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}; kwargs...)
+	model = SSOF.downsize(mws.om, n_comps[1], n_comps[2])
+	model.metadata[:todo][:downsized] = true
+	return _finish_downsizing(mws, model; kwargs...)
+end
+
 
 function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="")
 	save = save_fn!=""

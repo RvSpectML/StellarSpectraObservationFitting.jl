@@ -265,6 +265,13 @@ function copy_to_LinearModel!(to::LinearModel, from::LinearModel)
 		end
 	end
 end
+copy_to_LinearModel!(to::TemplateModel, from::TemplateModel, inds) =
+	copy_to_LinearModel!(to, from)
+function copy_to_LinearModel!(to::FullLinearModel, from::FullLinearModel, inds)
+	to.μ .= from.μ
+	to.M .= view(from.M, :, inds)
+	to.s .= view(from.s, inds, :)
+end
 function copy_to_LinearModel!(to::LinearModel, from::Vector)
 	fns = fieldnames(typeof(to))
 	if typeof(to) <: TemplateModel
@@ -670,8 +677,8 @@ end
 #     return findfirst(s_var ./ sum(s_var) .< threshold)[1] - 1
 # end
 
-function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2,
-	seed::Union{OrderModel, Nothing}=nothing)
+function initializations!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2,
+	seed::Union{OrderModel, Nothing}=nothing, use_mean::Bool=false)
 
 	seeded = !isnothing(seed)
 
@@ -680,6 +687,7 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2,
 
 	n_obs = size(d.flux, 2)
 	n_comp_star = size(om.star.lm.M, 2)
+	n_comp_tel = size(om.tel.lm.M, 2)
 
 	star_log_λ_tel = _shift_log_λ_model(d.log_λ_obs, d.log_λ_star, om.star.log_λ)
 	tel_log_λ_star = _shift_log_λ_model(d.log_λ_star, d.log_λ_obs, om.tel.log_λ)
@@ -687,15 +695,18 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2,
 	vars_star = SOAP_gp_var .* ones(length(om.star.log_λ), n_obs)
 	flux_tel = ones(length(om.tel.log_λ), n_obs)
 	vars_tel = SOAP_gp_var .* ones(length(om.tel.log_λ), n_obs)
+	lm_tel = copy(om.tel.lm)
+	lm_star = FullLinearModel(zeros(size(om.star.lm.M, 1), n_comp_star + 1), zeros(n_comp_star + 1, size(om.star.lm.s, 2)), zeros(size(om.star.lm.M, 1)))
 
 	# if we have a seed model to get tellurics from
+	# TODO should we also transfer basis vectors?
 	if seeded
 
 		# get initial interpolated guess for telluric template
-		_spectra_interp_gp!(om.tel.lm.μ, om.tel.log_λ, seed.tel.lm.μ, LSF_gp_var, seed.tel.log_λ; gp_base=LSF_gp, gp_mean=1.)
+		_spectra_interp_gp!(lm_tel.μ, om.tel.log_λ, seed.tel.lm.μ, LSF_gp_var, seed.tel.log_λ; gp_base=LSF_gp, gp_mean=1.)
 
 		# finding where the telluric lines are in the seeded template
-		tel_μ_interp = 1 .- vec(spectra_interp(om.tel.lm.μ, om.t2o))
+		tel_μ_interp = 1 .- vec(spectra_interp(lm_tel.μ, om.t2o))
 		mask = tel_μ_interp .> 0.05
 		step = (d.log_λ_obs[end, 1] - d.log_λ_obs[1, 1]) / (size(d.log_λ_obs, 1) - 1)
 		width = Int(floor(2.5e-5 / step))
@@ -738,68 +749,87 @@ function initialize!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2,
 		if length(good_amps) < 1
 			@warn "insufficient good telluric fits to estimate an amplitude. Defaulting to no scaling"
 		else
-			om.tel.lm.μ[:] .= 1 .+ (median(good_amps) .* (om.tel.lm.μ .- 1))
+			lm_tel.μ[:] .= 1 .+ (median(good_amps) .* (lm_tel.μ .- 1))
 		end
 
 		# stellar flux dividing out template tellurics
-		flux_tel .= om.tel.lm.μ
+		flux_tel .= lm_tel.μ
 		_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
 
 		om = downsize(om, size(seed.tel.lm.M, 2), n_comp_star)
+		lm_tel = downsize(lm_tel, size(seed.tel.lm.M, 2))
 
 	else
 		# stellar flux assuming no tellurics
 		_spectra_interp_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var .+ SOAP_gp_var, d.log_λ_star; gp_mean=1.)
 	end
-	om.star.lm.μ[:] = make_template(flux_star; min=μ_min, max=μ_max, use_mean=seeded)
+	# stellar template assuming no tellurics (only used for telluric initialization)
+	lm_star.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=seeded)
 
+	# telluric model with stellar template
+	flux_star .= lm_star.μ
+	_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
+	lm_tel.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=seeded||use_mean)
+	EMPCA!(lm_tel.M, lm_tel.s, flux_tel .- lm_tel.μ, 1 ./ vars_tel)
+
+	# stellar models with n basis telluric model
 	if is_time_variable(om.tel)
-		# 1 basis telluric model using stellar template
-		flux_star .= om.star.lm.μ
-		_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
-
-		om.tel.lm.μ[:] = make_template(flux_tel; min=μ_min, max=μ_max, use_mean=seeded)
-		tel_M_1 = ones(size(om.tel.lm.M, 1), 1)
-		tel_s_1 = ones(1, size(om.tel.lm.s, 2))
-		EMPCA!(tel_M_1, flux_tel .- om.tel.lm.μ, tel_s_1, 1 ./ vars_tel)
-
-		# stellar model with 1 basis telluric model
-		flux_tel .= (tel_M_1 * tel_s_1) .+ om.tel.lm.μ
-		_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
-		om.star.lm.μ[:] = make_template(flux_star; min=μ_min, max=μ_max, use_mean=seeded)
+		n_comp_tel = size(om.tel.lm.M, 2)
+		lm_star = [copy(lm_star) for i in 1:(n_comp_tel+1)]
+		for i in 1:n_comp_tel
+			flux_tel .= lm_tel.μ .+ (view(lm_tel.M, :, 1:i) * view(lm_tel.s, 1:i, :))
+			_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
+			lm_star[i+1].μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=true)
+			doppler_comp = calc_doppler_component_RVSKL(om.star.λ, lm_star[i+1].μ)
+			flux_star .-= lm_star[i+1].μ
+			DEMPCA!(lm_star[i+1].M, lm_star[i+1].s, flux_star, 1 ./ vars_star, doppler_comp)
+		end
+	else
+		lm_star = [lm_star]
 	end
 
-	M_star = zeros(size(om.star.lm.M, 1), n_comp_star + 1)
-	s_star = zeros(n_comp_star + 1, size(om.star.lm.s, 2))
-	rvs_notel = DEMPCA!(flux_star, om.star.λ, M_star, s_star, 1 ./ vars_star; template=om.star.lm.μ)
-	fracvar_star = fracvar(flux_star .- om.star.lm.μ, M_star, s_star, 1 ./ vars_star)
+	# stellar model with telluric template
+	flux_tel .= lm_tel.μ
+	_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
+	lm_star[1].μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=seeded||use_mean)
+	doppler_comp = calc_doppler_component_RVSKL(om.star.λ, lm_star[1].μ)
+	DEMPCA!(lm_star[1].M, lm_star[1].s, flux_star, 1 ./ vars_star, doppler_comp)
 
-	om.star.lm.M .= view(M_star, :, 2:size(M_star, 2))
-	om.star.lm.s[:] = view(s_star, 2:size(s_star, 1), :)
+	# telluric models with n basis stellar model
+	if is_time_variable(om.tel) #&& !seeded
+		lm_tel = [copy(lm_tel) for i in 1:(n_comp_star+1)]
+		for i in 1:n_comp_star
+			flux_star .= lm_star[1].μ .+ (view(lm_star[1].M, :, 1:(i+1)) * view(lm_star[1].s, 1:(i+1), :))
+			_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
+			lm_tel[i+1].μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=true)
+			flux_tel .-= lm_tel[i+1].μ
+			EMPCA!(lm_tel[i+1].M, lm_tel[i+1].s, flux_tel, 1 ./ vars_tel)
+		end
+	else
+		lm_tel = [lm_tel]
+	end
+
+	fill_TelModel!(om, lm_tel[1])
+	fill_StarModel!(om, lm_star[1])
+
+	return lm_tel, lm_star
+end
+
+
+fill_TelModel!(om::OrderModel, lm::FullLinearModel) =
+	copy_to_LinearModel!(om.tel.lm, lm)
+fill_TelModel!(om::OrderModel, lm::FullLinearModel, inds) =
+	copy_to_LinearModel!(om.tel.lm, lm, inds)
+
+function fill_StarModel!(om::OrderModel, lm::FullLinearModel; inds=2:size(lm.M, 2))
+	@assert inds[1] > 1
+	copy_to_LinearModel!(om.star.lm, lm, inds)
 	if typeof(om) <: OrderModelDPCA
-		om.rv.lm.M .= view(M_star, :, 1)
-		om.rv.lm.s[:] = view(s_star, 1, :)
+		om.rv.lm.M .= view(lm.M, :, 1)
+		om.rv.lm.s[:] .= view(lm.s, 1, :)
 	else
-		om.rv[:] .= view(s_star, 1, :) .* -light_speed_nu #TODO check if this is correct
+		om.rv .= view(lm.s, 1, :) .* -light_speed_nu #TODO check if this is correct
 	end
-
-	if is_time_variable(om.tel)
-		# telluric model with updated stellar template
-		flux_star .= om.star.lm.μ
-		_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
-
-		om.tel.lm.μ[:] = make_template(flux_tel; min=μ_min, max=μ_max, use_mean=seeded)
-		Xtmp = flux_tel .- om.tel.lm.μ
-		EMPCA!(om.tel.lm.M, Xtmp, om.tel.lm.s, 1 ./ vars_tel)
-		fracvar_tel = fracvar(Xtmp, om.tel.lm.M, om.tel.lm.s, 1 ./ vars_tel)
-	else
-		fracvar_tel = Float64[]
-	end
-
-	# fix_FullLinearModel_s!(om.star.lm, min, max)
-	# fix_FullLinearModel_s!(om.tel.lm, min, max)
-
-	return om, rvs_notel, fracvar_tel, fracvar_star
 end
 
 L1(a) = sum(abs, a)
