@@ -39,7 +39,7 @@ end
 function _test_om(mws_inp::ModelWorkspace, _om::OrderModel, times::AbstractVector; kwargs...)
     mws = typeof(mws_inp)(_om, mws_inp.d)
     train_OrderModel!(mws; kwargs...)  # 16s
-    n = total_length(mws) - n_negligible(mws)
+    n = total_length(mws) #- n_negligible(mws)
     model_rvs = rvs(mws.om)
     return _loss(mws), n, std(model_rvs), intra_night_std(model_rvs, times)
 end
@@ -93,7 +93,7 @@ function _fill_model_star_first!(model::OrderModel, n_comps::Vector{<:Int}, lm_t
 	fill_TelModel!(model, lm_tel[n_comps[2]+1], 1:n_comps[1])
 end
 
-function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector, var::AbstractMatrix; return_inters::Bool=false, use_aic::Bool=true)
+function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector, var::AbstractMatrix; return_inters::Bool=false, use_aic::Bool=false)
 
     ## max likelihood
     # ans_ml = argmin(ls)
