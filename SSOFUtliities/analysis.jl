@@ -30,7 +30,7 @@ function create_model(
 	# takes a couple mins now
 	if isfile(save_fn) && !recalc
 		println("using saved model at $save_fn")
-	    @load save_fn model
+	    @load save_fn model lm_tel lm_star
 	    if model.metadata[:todo][:err_estimated]
 	        @load save_fn rv_errors
 	    end
@@ -41,7 +41,7 @@ function create_model(
 			SSOF.rm_regularization!(model)
 			model.metadata[:todo][:reg_improved] = true
 		end
-		if save; @save save_fn model end
+		if save; @save save_fn model lm_tel lm_star end
 	end
 	return model, data, times_nu, airmasses, lm_tel, lm_star
 end
@@ -146,7 +146,12 @@ end
 function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}, better_model::Int, lm_tel::Vector{<:SSOF.LinearModel}, lm_star::Vector{<:SSOF.LinearModel}; kwargs...)
 	model = SSOF.downsize(mws.om, n_comps[1], n_comps[2])
 	model.metadata[:todo][:downsized] = true
-	if all(n_comps .> 0); SSOF._fill_model!(model, n_comps, better_model, lm_tel, lm_star) end
+	if all(n_comps .> 0)
+		SSOF._fill_model!(model, n_comps, better_model, lm_tel, lm_star)
+		better_model==1 ?
+			println("downsizing: used the $(n_comps[1]) telluric basis -> $(n_comps[2]) stellar basis initialization") :
+			println("downsizing: used the $(n_comps[2]) stellar basis -> $(n_comps[1]) telluric basis initialization")
+	end
 	return _finish_downsizing(mws, model; kwargs...)
 end
 function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}; kwargs...)

@@ -181,9 +181,9 @@ function _empca!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMa
 	_solve_coeffs!(eigvec, coeff, data, weights)
 	_data = copy(data)
     for k in 1:niter
-		_solve_eigenvectors!(eigvec, coeff, data, weights)
+		_solve_eigenvectors!(eigvec, coeff, _data, weights)
 		_data .= data
-        _solve_coeffs!(eigvec, coeff, data, weights)
+        _solve_coeffs!(eigvec, coeff, _data, weights)
 	end
 
     return eigvec, coeff

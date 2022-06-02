@@ -794,6 +794,7 @@ function initializations!(om::OrderModel, d::Data; min::Number=0, max::Number=1.
 	_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
 	lm_star[1].μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=seeded||use_mean)
 	doppler_comp = calc_doppler_component_RVSKL(om.star.λ, lm_star[1].μ)
+	flux_star .-= lm_star[1].μ
 	DEMPCA!(lm_star[1].M, lm_star[1].s, flux_star, 1 ./ vars_star, doppler_comp)
 
 	# telluric models with n basis stellar model
