@@ -770,7 +770,8 @@ function initializations!(om::OrderModel, d::Data; min::Number=0, max::Number=1.
 	flux_star .= lm_star.μ
 	_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
 	lm_tel.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=seeded||use_mean)
-	EMPCA!(lm_tel.M, lm_tel.s, flux_tel .- lm_tel.μ, 1 ./ vars_tel)
+	flux_tel .-= lm_tel.μ
+	EMPCA!(lm_tel.M, lm_tel.s, flux_tel, 1 ./ vars_tel)
 
 	# stellar models with n basis telluric model
 	if is_time_variable(om.tel)

@@ -59,7 +59,7 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 	end
 
 	n_plots = plot_stellar + plot_telluric
-	plt = _plot(; layout=grid(2, n_plots), size=(n_plots * _plt_size[1],_plt_size[2]*1.5))
+	plt = _plot(; layout=grid(2, n_plots), size=(n_plots * _plt_size[1],_plt_size[2]*1.5), kwargs...)
 	shift_M = 0.2
 	incl_χ² = incl_χ² && !isnothing(d) && !isnothing(o)
 	if incl_χ²; χ²_base = SSOF._loss(o, om, d) end
@@ -131,6 +131,30 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 end
 plot_model(mws::SSOF.ModelWorkspace, airmasses::Vector, times_nu::Vector; kwargs...) =
 	plot_model(mws.om, airmasses, times_nu; d=mws.d, o=mws.o, kwargs...)
+function plot_model(lm::SSOF.FullLinearModel; λ=1:length(lm.μ), times=1:size(lm.s, 2), display_plt::Bool=true, kwargs...)
+	plt = _plot(; layout=grid(2, 1), size=(_plt_size[1],_plt_size[2]*1.5), kwargs...)
+	shift_M = 0.2
+	inds = 1:size(lm.M, 2)
+
+	# basis plot
+	plot!(plt[1, 1], λ, lm.μ; label="μ", title="Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
+
+	shift_s = ceil(10 * maximum([std(lm.s[inds[i], :] .* norm(lm.M[:, inds[i]])) for i in inds])) / 2
+	half_shift_s = ceil(shift_s) / 2
+	for i in reverse(inds)
+		c_ind = c_ind_f(i - inds[1])
+		norm_M = norm(view(lm.M, :, i))
+
+		# basis plot
+		plot!(plt[1, 1], λ, (view(lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); label="Basis $i", color=plt_colors[c_ind])
+
+		# weights plot
+		_scatter!(plt[2, 1], times, (view(lm.s, i, :) .* norm_M) .- (shift_s * (i - 1) + half_shift_s); label="Weights $i", color=plt_colors[c_ind], title="Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
+		hline!(plt[2, 1], [-(shift_s * (i - 1) + half_shift_s)]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
+	end
+	if display_plt; display(plt) end
+	return plt
+end
 
 function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool=true, include_χ²::Bool=true, kwargs...)
     o = mws.o
