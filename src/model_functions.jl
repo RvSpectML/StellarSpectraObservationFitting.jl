@@ -33,7 +33,7 @@ function _lower_inds(model_log_λ::AbstractVector{<:Real}, rvs, log_λ_obs::Abst
 	log_λ_holder = Array{Float64}(undef, len)
 	len_model = length(model_log_λ)
 	for i in 1:n_obs
-		log_λ_holder[:] .= view(log_λ_obs, :, i) .+ rv_to_D(rvs[i])
+		log_λ_holder[:] = view(log_λ_obs, :, i) .+ rv_to_D(rvs[i])
 		lower_inds[:, i] .= searchsortednearest(model_log_λ, log_λ_holder; lower=true)
 		for j in 1:len
 			if lower_inds[j, i] >= len_model
@@ -609,12 +609,12 @@ LSF_gp_var = 1e-4
 # SOAP_gp = build_gp(ParameterHandling.value(SOAP_gp_params))
 function _spectra_interp_gp!(fluxes::AbstractVector, log_λ, flux_obs::AbstractVector, var_obs, log_λ_obs; gp_mean::Number=0., gp_base=SOAP_gp)
 	gp = get_marginal_GP(gp_base(log_λ_obs, var_obs), flux_obs .- gp_mean, log_λ)
-	fluxes[:] .= mean.(gp) .+ gp_mean
+	fluxes[:] = mean.(gp) .+ gp_mean
 	return gp
 end
 function _spectra_interp_gp!(fluxes::AbstractVector, vars, log_λ, flux_obs::AbstractVector, var_obs, log_λ_obs; keep_mask::Bool=true, kwargs...)
 	gp = _spectra_interp_gp!(fluxes, log_λ, flux_obs, var_obs, log_λ_obs; kwargs...)
-	vars[:] .= var.(gp)
+	vars[:] = var.(gp)
 	if keep_mask
 		inds = searchsortednearest(log_λ_obs, log_λ; lower=true)
 		for i in 1:length(inds)
@@ -749,7 +749,7 @@ function initializations!(om::OrderModel, d::Data; min::Number=0, max::Number=1.
 		if length(good_amps) < 1
 			@warn "insufficient good telluric fits to estimate an amplitude. Defaulting to no scaling"
 		else
-			lm_tel.μ[:] .= 1 .+ (median(good_amps) .* (lm_tel.μ .- 1))
+			lm_tel.μ[:] = 1 .+ (median(good_amps) .* (lm_tel.μ .- 1))
 		end
 
 		# stellar flux dividing out template tellurics
@@ -827,7 +827,7 @@ function fill_StarModel!(om::OrderModel, lm::FullLinearModel; inds=2:size(lm.M, 
 	copy_to_LinearModel!(om.star.lm, lm, inds)
 	if typeof(om) <: OrderModelDPCA
 		om.rv.lm.M .= view(lm.M, :, 1)
-		om.rv.lm.s[:] .= view(lm.s, 1, :)
+		om.rv.lm.s[:] = view(lm.s, 1, :)
 	else
 		om.rv .= view(lm.s, 1, :) .* -light_speed_nu #TODO check if this is correct
 	end
