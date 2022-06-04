@@ -17,11 +17,10 @@ function create_model(
 	save_fn::String="",
 	recalc::Bool=false,
 	dpca::Bool=true,
-	seed::Union{SSOF.OrderModel, Nothing}=nothing
+	kwargs...
 	)
 
 	save = save_fn!=""
-	seeded = !isnothing(seed)
 
 	# save_path = save_path_base * star * "/$(desired_order)/"
 	@load data_fn n_obs data times_nu airmasses
@@ -36,7 +35,7 @@ function create_model(
 	    end
 	else
 	    model = SSOF.OrderModel(data, instrument, desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, oversamp=oversamp, dpca=dpca)
-	    lm_tel, lm_star = SSOF.initializations!(model, data; seed=seed)
+	    lm_tel, lm_star = SSOF.initializations!(model, data; kwargs...)
 		if !use_reg
 			SSOF.rm_regularization!(model)
 			model.metadata[:todo][:reg_improved] = true
