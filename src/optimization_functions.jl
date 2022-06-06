@@ -586,9 +586,6 @@ train_rvs_optim!(ow::OptimWorkspace, optim_cb::Function, kwargs...) =
 		train_rvs_optim!(ow.rv, ow.om.rv, ow.om.star, optim_cb, kwargs...) :
 		train_rvs_optim!(ow.rv, ow.om.rv, optim_cb, kwargs...)
 
-fine_train_OrderModel!(mws::ModelWorkspace; iter=3*_iter_def, kwargs...) =
-	train_OrderModel!(mws; iter=iter, kwargs...)
-
 function finalize_scores_setup(mws::ModelWorkspace; print_stuff::Bool=_print_stuff_def, kwargs...)
 	if is_time_variable(mws.om.tel) || is_time_variable(mws.om.star)
 		mws_s = OptimWorkspace(mws.om, mws.d; only_s=true)
@@ -611,6 +608,7 @@ function _finalize_scores_setup(mws::ModelWorkspace, om::OrderModelWobble, loss_
 end
 function finalize_scores!(score_trainer::Function, mws::ModelWorkspace)
 	score_trainer()
+	remove_lm_score_means!(mws.om)
 	Output!(mws)
 end
 function finalize_scores!(mws::ModelWorkspace; kwargs...)

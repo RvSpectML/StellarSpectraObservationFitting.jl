@@ -256,7 +256,7 @@ _eval_lm(tlm::TemplateModel) = _eval_lm(tlm.μ, tlm.n)
 (tlm::TemplateModel)(inds::AbstractVecOrMat) = repeat(view(tlm.μ, inds), 1, tlm.n)
 
 function copy_to_LinearModel!(to::LinearModel, from::LinearModel)
-	@assert typeof(to)==typeof(from)
+	# @assert typeof(to)==typeof(from)
 	if typeof(to) <: TemplateModel
 		to.μ .= from.μ
 	else
@@ -265,7 +265,7 @@ function copy_to_LinearModel!(to::LinearModel, from::LinearModel)
 		end
 	end
 end
-copy_to_LinearModel!(to::TemplateModel, from::TemplateModel, inds) =
+copy_to_LinearModel!(to::TemplateModel, from::LinearModel, inds) =
 	copy_to_LinearModel!(to, from)
 function copy_to_LinearModel!(to::FullLinearModel, from::FullLinearModel, inds)
 	to.μ .= from.μ
@@ -677,13 +677,10 @@ end
 #     return findfirst(s_var ./ sum(s_var) .< threshold)[1] - 1
 # end
 
-function initializations!(om::OrderModel, d::Data; min::Number=0, max::Number=1.2,
-	seed::Union{OrderModel, Nothing}=nothing, use_mean::Bool=false)
+function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Number=1.25,
+	seed::Union{OrderModel, Nothing}=nothing, use_mean::Bool=true)
 
 	seeded = !isnothing(seed)
-
-	μ_min = min + 0.05
-	μ_max = max - 0.05
 
 	n_obs = size(d.flux, 2)
 	n_comp_star = size(om.star.lm.M, 2)
@@ -811,10 +808,29 @@ function initializations!(om::OrderModel, d::Data; min::Number=0, max::Number=1.
 		lm_tel = [lm_tel]
 	end
 
+	remove_lm_score_means!(lm_tel)
+	remove_lm_score_means!(lm_star)
+
 	fill_TelModel!(om, lm_tel[1])
 	fill_StarModel!(om, lm_star[1])
 
 	return lm_tel, lm_star
+end
+
+function remove_lm_score_means!(lm::FullLinearModel)
+	mean_s = mean(lm.s; dims=2)
+	lm.μ .+= lm.M * mean_s
+	lm.s .-= mean_s
+end
+remove_lm_score_means!(lm::LinearModel) = nothing
+function remove_lm_score_means!(om::OrderModel)
+	remove_lm_score_means!(om.star.lm)
+	remove_lm_score_means!(om.tel.lm)
+end
+function remove_lm_score_means!(lms::Vector{<:LinearModel})
+	for lm in lms
+		remove_lm_score_means!(lm)
+	end
 end
 
 
