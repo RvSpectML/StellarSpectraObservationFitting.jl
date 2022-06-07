@@ -72,7 +72,6 @@ function improve_regularization!(mws::SSOF.ModelWorkspace; redo::Bool=false, pri
 	    testing_inds = test_start_ind:test_start_ind+n_obs_test-1
 	    SSOF.fit_regularization!(mws, testing_inds)
 	    model.metadata[:todo][:reg_improved] = true
-	    model.metadata[:todo][:optimized] = false
 	    if save; @save save_fn model end
 	end
 end
@@ -80,13 +79,10 @@ end
 function improve_model!(mws::SSOF.ModelWorkspace; print_stuff::Bool=true, show_plot::Bool=false, save_fn::String="", kwargs...)
 	save = save_fn!=""
 	model = mws.om
-	if !model.metadata[:todo][:optimized]
-	    SSOF.train_OrderModel!(mws; print_stuff=print_stuff, kwargs...)  # 120s
-		SSOF.finalize_scores!(mws)
-	    if show_plot; status_plot(mws) end
-	    model.metadata[:todo][:optimized] = true
-	    if save; @save save_fn model end
-	end
+    SSOF.train_OrderModel!(mws; print_stuff=print_stuff, kwargs...)  # 120s
+	SSOF.finalize_scores!(mws)
+    if show_plot; status_plot(mws) end
+    if save; @save save_fn model end
 end
 function improve_model!(mws::SSOF.ModelWorkspace, airmasses::AbstractVector, times::AbstractVector; show_plot::Bool=false, kwargs...)
 	improve_model!(mws; show_plot=show_plot, kwargs...)
@@ -146,8 +142,6 @@ function _finish_downsizing(mws::SSOF.ModelWorkspace, model::SSOF.OrderModel; no
 	end
 	SSOF.train_OrderModel!(mws_smol; kwargs...)  # 120s
 	SSOF.finalize_scores!(mws_smol)
-	# model.metadata[:todo][:reg_improved] = true
-	model.metadata[:todo][:optimized] = true
 	return mws_smol
 end
 function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}, better_model::Int, lm_tel::Vector{<:SSOF.LinearModel}, lm_star::Vector{<:SSOF.LinearModel}; kwargs...)
