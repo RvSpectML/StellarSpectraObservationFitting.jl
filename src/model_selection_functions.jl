@@ -1,6 +1,12 @@
 total_length(x::Vector{<:AbstractArray}) = sum(total_length.(x))
 total_length(x::AbstractArray) = length(x)
-total_length(mws::FrozenTelWorkspace) = total_length(mws.total.θ) - is_time_variable(mws.om.tel) * length(mws.total.θ[1][1]) - length(mws.total.θ[1][end])
+function total_length(mws::FrozenTelWorkspace)
+	n = total_length(mws.total.θ) - length(mws.total.θ[1][end])
+	if is_time_variable(mws.om.tel)
+		n -= length(mws.total.θ[1][1]) + length(mws.total.θ[1][2])
+	end
+	return n
+end
 total_length(mws::TotalWorkspace) = total_length(mws.total.θ)
 total_length(mws::OptimWorkspace) = length(mws.telstar.p0) + length(mws.rv.p0)
 function effective_length(x; return_mask::Bool=false, masked_val::Real = Inf)
@@ -36,26 +42,27 @@ function n_negligible(mws::ModelWorkspace)
     return n
 end
 
-function _test_om(mws_inp::ModelWorkspace, _om::OrderModel, times::AbstractVector; kwargs...)
-    mws = typeof(mws_inp)(_om, mws_inp.d)
+function _test_om(mws_inp::ModelWorkspace, om::OrderModel, times::AbstractVector; no_tels::Bool=false, kwargs...)
+    if no_tels
+		mws = FrozenTelWorkspace(om, mws_inp.d)
+		om.tel.lm.μ .= 1
+	else
+		mws = typeof(mws_inp)(om, mws_inp.d)
+	end
     train_OrderModel!(mws; kwargs...)  # 16s
     n = total_length(mws) #- n_negligible(mws)
     model_rvs = rvs(mws.om)
     return _loss(mws), n, std(model_rvs), intra_night_std(model_rvs, times)
 end
 function test_ℓ_for_n_comps(n_comps::Vector, mws_inp::ModelWorkspace, times::AbstractVector, lm_tel::Vector{<:LinearModel}, lm_star::Vector{<:LinearModel}; return_inters::Bool=false, kwargs...)
-    _om = downsize(mws_inp.om, n_comps[1], n_comps[2])
+    _om = downsize(mws_inp.om, max(0, n_comps[1]), n_comps[2])
 
     # if either of the models are constant, there will only be one initialization
     # that should already be stored in the model
-    if (n_comps[1] == 0) || (n_comps[2] == 0)
+    if (n_comps[1] <= 0) || (n_comps[2] == 0)
         # if n_comps[2] > 0; fill_StarModel!(_om, lm_star[1]; inds=(1:n_comps[2]) .+ 1) end
-        l, n, rv_std, in_rv_std = _test_om(mws_inp, _om, times)
+        l, n, rv_std, in_rv_std = _test_om(mws_inp, _om, times; no_tels=n_comps[1]<0)
         return l, n, rv_std, in_rv_std, 1
-    # elseif n_comps[2] == 0
-    #     fill_TelModel!(_om, lm_tel[1], 1:n_comps[1])
-    #     l, n, rv_std, in_rv_std = _test_om(mws_inp, _om, times)
-    #     return l, n, rv_std, in_rv_std, 2
 
     # choose the better of the two initializations
     else

@@ -101,7 +101,7 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 		save_md = decision_fn!=""
 		save_plots = plots_fn!=""
 
-	    test_n_comp_tel = 0:size(model.tel.lm.M, 2)
+	    test_n_comp_tel = -1:size(model.tel.lm.M, 2)
 	    test_n_comp_star = 0:size(model.star.lm.M, 2)
 	    ks = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
 	    comp_ls = zeros(length(test_n_comp_tel), length(test_n_comp_star))
@@ -135,8 +135,13 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 	end
 	return mws
 end
-function _finish_downsizing(mws::SSOF.ModelWorkspace, model::SSOF.OrderModel; kwargs...)
-	mws_smol = typeof(mws)(model, mws.d)
+function _finish_downsizing(mws::SSOF.ModelWorkspace, model::SSOF.OrderModel; no_tels::Bool=false, kwargs...)
+	if no_tels
+		mws_smol = SSOF.FrozenTelWorkspace(model, mws.d)
+		model.tel.lm.μ .= 1
+	else
+		mws_smol = typeof(mws)(model, mws.d)
+	end
 	SSOF.train_OrderModel!(mws_smol; kwargs...)  # 120s
 	SSOF.finalize_scores!(mws_smol)
 	# model.metadata[:todo][:reg_improved] = true
@@ -152,12 +157,12 @@ function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}, bette
 			println("downsizing: used the $(n_comps[1]) telluric basis -> $(n_comps[2]) stellar basis initialization") :
 			println("downsizing: used the $(n_comps[2]) stellar basis -> $(n_comps[1]) telluric basis initialization")
 	end
-	return _finish_downsizing(mws, model; kwargs...)
+	return _finish_downsizing(mws, model; no_tels=n_comps[1]<0, kwargs...)
 end
 function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}; kwargs...)
 	model = SSOF.downsize(mws.om, n_comps[1], n_comps[2])
 	model.metadata[:todo][:downsized] = true
-	return _finish_downsizing(mws, model; kwargs...)
+	return _finish_downsizing(mws, model; no_tels=n_comps[1]<0, kwargs...)
 end
 
 
