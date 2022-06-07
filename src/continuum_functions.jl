@@ -135,7 +135,7 @@ function flat_normalize!(d::Data; kwargs...)
 	end
 end
 
-function outlier_mask(v::AbstractVector; thres::Real=5)
+function outlier_mask(v::AbstractVecOrMat; thres::Real=5)
 	μ = mean(v)
 	σ = stdm(v, μ)
 	return (v .< (μ + thres * σ)) .&& (v .> (μ - thres * σ))
