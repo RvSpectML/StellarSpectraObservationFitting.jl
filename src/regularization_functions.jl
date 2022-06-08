@@ -1,19 +1,19 @@
 _reg_fields = [:reg_tel, :reg_star]
 
 
-function _eval_regularization(om::OrderModel, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat)
+function _eval_regularization(om::OrderModel, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat; kwargs...)
     train = typeof(mws)(om, mws.d, training_inds)
     test = typeof(mws)(om, mws.d, testing_inds; only_s=true)
-    train_OrderModel!(train) # trains basis vectors and (scores at training time)
-    train_OrderModel!(test)  # trains scores at testing times
+    train_OrderModel!(train; kwargs...) # trains basis vectors and (scores at training time)
+    train_OrderModel!(test; kwargs...)  # trains scores at testing times
     return _loss(test)
 end
-function eval_regularization(reg_fields::Vector{Symbol}, reg_key::Symbol, reg_val::Real, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat)
+function eval_regularization(reg_fields::Vector{Symbol}, reg_key::Symbol, reg_val::Real, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat; kwargs...)
     om = copy(mws.om)
     for field in reg_fields
         getfield(om, field)[reg_key] = reg_val
     end
-    return _eval_regularization(om, mws, training_inds, testing_inds)
+    return _eval_regularization(om, mws, training_inds, testing_inds; kwargs...)
 end
 
 
@@ -23,9 +23,9 @@ function _fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol
     ℓs = Array{Float64}(undef, 2)
     reg_hold = [1, test_factor] .* start
     # println("initial regularization eval")
-    start_ℓ = ℓs[1] = eval_regularization(reg_fields, reg_key, reg_hold[1], mws, training_inds, testing_inds)
+    start_ℓ = ℓs[1] = eval_regularization(reg_fields, reg_key, reg_hold[1], mws, training_inds, testing_inds; kwargs...)
     # println("$(test_factor)x regularization eval")
-    ℓs[2] = eval_regularization(reg_fields, reg_key, reg_hold[2], mws, training_inds, testing_inds)
+    ℓs[2] = eval_regularization(reg_fields, reg_key, reg_hold[2], mws, training_inds, testing_inds; kwargs...)
     # println()
     # need to try decreasing regularization
     if ℓs[2] > ℓs[1]
@@ -33,7 +33,7 @@ function _fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol
             # println("trying a lower regularization")
             ℓs[2] = ℓs[1]
             reg_hold ./= test_factor
-            ℓs[1] = eval_regularization(reg_fields, reg_key, reg_hold[1], mws, training_inds, testing_inds)
+            ℓs[1] = eval_regularization(reg_fields, reg_key, reg_hold[1], mws, training_inds, testing_inds; kwargs...)
         end
         for field in reg_fields
             getfield(om, field)[reg_key] = reg_hold[2]
@@ -45,7 +45,7 @@ function _fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol
             # println("trying a higher regularization")
             ℓs[1] = ℓs[2]
             reg_hold .*= test_factor
-            ℓs[2] = eval_regularization(reg_fields, reg_key, reg_hold[2], mws, training_inds, testing_inds)
+            ℓs[2] = eval_regularization(reg_fields, reg_key, reg_hold[2], mws, training_inds, testing_inds; kwargs...)
         end
         for field in reg_fields
             getfield(om, field)[reg_key] = reg_hold[1]

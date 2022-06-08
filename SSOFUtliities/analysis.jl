@@ -145,7 +145,7 @@ function _finish_downsizing(mws::SSOF.ModelWorkspace, model::SSOF.OrderModel; no
 	return mws_smol
 end
 function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}, better_model::Int, lm_tel::Vector{<:SSOF.LinearModel}, lm_star::Vector{<:SSOF.LinearModel}; kwargs...)
-	model = SSOF.downsize(mws.om, n_comps[1], n_comps[2])
+	model = SSOF.downsize(mws.om, max(0, n_comps[1]), n_comps[2])
 	model.metadata[:todo][:downsized] = true
 	if all(n_comps .> 0)
 		SSOF._fill_model!(model, n_comps, better_model, lm_tel, lm_star)
@@ -156,7 +156,7 @@ function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}, bette
 	return _finish_downsizing(mws, model; no_tels=n_comps[1]<0, kwargs...)
 end
 function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}; kwargs...)
-	model = SSOF.downsize(mws.om, n_comps[1], n_comps[2])
+	model = SSOF.downsize(mws.om, max(0, n_comps[1]), n_comps[2])
 	model.metadata[:todo][:downsized] = true
 	return _finish_downsizing(mws, model; no_tels=n_comps[1]<0, kwargs...)
 end

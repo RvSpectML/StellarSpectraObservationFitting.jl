@@ -864,7 +864,7 @@ function model_prior(lm, om::OrderModel, key::Symbol)
 	reg = getfield(om, Symbol(:reg_, key))
 	sm = getfield(om, key)
 	isFullLinearModel = length(lm) > 2
-	val = 0
+	val = 0.
 
 	if haskey(reg, :GP_μ) || haskey(reg, :L2_μ) || haskey(reg, :L1_μ) || haskey(reg, :L1_μ₊_factor)
 		μ_mod = lm[1+2*isFullLinearModel] .- 1

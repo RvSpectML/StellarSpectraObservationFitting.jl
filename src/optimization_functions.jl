@@ -157,7 +157,7 @@ function loss_funcs_frozen_tel(o::Output, om::OrderModel, d::Data)
 		is_tel_time_variable ? tel = [om.tel.lm.M, total[1], om.tel.lm.μ] : tel = nothing
 		star = total[1+is_tel_time_variable]
 		rv = total[2+is_tel_time_variable]
-		return _loss(o, om, d; tel=tel, star=star, rv=rv)
+		return _loss(o, om, d; tel=tel, star=star, rv=rv) + star_prior(total[1+is_tel_time_variable], om)
 	end
     function l_frozen_tel_s(total_s)
 		if is_tel_time_variable
@@ -608,7 +608,6 @@ function _finalize_scores_setup(mws::ModelWorkspace, om::OrderModelWobble, loss_
 end
 function finalize_scores!(score_trainer::Function, mws::ModelWorkspace)
 	score_trainer()
-	remove_lm_score_means!(mws.om)
 	Output!(mws)
 end
 function finalize_scores!(mws::ModelWorkspace; kwargs...)
