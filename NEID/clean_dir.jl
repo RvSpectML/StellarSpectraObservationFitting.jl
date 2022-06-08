@@ -8,9 +8,9 @@ import StellarSpectraObservationFitting as SSOF
 using Dates
 ## Setting up necessary variables
 
-stars = ["10700", "2021/12/10", "2021/12/19", "2021/12/20", "2021/12/23"]
+stars = ["10700", "26965", "2021/12/10", "2021/12/19", "2021/12/20", "2021/12/23"]
 # orders_list = [1:85, 1:85, 1:85]
-orders_list = [4:122, 4:122, 4:122, 4:122, 4:122]
+orders_list = [4:122 for i in 1:length(stars)]
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 # prep_str = "noreg_"
 prep_str = ""
@@ -24,9 +24,10 @@ function clean(order::Int, star::String)
         ls = readdir(dir)
         println(order)
         for file in ls
-            if file != "data.jld2" && !isdir(dir * file) && (mtime(dir * file) < datetime2unix(cutoff))
+            # if file != "data.jld2" && !isdir(dir * file) && (mtime(dir * file) < datetime2unix(cutoff))
+            if file != "data.jld2" && (mtime(dir * file) < datetime2unix(cutoff))
                 println(file)
-                if delete; rm(dir * file) end
+                if delete; rm(dir * file; recursive=true) end
             end
         end
     else
