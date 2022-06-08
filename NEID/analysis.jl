@@ -43,9 +43,9 @@ else
     model, data, times_nu, airmasses, lm_tel, lm_star = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, dpca=dpca)
 end
 mws = SSOFU.create_workspace(model, data, opt)
-mws = SSOFU.downsize_model(mws, times_nu, lm_tel, lm_star; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path)#, use_aic=!solar)
+mws = SSOFU.downsize_model(mws, times_nu, lm_tel, lm_star; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path, use_aic=!solar)
 SSOFU.improve_regularization!(mws; save_fn=save_path)
-SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path)
+SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path, iter=300)
 rvs, rv_errors = SSOFU.estimate_errors(mws; save_fn=save_path)
 
 ## Plots
