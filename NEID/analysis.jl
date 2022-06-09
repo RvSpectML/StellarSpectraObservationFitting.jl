@@ -12,9 +12,10 @@ using Plots
 
 ## Setting up necessary variables
 
-stars = ["10700", "26965", "9407", "185144", "2021/12/19", "2021/12/20", "2021/12/23"]
-star_choice = SSOF.parse_args(1, Int, 4)
+stars = ["10700", "26965", "9407", "185144", "22049", "2021/12/19", "2021/12/20", "2021/12/23"]
+star_choice = SSOF.parse_args(1, Int, 2)
 star = stars[star_choice]
+solar = star_choice > 5
 interactive = length(ARGS) == 0
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 desired_order = SSOF.parse_args(2, Int, 81)  # 81 has a bunch of tels, 60 has very few
@@ -24,7 +25,6 @@ recalc = SSOF.parse_args(5, Bool, false)
 dpca = SSOF.parse_args(6, Bool, true)
 opt = SSOFU.valid_optimizers[which_opt]
 
-solar = star_choice > 4
 
 ## Loading in data and initializing model
 base_path = neid_save_path * star * "/$(desired_order)/"
