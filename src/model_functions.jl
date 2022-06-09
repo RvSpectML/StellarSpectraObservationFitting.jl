@@ -617,15 +617,12 @@ function _spectra_interp_gp!(fluxes::AbstractVector, vars, log_λ, flux_obs::Abs
 	vars[:] = var.(gp)
 	if keep_mask
 		inds = searchsortednearest(log_λ_obs, log_λ; lower=true)
-		for i in 1:length(inds)
-			if log_λ[i] < log_λ_obs[1]
-				if isinf(var_obs[1])
-					vars[i] = Inf
-				end
-			elseif log_λ[i] > log_λ_obs[end]
-				if isinf(var_obs[end])
-					vars[i] = Inf
-				end
+		# for i in 1:length(inds)
+		for i in 1:length(log_λ)
+			if log_λ[i] <= log_λ_obs[1]
+				if isinf(var_obs[1]); vars[i] = Inf end
+			elseif log_λ[i] >= log_λ_obs[end]
+				if isinf(var_obs[end]); vars[i] = Inf end
 			elseif isinf(var_obs[inds[i]]) && isinf(var_obs[inds[i]+1])
 				vars[i] = Inf
 			end
