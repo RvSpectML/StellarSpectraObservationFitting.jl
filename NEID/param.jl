@@ -1,6 +1,6 @@
 #global tophap_ccf_mask_scale_factor=1.6
 
-global max_spectra_to_use = 150
+global max_spectra_to_use = 250
 global fits_target_str
 
 if fits_target_str == "Solar" || fits_target_str == "Sun"

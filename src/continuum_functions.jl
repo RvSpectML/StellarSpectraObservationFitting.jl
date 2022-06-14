@@ -145,8 +145,8 @@ function mask_bad_normalization!(d::Data; kwargs...)
 	mask = outlier_mask([mean(view(d.var, .!isinf.(view(d.var, :, i)), i)) for i in 1:size(d.var, 2)]; kwargs...) .|| outlier_mask(vec(std(d.flux; dims=1)); kwargs...)
 	for i in 1:size(d.log_λ_obs, 2)
 		if !mask[i]
-			d.var[:, i] .= Inf
-			println("spectrum $i masked for having a weird continuum normalization, consider removing it from your analysis")
+			# d.var[:, i] .= Inf
+			println("spectrum $i has a weird continuum normalization, consider removing it from your analysis")
 		end
 	end
 end
