@@ -79,7 +79,7 @@ function test_ℓ_for_n_comps(n_comps::Vector, mws_inp::ModelWorkspace, times::A
 		_fill_model_star_first!(_om, n_comps, lm_tel, lm_star)
         ls[2], ns[2], rv_stds[2], in_rv_stds[2] = _test_om(mws_inp, _om, times; kwargs...)
 
-        better_model = argmax(ls)
+        better_model = argmin(ls)
         return ls[better_model], ns[better_model], rv_stds[better_model], in_rv_stds[better_model], better_model
     end
 end
