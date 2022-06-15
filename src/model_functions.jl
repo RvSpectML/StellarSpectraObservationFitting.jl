@@ -466,12 +466,12 @@ function OrderModel(
 end
 Base.copy(om::OrderModelDPCA) = OrderModelDPCA(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.b2o, om.t2o, copy(om.metadata), om.n)
 (om::OrderModelDPCA)(inds::AbstractVecOrMat) =
-	OrderModelDPCA(om.tel(inds), om.star(inds), om.rv(inds), om.reg_tel,
-		om.reg_star, view(om.b2o, inds), view(om.t2o, inds), copy(om.metadata), length(inds))
+	OrderModelDPCA(om.tel(inds), om.star(inds), om.rv(inds), copy(om.reg_tel),
+		copy(om.reg_star), view(om.b2o, inds), view(om.t2o, inds), copy(om.metadata), length(inds))
 Base.copy(om::OrderModelWobble) = OrderModelWobble(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.b2o, om.bary_rvs, om.t2o, copy(om.metadata), om.n)
 (om::OrderModelWobble)(inds::AbstractVecOrMat) =
-	OrderModelWobble(om.tel(inds), om.star(inds), view(om.rv, inds), om.reg_tel,
-		om.reg_star, om.b2o(inds, length(om.star.lm.μ)), view(om.bary_rvs, inds), view(om.t2o, inds), copy(om.metadata), length(inds))
+	OrderModelWobble(om.tel(inds), om.star(inds), view(om.rv, inds), copy(om.reg_tel),
+		copy(om.reg_star), om.b2o(inds, length(om.star.lm.μ)), view(om.bary_rvs, inds), view(om.t2o, inds), copy(om.metadata), length(inds))
 
 function rm_dict!(d::Dict)
 	for (key, value) in d
@@ -520,16 +520,16 @@ rvs(model::OrderModelWobble) = model.rv
 
 function downsize(lm::FullLinearModel, n_comp::Int)
 	if n_comp > 0
-		return FullLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :], lm.μ[:])
+		return FullLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :], copy(lm.μ))
 	else
-		return TemplateModel(lm.μ[:], size(lm.s, 2))
+		return TemplateModel(copy(lm.μ), size(lm.s, 2))
 	end
 end
 downsize(lm::BaseLinearModel, n_comp::Int) =
 	BaseLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :])
 function downsize(lm::TemplateModel, n_comp::Int)
 	@assert n_comp==0
-	return TemplateModel(lm.μ[:], lm.n)
+	return TemplateModel(copy(lm.μ), lm.n)
 end
 downsize(sm::Submodel, n_comp::Int) =
 	Submodel(copy(sm.log_λ), copy(sm.λ), downsize(sm.lm, n_comp), copy(sm.A_sde), copy(sm.Σ_sde), copy(sm.Δℓ_coeff))
@@ -537,12 +537,12 @@ downsize(m::OrderModelDPCA, n_comp_tel::Int, n_comp_star::Int) =
 	OrderModelDPCA(
 		downsize(m.tel, n_comp_tel),
 		downsize(m.star, n_comp_star),
-		m.rv, m.reg_tel, m.reg_star, m.b2o, m.t2o, m.metadata, m.n)
+		copy(m.rv), copy(m.reg_tel), copy(m.reg_star), m.b2o, m.t2o, copy(m.metadata), m.n)
 downsize(m::OrderModelWobble, n_comp_tel::Int, n_comp_star::Int) =
 	OrderModelWobble(
 		downsize(m.tel, n_comp_tel),
 		downsize(m.star, n_comp_star),
-		m.rv, m.reg_tel, m.reg_star, m.b2o, m.bary_rvs, m.t2o, m.metadata, m.n)
+		copy(m.rv), copy(m.reg_tel), copy(m.reg_star), copy(m.b2o), m.bary_rvs, m.t2o, copy(m.metadata), m.n)
 
 spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
 	hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
