@@ -284,7 +284,10 @@ function update!(aws::AdamSubWorkspace)
     iterate!(aws.θ, Δ, aws.opt)
 end
 
-check_converged(as::AdamState, f_reltol::Real, g_reltol::Real, g_L∞tol::Real) = ((as.δ_ℓ > (1 - f_reltol)) && (max(as.δ_L2_Δ,1/as.δ_L2_Δ) < (1+abs(g_reltol)))) || (as.L∞_Δ < g_L∞tol)
+function check_converged(as::AdamState, f_reltol::Real, g_reltol::Real, g_L∞tol::Real)
+	as.ℓ > 0 ? δ_ℓ = as.δ_ℓ : δ_ℓ = 1 / as.δ_ℓ  # further reductions in negative cost functions are good!
+	return ((δ_ℓ > (1 - f_reltol)) && (max(as.δ_L2_Δ,1/as.δ_L2_Δ) < (1+abs(g_reltol)))) || (as.L∞_Δ < g_L∞tol)
+end
 check_converged(as::AdamState, iter::Int, f_reltol::Real, g_reltol::Real, g_L∞tol::Real) = (as.iter > iter) || check_converged(as, f_reltol, g_reltol, g_L∞tol)
 function train_SubModel!(aws::AdamSubWorkspace; iter=_iter_def, f_reltol = _f_reltol_def, g_reltol = _g_reltol_def, g_L∞tol = _g_L∞tol_def, cb::Function=()->(), kwargs...)
 	converged = false  # check_converged(aws.as, iter, f_tol, g_tol)
