@@ -1,13 +1,6 @@
 total_length(x::Vector{<:AbstractArray}) = sum(total_length.(x))
 total_length(x::AbstractArray) = length(x)
-function total_length(mws::FrozenTelWorkspace)
-	n = total_length(mws.total.θ) - length(mws.total.θ[1][end])
-	if is_time_variable(mws.om.tel)
-		n -= length(mws.total.θ[1][1]) + length(mws.total.θ[1][2])
-	end
-	return n
-end
-total_length(mws::TotalWorkspace) = total_length(mws.total.θ)
+total_length(mws::AdamWorkspace) = total_length(mws.total.θ)
 total_length(mws::OptimWorkspace) = length(mws.telstar.p0) + length(mws.rv.p0)
 function effective_length(x; return_mask::Bool=false, masked_val::Real = Inf)
     mask = x .!= masked_val
@@ -61,8 +54,8 @@ function test_ℓ_for_n_comps(n_comps::Vector, mws_inp::ModelWorkspace, times::A
     # that should already be stored in the model
     if (n_comps[1] <= 0) || (n_comps[2] == 0)
         # if n_comps[2] > 0; fill_StarModel!(_om, lm_star[1]; inds=(1:n_comps[2]) .+ 1) end
-        l, n, rv_std, in_rv_std = _test_om(mws_inp, _om, times; no_tels=n_comps[1]<0)
-        return l, n, rv_std, in_rv_std, 1
+        l, n, rv_std, in_rv_std = _test_om(mws_inp, _om, times; no_tels=n_comps[1]<0, kwargs...)
+        return l, n, rv_std, in_rv_std, 2
 
     # choose the better of the two initializations
     else
