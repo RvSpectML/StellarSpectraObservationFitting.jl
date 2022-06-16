@@ -162,7 +162,7 @@ function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}; kwarg
 end
 
 
-function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="")
+function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="", n::Int=50)
 	save = save_fn!=""
 	model = mws.om
 	data = mws.d
@@ -172,10 +172,18 @@ function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="")
 	    data.var[data.var.==0] .= Inf
 
 		rvs = SSOF.rvs(model)
-	    n = 50
 	    typeof(mws.om) <: SSOF.OrderModelWobble ?
 		 	rv_holder = Array{Float64}(undef, n, length(model.rv)) :
 			rv_holder = Array{Float64}(undef, n, length(model.rv.lm.s))
+
+		time_var_tel = SSOF.is_time_variable(mws.om.tel)
+		time_var_star = SSOF.is_time_variable(mws.om.star)
+		if time_var_tel
+			tel_holder = Array{Float64}(undef, n, size(mws.om.tel.lm.s, 1), size(mws.om.tel.lm.s, 2))
+		end
+		if time_var_star
+			star_holder = Array{Float64}(undef, n, size(mws.om.star.lm.s, 1), size(mws.om.star.lm.s, 2))
+		end
 
 	    _mws = typeof(mws)(copy(model), copy(data))
 	    _mws_score_finalizer() = SSOF.finalize_scores_setup(_mws)
@@ -184,14 +192,36 @@ function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="")
 	        SSOF.train_OrderModel!(_mws; iter=50)
 	        _mws_score_finalizer()
 	        rv_holder[i, :] = SSOF.rvs(_mws.om)
+			if time_var_tel
+				tel_holder[i, :, :] .= _mws.om.tel.lm.s
+			end
+			if time_var_star
+				star_holder[i, :, :] .= _mws.om.star.lm.s
+			end
 	    end
 	    rv_errors = vec(std(rv_holder; dims=1))
-	    model.metadata[:todo][:err_estimated] = true
-	    if save; @save save_fn model rvs rv_errors end
-		return rvs, rv_errors
+		if time_var_tel
+			tel_errors = Array{Float64}(undef, size(mws.om.tel.lm.s, 1), size(mws.om.tel.lm.s, 2))
+			for i in 1:size(mws.om.tel.lm.s, 1)
+				tel_errors[i, :] .= vec(std(view(tel_holder, :, i, :); dims=1))
+			end
+		else
+			tel_errors = nothing
+		end
+		if time_var_star
+			star_errors = Array{Float64}(undef, size(mws.om.star.lm.s, 1), size(mws.om.star.lm.s, 2))
+			for i in 1:size(mws.om.star.lm.s, 1)
+				star_errors[i, :] .= vec(std(view(star_holder, :, i, :); dims=1))
+			end
+		else
+			star_errors = nothing
+		end
+	    if save; @save save_fn model rvs rv_errors tel_errors star_errors end
+		model.metadata[:todo][:err_estimated] = true
+		return rvs, rv_errors, tel_errors, star_errors
 	else
 		println("loading rvs")
-		if save; @load save_fn rvs rv_errors end
-		return rvs, rv_errors
+		if save; @load save_fn rvs rv_errors tel_errors star_errors end
+		return rvs, rv_errors, tel_errors, star_errors
 	end
 end
