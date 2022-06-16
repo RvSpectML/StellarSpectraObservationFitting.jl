@@ -93,7 +93,7 @@ function _fill_model_star_first!(model::OrderModel, n_comps::Vector{<:Int}, lm_t
 	fill_TelModel!(model, lm_tel[n_comps[2]+1], 1:n_comps[1])
 end
 
-function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector, var::AbstractMatrix; return_inters::Bool=false, use_aic::Bool=false)
+function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector, var::AbstractMatrix; return_inters::Bool=false, use_aic::Bool=true)
 
     ## max likelihood
     # ans_ml = argmin(ls)

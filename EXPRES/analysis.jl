@@ -21,20 +21,25 @@ desired_order = SSOF.parse_args(2, Int, 67)  # 68 has a bunch of tels, 47 has ve
 use_reg = SSOF.parse_args(3, Bool, true)
 which_opt = SSOF.parse_args(4, Int, 1)
 recalc = SSOF.parse_args(5, Bool, false)
+dpca = SSOF.parse_args(6, Bool, true)
 opt = SSOFU.valid_optimizers[which_opt]
 
 ## Loading in data and initializing model
 base_path = expres_save_path * star * "/$(desired_order)/"
 data_path = base_path * "data.jld2"
+if !dpca
+	base_path *= "wobble/"
+	mkpath(base_path)
+end
 save_path = base_path * "results.jld2"
 
-model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "EXPRES", star; use_reg=use_reg, save_fn=save_path, recalc=recalc)
+model, data, times_nu, airmasses, lm_tel, lm_star = SSOFU.create_model(data_path, desired_order, "EXPRES", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, dpca=dpca)
 mws = SSOFU.create_workspace(model, data, opt)
+mws = SSOFU.downsize_model(mws, times_nu, lm_tel, lm_star; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path)
 SSOFU.improve_regularization!(mws; save_fn=save_path)
-SSOFU.improve_model!(mws; show_plot=interactive, save_fn=save_path)
-mws, _, _, _, _, _ = SSOFU.downsize_model(mws, times_nu; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path)
+SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path, iter=300)
 # SSOFU.improve_regularization!(mws; save_fn=save_path, redo=true)
-rvs, rv_errors = SSOFU.estimate_errors(mws; save_fn=save_path)
+rvs, rv_errors, tel_errors, star_errors = SSOFU.estimate_errors(mws; save_fn=save_path)
 
 ## Plots
 using CSV, DataFrames
@@ -44,7 +49,7 @@ eo_rv_σ = expres_output."CBC RV Err. [m/s]"
 eo_time = expres_output."Time [MJD]"
 
 # Compare RV differences to actual RVs from activity
-plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, eo_time, eo_rv, eo_rv_σ; display_plt=interactive, markerstrokewidth=1, title="HD$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
+plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, eo_time, eo_rv, eo_rv_σ; display_plt=interactive, title="$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
 png(plt, save_path * "model_rvs.png")
 
-SSOFU.save_model_plots(mws, airmasses, times_nu, base_path; display_plt=interactive)
+SSOFU.save_model_plots(mws, airmasses, times_nu, base_path; display_plt=interactive, tel_errors=tel_errors, star_errors=star_errors)
