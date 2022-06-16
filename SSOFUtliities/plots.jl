@@ -70,11 +70,12 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 		plot!(plt[1, 1], om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ", alpha=0.3, color=base_color, title="Telluric Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
 		plot!(plt[1, 1], om.tel.λ, om.tel.lm.μ; label="μₜₑₗ")
 
-		_scatter!(plt[2, 1], times_nu, airmasses; label="Airmasses", color=plt_colors[1])
-		hline!(plt[2, 1], [1]; label="", color=plt_colors[1], lw=3, alpha=0.4)
+		max_s_std = maximum([std(om.tel.lm.s[i, :] .* norm(om.tel.lm.M[:, i])) for i in inds])
+		shift_s = ceil(10 * max_s_std) / 2
+		_scatter!(plt[2, 1], times_nu, ((max_s_std / std(airmasses)) .* (airmasses .- mean(airmasses))) .+ shift_s; label="Airmasses (scaled)", color=plt_colors[1])
+		hline!(plt[2, 1], [shift_s]; label="", color=plt_colors[1], lw=3, alpha=0.4)
 
-		shift_s = ceil(10 * maximum([std(om.tel.lm.s[inds[i], :] .* norm(om.tel.lm.M[:, inds[i]])) for i in inds])) / 2
-		half_shift_s = ceil(shift_s) / 2
+		# half_shift_s = ceil(shift_s) / 2
 		holder = copy(om.tel.lm.s)
 	    for i in reverse(inds)
 	        c_ind = c_ind_f(i - inds[1])
@@ -88,11 +89,11 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 				om.tel.lm.s[i, :] .= 0
 				Δχ² = 1 - (χ²_base / SSOF._loss(o, om, d; tel=vec(om.tel.lm)))
 				om.tel.lm.s[i, :] .= view(holder, i, :)
-				_scatter!(plt[2, 1], times_nu, (view(om.tel.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1) + half_shift_s); label="Weights $i (Δχ² = $(round(Δχ²; digits=3)))", color=plt_colors[c_ind], title="Telluric Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
+				_scatter!(plt[2, 1], times_nu, (view(om.tel.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1)); label="Weights $i (Δχ² = $(round(Δχ²; digits=3)))", color=plt_colors[c_ind], title="Telluric Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
 			else
-				_scatter!(plt[2, 1], times_nu, (view(om.tel.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1) + half_shift_s); label="Weights $i", color=plt_colors[c_ind], title="Telluric Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
+				_scatter!(plt[2, 1], times_nu, (view(om.tel.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1)); label="Weights $i", color=plt_colors[c_ind], title="Telluric Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
 			end
-			hline!(plt[2, 1], [-(shift_s * (i - 1) + half_shift_s)]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
+			hline!(plt[2, 1], [-(shift_s * (i - 1))]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
 	    end
 	end
 	if plot_stellar
