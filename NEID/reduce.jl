@@ -38,9 +38,9 @@ med_rvs_σ = vec(median(rvs_σ; dims=2))
 rvs_std = vec(std(rvs; dims=2))
 σ_floor = 50
 
-χ²_sortperm = sortperm(χ²)
-χ²_sortperm = [i for i in χ²_sortperm if !iszero(χ²[i])]
-χ²_orders = χ²_sortperm[1:end-6]
+χ²_sortperm = [i for i in sortperm(χ²) if !iszero(χ²[i])]
+χ²_orders = [i for i in χ²_sortperm if χ²[i] < (4.5e3 / 37 * size(rvs, 2))]
+
 χ²_orders = [orders[χ²_order] for χ²_order in χ²_orders]
 inds = orders2inds([orders[i] for i in eachindex(orders) if (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders)])
 
@@ -56,7 +56,6 @@ neid_rv .-= median(neid_rv)
 
 using LinearAlgebra
 lin = SSOF.general_lst_sq_f(rvs_red, Diagonal(rvs_σ2_red), 1; x=times_nu)
-
 
 annot = text.(orders[rvs_std .< σ_floor], :center, :black, 3)
 plt = SSOFU._plot()

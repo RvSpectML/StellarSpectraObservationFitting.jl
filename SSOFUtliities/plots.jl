@@ -18,11 +18,6 @@ plot_rv(; xlabel = "Time (d)", ylabel = "RV (m/s)", kwargs...) =
 plot_scores(; xlabel = "Time (d)", ylabel = "Weights + Const", kwargs...) =
     _plot(; xlabel=xlabel, ylabel=ylabel, kwargs...)
 theme(_theme)
-function _scatter(x::AbstractVecOrMat, y::AbstractVecOrMat; kwargs...)
-    plt = _plot(; kwargs...)
-    scatter!(plt, x, y; kwargs...)
-	return plt
-end
 _scatter!(plt::Union{Plots.AbstractPlot,Plots.AbstractLayout}, x::AbstractVecOrMat, y::AbstractVecOrMat; markerstrokewidth::Real=0, kwargs...) = scatter!(plt, x, y; markerstrokewidth=markerstrokewidth, kwargs...)
 _theme == :default ? plt_colors = palette(_theme).colors.colors : plt_colors = PlotThemes._themes[_theme].defaults[:palette].colors.colors
 
