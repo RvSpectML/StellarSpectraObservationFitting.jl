@@ -542,7 +542,7 @@ downsize(m::OrderModelWobble, n_comp_tel::Int, n_comp_star::Int) =
 	OrderModelWobble(
 		downsize(m.tel, n_comp_tel),
 		downsize(m.star, n_comp_star),
-		copy(m.rv), copy(m.reg_tel), copy(m.reg_star), copy(m.b2o), m.bary_rvs, m.t2o, copy(m.metadata), m.n)
+		copy(m.rv), copy(m.reg_tel), copy(m.reg_star), m.b2o, m.bary_rvs, m.t2o, copy(m.metadata), m.n)
 
 spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
 	hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
