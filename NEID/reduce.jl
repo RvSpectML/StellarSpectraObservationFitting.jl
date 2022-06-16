@@ -21,8 +21,8 @@ else
     prep_str = "wobble_"
 end
 
-# for prep_str in ["wobble_", ""]
-#     for star_ind in [1,2,5]
+# for star_ind in [1,2,5]
+#     for prep_str in ["wobble_", ""]
 star = stars[star_ind]
 orders = orders_list[star_ind]
 orders2inds(selected_orders::AbstractVector) = [searchsortedfirst(orders, order) for order in selected_orders]
@@ -40,6 +40,10 @@ rvs_std = vec(std(rvs; dims=2))
 
 χ²_sortperm = [i for i in sortperm(χ²) if !iszero(χ²[i])]
 χ²_orders = [i for i in χ²_sortperm if χ²[i] < (4.5e3 / 37 * size(rvs, 2))]
+println("starting with $(length(orders)) orders")
+println("$(length(orders) - length(χ²_sortperm)) orders ignored for unfinished analyses or otherwise weird")
+println("$(length(χ²_sortperm) - length(χ²_orders)) worst orders (in χ²-sense) ignored")
+println("$(length(χ²_orders)) orders used in total")
 
 χ²_orders = [orders[χ²_order] for χ²_order in χ²_orders]
 inds = orders2inds([orders[i] for i in eachindex(orders) if (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders)])
