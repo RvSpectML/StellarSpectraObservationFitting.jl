@@ -6,10 +6,14 @@ Pkg.instantiate()
 using JLD2
 import StellarSpectraObservationFitting as SSOF
 using CSV, DataFrames
+using Statistics
+using Plots
 
 ## Setting up necessary variables
 
 SSOF_path = dirname(dirname(pathof(SSOF)))
+include(SSOF_path * "/SSOFUtliities/SSOFUtilities.jl")
+SSOFU = SSOFUtilities
 stars = ["10700", "26965", "9407", "185144", "22049", "2021/12/19", "2021/12/20", "2021/12/23"]
 orders_list = repeat([4:122], length(stars))
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
@@ -39,14 +43,15 @@ rvs_std = vec(std(rvs; dims=2))
 σ_floor = 50
 
 χ²_sortperm = [i for i in sortperm(χ²) if !iszero(χ²[i])]
-χ²_orders = [i for i in χ²_sortperm if χ²[i] < (4.5e3 / 37 * size(rvs, 2))]
+χ²_thres = 4.5e3 / 37 * size(rvs, 2)
+χ²_orders = [i for i in χ²_sortperm if χ²[i] < χ²_thres]
+χ²_orders = [orders[χ²_order] for χ²_order in χ²_orders]
+inds = orders2inds([orders[i] for i in eachindex(orders) if ((rvs_std[i] < σ_floor) && (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders))])
 println("starting with $(length(orders)) orders")
 println("$(length(orders) - length(χ²_sortperm)) orders ignored for unfinished analyses or otherwise weird")
 println("$(length(χ²_sortperm) - length(χ²_orders)) worst orders (in χ²-sense) ignored")
-println("$(length(χ²_orders)) orders used in total")
-
-χ²_orders = [orders[χ²_order] for χ²_order in χ²_orders]
-inds = orders2inds([orders[i] for i in eachindex(orders) if (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders)])
+println("$(length(χ²_orders) - length(inds)) more orders ignored for having >$σ_floor m/s RMS or errors")
+println("$(length(inds)) orders used in total")
 
 rvs_red = collect(Iterators.flatten((sum(rvs[inds, :] ./ (rvs_σ[inds, :] .^ 2); dims=1) ./ sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1))'))
 rvs_red .-= median(rvs_red)
@@ -54,9 +59,8 @@ rvs_σ_red = collect(Iterators.flatten(1 ./ sqrt.(sum(1 ./ (rvs_σ[inds, :] .^ 2
 rvs_σ2_red = rvs_σ_red .^ 2
 
 @load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ
-star=="10700" ? mask = .!(2459525 .< times_nu .< 2459530) : mask = Bool.(ones(length(times_nu)))
-
 neid_rv .-= median(neid_rv)
+star=="10700" ? mask = .!(2459525 .< times_nu .< 2459530) : mask = Bool.(ones(length(times_nu)))
 
 using LinearAlgebra
 lin = SSOF.general_lst_sq_f(rvs_red, Diagonal(rvs_σ2_red), 1; x=times_nu)
@@ -72,7 +76,7 @@ annot = text.(orders[med_rvs_σ .< σ_floor], :center, :black, 3)
 plt = SSOFU._plot()
 scatter!(plt, orders[med_rvs_σ .< σ_floor], med_rvs_σ[med_rvs_σ .< σ_floor]; legend=:topleft, label="", title="$star Median σ", xlabel="Order", ylabel="m/s", size=(SSOFU._plt_size[1]*0.5,SSOFU._plt_size[2]*0.75), series_annotations=annot, ylim=[0,σ_floor], markerstrokewidth=0.5)
 annot = text.(orders[med_rvs_σ .> σ_floor], :center, :black, 3)
-scatter!(plt, orders[med_rvs_σ .> σ_floor], ones(sum(med_rvs_σ .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=SSOFU.plt_colors[1])
+scatter!(plt, orders[med_rvs_σ .> σ_floor], ones(sum(med_rvs_σ .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=SSOFU.plt_colors[1], markerstrokewidth=0.5)
 png(plt, "figs/neid_" * prep_str * star * "_order_rv_σ")
 
 annot = text.(orders, :center, :black, 3)
@@ -82,7 +86,8 @@ png(plt, "figs/neid_" * prep_str * star * "_order_rv_ratio")
 
 annot = text.(orders[χ²_sortperm], :center, :black, 4)
 plt = SSOFU._plot()
-scatter!(plt, χ²[χ²_sortperm]; label="", ylabel="χ²", series_annotations=annot, title=prep_str * star * "_χ²", size=(SSOFU._plt_size[1]*(length(orders) / 80),SSOFU._plt_size[2]), markerstrokewidth=0, yaxis=:log10)
+scatter!(plt, χ²[χ²_sortperm]; label="", ylabel="χ²", series_annotations=annot, title = star * "_χ²", size=(SSOFU._plt_size[1]*(length(orders) / 80),SSOFU._plt_size[2]), markerstrokewidth=0, yaxis=:log10)
+hline!(plt, [χ²_thres]; label="", lw=1, color=SSOFU.plt_colors[1])
 png(plt, "figs/neid_" * prep_str * star * "_χ²")
 
 # Compare RV differences to actual RVs from activity

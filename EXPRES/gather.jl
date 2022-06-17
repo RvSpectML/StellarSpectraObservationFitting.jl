@@ -13,20 +13,10 @@ SSOFU = SSOFUtilities
 
 input_ind = SSOF.parse_args(1, Int, 0)
 dpca = SSOF.parse_args(2, Bool, true)
-only_excalibur = SSOF.parse_args(3, Bool, false)
+
 stars = ["10700", "26965", "34411"]
-if only_excalibur
-    # excals = Bool.(zeros(85))
-    # for order in 1:85
-    #     @load expres_save_path * star * "/$(order)/data.jld2" used_excal
-    #     excals[order] = used_excal
-    # end
-    # findfirst(excals):findlast(excals)
-    orders_list = [42:77, 40:77, 38:77]
-else
-    orders_list = repeat([1:85], length(stars))
-end
 input_ind == 0 ? star_inds = (1:length(stars)) : star_inds = input_ind:input_ind
+orders_list = repeat([1:85], length(stars))
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 if dpca
     prep_str = ""
