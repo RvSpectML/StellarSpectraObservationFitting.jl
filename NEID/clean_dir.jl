@@ -9,10 +9,8 @@ using Dates
 ## Setting up necessary variables
 
 stars = ["10700", "26965", "2021/12/10", "2021/12/19", "2021/12/20", "2021/12/23"]
-# orders_list = [1:85, 1:85, 1:85]
-orders_list = [4:122 for i in 1:length(stars)]
+orders_list = repeat([4:122], length(stars))
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
-# prep_str = "noreg_"
 prep_str = ""
 cutoff = now() - Week(1)
 input_ind = SSOF.parse_args(1, Int, 0)
@@ -37,10 +35,7 @@ end
 
 input_ind == 0 ? star_inds = (1:length(stars)) : star_inds = input_ind
 for star_ind in star_inds
-    star = stars[star_ind]
-    orders = orders_list[star_ind]
-    n_ord = length(orders)
-    for i in 1:n_ord
-        clean(orders[i], star)
+    for order in orders_list[star_ind]
+        clean(order, stars[star_ind])
     end
 end

@@ -9,10 +9,8 @@ using Dates
 ## Setting up necessary variables
 
 stars = ["10700", "26965", "34411"]
-# orders_list = [1:85, 1:85, 1:85]
-orders_list = [1:85, 1:85, 1:85]
+orders_list = repeat([1:85], length(stars))
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
-# prep_str = "noreg_"
 prep_str = ""
 cutoff = now() - Week(1)
 input_ind = SSOF.parse_args(1, Int, 0)
@@ -24,7 +22,8 @@ function clean(order::Int, star::String)
         ls = readdir(dir)
         println(order)
         for file in ls
-            if file != "data.jld2" && !isdir(dir * file) && (mtime(dir * file) < datetime2unix(cutoff))
+            # if file != "data.jld2" && !isdir(dir * file) && (mtime(dir * file) < datetime2unix(cutoff))
+            if file != "data.jld2" && (mtime(dir * file) < datetime2unix(cutoff))
                 println(file)
                 if delete; rm(dir * file) end
             end
@@ -36,10 +35,7 @@ end
 
 input_ind == 0 ? 1:length(stars) : star_inds = input_ind
 for star_ind in star_inds
-    star = stars[star_ind]
-    orders = orders_list[star_ind]
-    n_ord = length(orders)
-    for i in 1:n_ord
-        clean(orders[i], star)
+    for order in orders_list[star_ind]
+        clean(order, stars[star_ind])
     end
 end
