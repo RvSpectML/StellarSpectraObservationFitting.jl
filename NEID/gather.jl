@@ -18,7 +18,6 @@ stars = ["10700", "26965", "9407", "185144", "22049", "2021/12/19", "2021/12/20"
 input_ind == 0 ? star_inds = (1:length(stars)) : star_inds = input_ind:input_ind
 orders_list = repeat([4:122], length(stars))
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
-# prep_str = "noreg_"
 if dpca
     prep_str = ""
 else
