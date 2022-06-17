@@ -11,7 +11,6 @@ using Dates
 stars = ["10700", "26965", "34411"]
 orders_list = repeat([1:85], length(stars))
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
-prep_str = ""
 cutoff = now() - Week(1)
 input_ind = SSOF.parse_args(1, Int, 0)
 delete = SSOF.parse_args(2, Bool, false)
