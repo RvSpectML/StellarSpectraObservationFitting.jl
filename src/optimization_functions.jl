@@ -289,23 +289,16 @@ function check_converged(as::AdamState, f_reltol::Real, g_reltol::Real, g_L∞to
 	return ((δ_ℓ > (1 - f_reltol)) && (max(as.δ_L2_Δ,1/as.δ_L2_Δ) < (1+abs(g_reltol)))) || (as.L∞_Δ < g_L∞tol)
 end
 check_converged(as::AdamState, iter::Int, f_reltol::Real, g_reltol::Real, g_L∞tol::Real) = (as.iter > iter) || check_converged(as, f_reltol, g_reltol, g_L∞tol)
-function train_SubModel!(aws::AdamSubWorkspace; iter=_iter_def, f_reltol = _f_reltol_def, g_reltol = _g_reltol_def, g_L∞tol = _g_L∞tol_def, cb::Function=()->(), kwargs...)
+function train_SubModel!(aws::AdamSubWorkspace; iter=_iter_def, f_reltol = _f_reltol_def, g_reltol = _g_reltol_def, g_L∞tol = _g_L∞tol_def, cb::Function=(as::AdamState)->(), kwargs...)
 	converged = false  # check_converged(aws.as, iter, f_tol, g_tol)
 	while !converged
 		update!(aws)
-		cb()
+		cb(aws.as)
 		converged = check_converged(aws.as, iter, f_reltol, g_reltol, g_L∞tol)
 	end
 	converged = check_converged(aws.as, f_reltol, g_reltol, g_L∞tol)
 	# converged ? println("Converged") : println("Max Iters Reached")
 	return converged
-end
-function default_cb(as::AdamState; print_stuff=_print_stuff_def)
-	if print_stuff
-		return () -> println(as)
-	else
-		return () -> ()
-	end
 end
 
 rel_step_size(θ::AbstractVecOrMat) = sqrt(mean(abs2, θ))
@@ -403,7 +396,7 @@ FrozenTelWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
 FrozenTelWorkspace(om::OrderModel, d::Data; kwargs...) =
 	FrozenTelWorkspace(Output(om, d), om, d; kwargs...)
 
-function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, kwargs...)
+function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, shift_scores::Bool=true, kwargs...)
 
     if ignore_regularization
         reg_tel_holder = copy(mws.om.reg_tel)
@@ -411,7 +404,20 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
         rm_regularization!(mws.om)
     end
 
-	cb = default_cb(mws.total.as; print_stuff)
+	function cb(as::AdamState)
+		if shift_scores
+			if !(typeof(mws) <: FrozenTelWorkspace)
+				remove_lm_score_means!(mws.om.tel.lm)
+			end
+			remove_lm_score_means!(mws.om.tel.lm)
+			if typeof(mws.om) <: OrderModelWobble
+				remove_lm_score_means!(mws.om.star.lm)
+			end
+		end
+		if print_stuff; println(as) end
+	end
+	# print_stuff ? cb(as::AdamState) = println(as) : cb(as::AdamState) = nothing
+
 	result = train_SubModel!(mws.total; cb=cb, kwargs...)
 	mws.total.as.iter = 0
     Output!(mws)

@@ -189,7 +189,7 @@ function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="", n::Int=50)
 	    _mws_score_finalizer() = SSOF.finalize_scores_setup(_mws)
 	    for i in 1:n
 	        _mws.d.flux .= data.flux .+ (data_noise .* randn(size(data.var)))
-	        SSOF.train_OrderModel!(_mws; iter=50)
+	        SSOF.train_OrderModel!(_mws; shift_scores=false, iter=50)
 	        _mws_score_finalizer()
 	        rv_holder[i, :] = SSOF.rvs(_mws.om)
 			if time_var_tel

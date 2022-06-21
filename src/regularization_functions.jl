@@ -5,7 +5,7 @@ function _eval_regularization(om::OrderModel, mws::ModelWorkspace, training_inds
     train = typeof(mws)(om, mws.d, training_inds)
     test = typeof(mws)(om, mws.d, testing_inds; only_s=true)
     train_OrderModel!(train; kwargs...) # trains basis vectors and (scores at training time)
-    train_OrderModel!(test; kwargs...)  # trains scores at testing times
+    train_OrderModel!(test; shift_scores=false, kwargs...)  # trains scores at testing times
     return _loss(test)
 end
 function eval_regularization(reg_fields::Vector{Symbol}, reg_key::Symbol, reg_val::Real, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat; kwargs...)
