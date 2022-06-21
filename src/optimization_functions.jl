@@ -409,7 +409,6 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
 			if !(typeof(mws) <: FrozenTelWorkspace)
 				remove_lm_score_means!(mws.om.tel.lm)
 			end
-			remove_lm_score_means!(mws.om.tel.lm)
 			if typeof(mws.om) <: OrderModelWobble
 				remove_lm_score_means!(mws.om.star.lm)
 			end
