@@ -120,13 +120,26 @@ function reformat_spectra(
 	end
 
 	if is_NEID
+		f = FITS(df_files.Filename[1])
+		neid_tel = zeros(n_obs, size(f[11], 1), size(f[11], 2))
+		_df = DataFrame(f[14])
+		df_cols = String[]
+		for i in _df.INDEX
+			append!(df_cols, [i, i*"_σ"])
+		end
+		df_act = zeros(n_obs, length(df_cols))
 		rv_ords = 57:122
 		neid_time = zeros(n_obs)
 		neid_rv = zeros(n_obs)
 		neid_rv_σ = zeros(n_obs)
 		neid_order_rv = zeros(n_obs, orders_to_read[end])
 		for i in 1:n_obs # at every time
-			ccf_header = read_header(FITS(df_files.Filename[i])[13])
+			f = FITS(df_files.Filename[i])
+			neid_tel[i, :, :] .= read(f[11])
+			_df = DataFrame(f[14])
+			df_act[i, 1:2:end] = _df.VALUE
+			df_act[i, 2:2:end] = _df.UNCERTAINTY
+			ccf_header = read_header(f[13])
 			neid_time[i] = ccf_header["CCFJDMOD"]
 			neid_rv[i] = ccf_header["CCFRVMOD"] * 1000  # m/s
 			neid_rv_σ[i] = ccf_header["DVRMSMOD"] * 1000  # m/s
@@ -134,6 +147,7 @@ function reformat_spectra(
 				neid_order_rv[i, j] = ccf_header["CCFRV"*n2s(j)] * 1000  # m/s
 			end
 		end
-		@save save_path_base * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv
+		df_act = DataFrame(df_act, df_cols)
+		@save save_path_base * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv df_act neid_tel
 	end
 end
