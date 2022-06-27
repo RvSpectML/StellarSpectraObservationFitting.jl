@@ -49,13 +49,23 @@ SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=sa
 rvs, rv_errors, tel_errors, star_errors = SSOFU.estimate_errors(mws; save_fn=save_path)
 
 ## Plots
-@load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv
+@load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv d_act_tot neid_tel d_lcs
 
 # Compare RV differences to actual RVs from activity
 plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
 png(plt, base_path * "model_rvs.png")
 
-SSOFU.save_model_plots(mws, airmasses, times_nu, base_path; display_plt=interactive, tel_errors=tel_errors, star_errors=star_errors)
+lo, hi = exp.(quantile(vec(data.log_λ_star), [0.05, 0.95]))
+df_act = Dict()
+for wv in keys(d_lcs)
+	if lo < parse(Float64, wv) < hi
+		for key in d_lcs[wv]
+			df_act[key] = d_act_tot[key]
+			df_act[key*"_σ"] = d_act_tot[key*"_σ"]
+		end
+	end
+end
+SSOFU.save_model_plots(mws, airmasses, times_nu, base_path; display_plt=interactive, tel_errors=tel_errors, star_errors=star_errors, df_act=df_act)
 
 if all(.!iszero.(view(neid_order_rv, :, desired_order)))
     plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, view(neid_order_rv, :, desired_order), zeros(length(times_nu)); display_plt=interactive, title="$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");

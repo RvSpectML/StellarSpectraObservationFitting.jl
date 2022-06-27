@@ -40,8 +40,8 @@ function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat
     return plt
 end
 
-c_ind_f(i) = ((i + 3) % 19) + 1
-function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; display_plt::Bool=true, d::Union{SSOF.Data, Nothing}=nothing, o::Union{SSOF.Output, Nothing}=nothing, incl_χ²::Bool=true, tel_errors::Union{AbstractMatrix, Nothing}=nothing, star_errors::Union{AbstractMatrix, Nothing}=nothing, kwargs...)
+c_ind_f(i) = ((i + 3) % 16) + 1
+function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; display_plt::Bool=true, d::Union{SSOF.Data, Nothing}=nothing, o::Union{SSOF.Output, Nothing}=nothing, incl_χ²::Bool=true, tel_errors::Union{AbstractMatrix, Nothing}=nothing, star_errors::Union{AbstractMatrix, Nothing}=nothing, df_act::Dict=Dict(), kwargs...)
 	plot_stellar = SSOF.is_time_variable(om.star)
 	plot_telluric = SSOF.is_time_variable(om.tel)
 	# plot the two templates if there is no time variation
@@ -54,7 +54,7 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 	end
 
 	n_plots = plot_stellar + plot_telluric
-	plt = _plot(; layout=grid(2, n_plots), size=(n_plots * _plt_size[1],_plt_size[2]*1.5), kwargs...)
+	plt = _plot(; layout=grid(2, n_plots), size=(n_plots * _plt_size[1],_plt_size[2]*2), kwargs...)
 	shift_M = 0.2
 	incl_χ² = incl_χ² && !isnothing(d) && !isnothing(o)
 	if incl_χ²; χ²_base = SSOF._loss(o, om, d) end
@@ -72,7 +72,8 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 
 		# half_shift_s = ceil(shift_s) / 2
 		if incl_χ²; holder = copy(om.tel.lm.s) end
-	    for i in reverse(inds)
+	    # for i in reverse(inds)
+		for i in inds
 	        c_ind = c_ind_f(i - inds[1])
 			norm_M = norm(view(om.tel.lm.M, :, i))
 
@@ -101,9 +102,21 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 		plot!(plt[1, n_plots], om.tel.λ, om.tel.lm.μ; label="μₜₑₗ", alpha=0.3, color=base_color, title="Stellar Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
 		plot!(plt[1, n_plots], om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ")
 
-		shift_s = ceil(10 * maximum([std(om.star.lm.s[inds[i], :] .* norm(om.star.lm.M[:, inds[i]])) for i in inds])) / 2
+		max_s_std = maximum([std(om.star.lm.s[inds[i], :] .* norm(om.star.lm.M[:, inds[i]])) for i in inds])
+		shift_s = ceil(10 * max_s_std) / 2
+		_keys = sort([key for key in keys(df_act)])[1:2:end]
+		for i in reverse(1:length(_keys))
+			key = _keys[i]
+			y = df_act[key]
+			c = max_s_std / std(y)
+			scatter!(plt[2, n_plots], times_nu, (c .* (y .- mean(y))) .+ (shift_s*i); label=_keys[i] * " (scaled)", yerror=c.*df_act[key*"_σ"], color=plt_colors[c_ind_f(1 + c_offset)], markerstrokewidth=0.5)
+			hline!(plt[2, n_plots], [shift_s*i]; label="", color=plt_colors[c_ind_f(1 + c_offset)], lw=3, alpha=0.4)
+			c_offset += 1
+		end
+
 		if incl_χ²; holder = copy(om.star.lm.s) end
-		for i in reverse(inds)
+		# for i in reverse(inds)
+		for i in inds
 			c_ind = c_ind_f(i + c_offset)
 			norm_M = norm(view(om.star.lm.M, :, i))
 
@@ -205,8 +218,8 @@ function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n
     return plt
 end
 
-function save_model_plots(mws, airmasses, times_nu, save_path::String; display_plt::Bool=true, incl_χ²::Bool=true, tel_errors::Union{AbstractMatrix, Nothing}=nothing, star_errors::Union{AbstractMatrix, Nothing}=nothing, kwargs...)
-	plt = plot_model(mws, airmasses, times_nu; display_plt=display_plt, incl_χ²=incl_χ², tel_errors=tel_errors, star_errors=star_errors, kwargs...);
+function save_model_plots(mws, airmasses, times_nu, save_path::String; display_plt::Bool=true, incl_χ²::Bool=true, tel_errors::Union{AbstractMatrix, Nothing}=nothing, star_errors::Union{AbstractMatrix, Nothing}=nothing, df_act::Dict=Dict(), kwargs...)
+	plt = plot_model(mws, airmasses, times_nu; display_plt=display_plt, incl_χ²=incl_χ², tel_errors=tel_errors, star_errors=star_errors, df_act=df_act, kwargs...);
 	png(plt, save_path * "model.png")
 
 	plt = status_plot(mws; display_plt=display_plt, kwargs...);

@@ -29,10 +29,12 @@ function create_model(
 	# takes a couple mins now
 	if isfile(save_fn) && !recalc
 		println("using saved model at $save_fn")
-	    @load save_fn model lm_tel lm_star
-	    if model.metadata[:todo][:err_estimated]
-	        @load save_fn rv_errors
-	    end
+	    @load save_fn model
+		if !model.metadata[:todo][:downsized]
+			@load save_fn lm_tel lm_star
+		else
+			lm_tel, lm_star = SSOF.FullLinearModel[], SSOF.FullLinearModel[]
+		end
 	else
 	    model = SSOF.OrderModel(data, instrument, desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, oversamp=oversamp, dpca=dpca)
 	    lm_tel, lm_star = SSOF.initializations!(model, data; kwargs...)
@@ -127,7 +129,7 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 			end
 		end
 
-		if save; @save save_fn model model_large end
+		if save; @save save_fn model lm_tel lm_star model_large end
 
 		return mws_smol#, ℓ, aics, bics, comp_stds, comp_intra_stds
 	end

@@ -123,6 +123,19 @@ function reformat_spectra(
 		f = FITS(df_files.Filename[1])
 		neid_tel = zeros(n_obs, size(f[11], 1), size(f[11], 2))
 		_df = DataFrame(f[14])
+		inds = _df.INDEX
+		lcs = _df.LINE_CENTER
+		d_lcs = Dict()
+		for i in 1:length(lcs)
+			_lcs = split(lcs[i], ", ")
+			for j in _lcs
+				if haskey(d_lcs, j)
+					append!(d_lcs[j], [inds[i]])
+				else
+					d_lcs[j] = [inds[i]]
+				end
+			end
+		end
 		df_cols = String[]
 		for i in _df.INDEX
 			append!(df_cols, [i, i*"_σ"])
@@ -147,7 +160,11 @@ function reformat_spectra(
 				neid_order_rv[i, j] = ccf_header["CCFRV"*n2s(j)] * 1000  # m/s
 			end
 		end
-		df_act = DataFrame(df_act, df_cols)
-		@save save_path_base * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv df_act neid_tel
+		d_act_tot = Dict()
+		for key in 1:2:length(df_cols)
+			d_act_tot[df_cols[i]] = df_act[:, i]
+			d_act_tot[df_cols[i+1]] = df_act[:, i+1]
+		end
+		@save save_path_base * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv d_act_tot neid_tel
 	end
 end
