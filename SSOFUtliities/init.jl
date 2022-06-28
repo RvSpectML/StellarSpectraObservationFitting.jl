@@ -136,6 +136,8 @@ function reformat_spectra(
 				end
 			end
 		end
+		Hα = "6562.808"
+		if Hα in keys(d_lcs) && "Ha06_2" in d_lcs[Hα]; d_lcs[Hα] = ["Ha06_2"] end
 		df_cols = String[]
 		for i in _df.INDEX
 			append!(df_cols, [i, i*"_σ"])
@@ -165,6 +167,6 @@ function reformat_spectra(
 			d_act_tot[df_cols[i]] = df_act[:, i]
 			d_act_tot[df_cols[i+1]] = df_act[:, i+1]
 		end
-		@save save_path_base * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv d_act_tot neid_tel
+		@save save_path_base * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv d_act_tot neid_tel d_lcs
 	end
 end
