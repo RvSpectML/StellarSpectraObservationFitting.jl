@@ -167,7 +167,7 @@ function neid_extras(df_files::DataFrame, save_path_base::String)
 		end
 	end
 	d_act_tot = Dict()
-	for key in 1:2:length(df_cols)
+	for i in 1:2:length(df_cols)
 		d_act_tot[df_cols[i]] = df_act[:, i]
 		d_act_tot[df_cols[i+1]] = df_act[:, i+1]
 	end
