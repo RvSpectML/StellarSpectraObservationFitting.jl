@@ -8,7 +8,7 @@ import StellarSpectraObservationFitting as SSOF
 using EchelleInstruments, EchelleInstruments.EXPRES
 using CSV, DataFrames, Query
 SSOF_path = dirname(dirname(pathof(SSOF)))
-include(SSOF_path * "/SSOFUtliities/SSOFUtilities.jl")
+include(SSOF_path * "/SSOFUtilities/SSOFUtilities.jl")
 SSOFU = SSOFUtilities
 
 stars = ["10700", "26965", "34411"]

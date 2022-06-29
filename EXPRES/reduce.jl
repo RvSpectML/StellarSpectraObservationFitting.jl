@@ -12,7 +12,7 @@ using Plots
 ## Setting up necessary variables
 
 SSOF_path = dirname(dirname(pathof(SSOF)))
-include(SSOF_path * "/SSOFUtliities/SSOFUtilities.jl")
+include(SSOF_path * "/SSOFUtilities/SSOFUtilities.jl")
 SSOFU = SSOFUtilities
 stars = ["10700", "26965", "34411"]
 orders_list = repeat([1:85], length(stars))

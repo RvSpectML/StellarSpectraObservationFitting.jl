@@ -6,7 +6,7 @@ Pkg.instantiate()
 using JLD2
 import StellarSpectraObservationFitting as SSOF
 SSOF_path = dirname(dirname(pathof(SSOF)))
-include(SSOF_path * "/SSOFUtliities/SSOFUtilities.jl")
+include(SSOF_path * "/SSOFUtilities/SSOFUtilities.jl")
 SSOFU = SSOFUtilities
 
 ## Setting up necessary variables
