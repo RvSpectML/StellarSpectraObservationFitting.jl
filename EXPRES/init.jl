@@ -16,11 +16,11 @@ star = stars[SSOF.parse_args(1, Int, 1)]
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 target_subdir = star * "/"  # needed for param.jl
 fits_target_str = star  # needed for param.jl
-include("lsf.jl")  # defines EXPRES_lsf()
 
 df_files = make_manifest(expres_data_path * target_subdir, EXPRES)
 include("param.jl")  # filters df_files -> df_files_use
 
+include("lsf.jl")  # defines EXPRES_lsf()
 SSOFU.reformat_spectra(
 	df_files_use,
 	expres_save_path * target_subdir,

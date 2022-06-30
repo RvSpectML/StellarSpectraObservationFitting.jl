@@ -12,7 +12,7 @@ _intra_poly_order = 2
 
 if _recalc
     using CSV, DataFrames
-    eo = CSV.read("D:/Christian/Downloads/expres_psf.txt", DataFrame)
+    eo = CSV.read("EXPRES/expres_psf.txt", DataFrame)
     # eo = CSV.read("C:/Users/chris/Downloads/expres_psf.txt", DataFrame)
     filter!(:line => ==("LFC"), eo)
     sort!(eo, ["wavenumber [1/cm]"])
@@ -48,22 +48,23 @@ else
     _min_wn, _max_wn = 13760.52558749721, 20111.11872452446
 end
 
-lsf_σ_inter_order(wn::Real) = _w[1] + wn*(_w[2] + _w[3]*wn)
-lsf_σ_intra_order(wn_m_order_mean::Real) = wn_m_order_mean*(_w[4] + _w[5]*wn_m_order_mean)
-lsf_σ(wn::Real, wn_m_order_mean::Real) = lsf_σ_inter_order(wn) + lsf_σ_intra_order(wn_m_order_mean)
-function lsf_σ_safe(wn::Real, wn_m_order_mean::Real)
-    if _min_wn < wn < _max_wn
-        return lsf_σ(wn, wn_m_order_mean)
-    else
-        return lsf_σ_inter_order(wn)
-    end
-end
-function lsf_σ_inter_order(wn::AbstractVector)
-    dm = ones(length(wn), 3)
-    dm[:, 2] = wn
-    dm[:, 3] = wn .* wn
-    return dm * view(_w, 1:3)
-end
+# lsf_σ_inter_order(wn::Real) = _w[1] + wn*(_w[2] + _w[3]*wn)
+# lsf_σ_intra_order(wn_m_order_mean::Real) = wn_m_order_mean*(_w[4] + _w[5]*wn_m_order_mean)
+# lsf_σ(wn::Real, wn_m_order_mean::Real) = lsf_σ_inter_order(wn) + lsf_σ_intra_order(wn_m_order_mean)
+# function lsf_σ_safe(wn::Real, wn_m_order_mean::Real)
+#     if _min_wn < wn < _max_wn
+#         return lsf_σ(wn, wn_m_order_mean)
+#     else
+#         # return lsf_σ_inter_order(wn)
+#         return nothing
+#     end
+# end
+# function lsf_σ_inter_order(wn::AbstractVector)
+#     dm = ones(length(wn), 3)
+#     dm[:, 2] = wn
+#     dm[:, 3] = wn .* wn
+#     return dm * view(_w, 1:3)
+# end
 
 function lsf_σ(wn::AbstractVector, wn_m_order_mean::AbstractVector)
     dm = ones(length(wn), 1 + _inter_poly_order + _intra_poly_order)
@@ -81,7 +82,8 @@ function lsf_σ_safe(wn::AbstractVector, wn_m_order_mean::AbstractVector)
     if _min_wn < mean(wn) < _max_wn
         return lsf_σ(wn, wn_m_order_mean)
     else
-        return lsf_σ_inter_order(wn)
+        return nothing
+        # return lsf_σ_inter_order(wn)
     end
 end
 
@@ -120,13 +122,13 @@ function EXPRES_lsf(λ::AbstractVector; safe::Bool=true)
     if safe; @assert 1000 < mean(λ) < 50000  "Are you sure you're using λ (Å) and not wavenumber (1/cm) or log(λ)?" end
     wn = SSOF.Å_to_wavenumber.(λ)
     σs = lsf_σ_safe(wn, wn .- mean(wn))
+    if isnothing(σs); return nothing end
     nwn = -wn
     holder = zeros(length(nwn), length(nwn))
     # max_w = 0
     for i in eachindex(nwn)
         lo, hi = SSOF.searchsortednearest(nwn, [nwn[i] - 3 * σs[i], nwn[i] + 3 * σs[i]])
-        lsf = Normal(wn[i], σs[i])
-        holder[i, lo:hi] = pdf.(lsf, wn[lo:hi])
+        holder[i, lo:hi] = pdf.(Normal(wn[i], σs[i]), wn[lo:hi])
         holder[i, lo:hi] ./= sum(view(holder, i, lo:hi))
         # max_w = max(max_w, max(hi-i, i-lo))
     end

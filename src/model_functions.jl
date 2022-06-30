@@ -110,6 +110,8 @@ struct LSFData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
 		return new{T, AM, typeof(log_λ_obs_bounds)}(flux::AM, var::AM, log_λ_obs::AM, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds, lsf)
 	end
 end
+LSFData(flux::AM, var::AM, log_λ_obs::AM, log_λ_star::AM, lsf::Nothing) where {T<:Real, AM<:AbstractMatrix{T}} =
+	GenericData(flux, var, log_λ_obs, log_λ_star)
 (d::LSFData)(inds::AbstractVecOrMat) =
 	LSFData(view(d.flux, :, inds), view(d.var, :, inds),
 	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds), d.lsf)

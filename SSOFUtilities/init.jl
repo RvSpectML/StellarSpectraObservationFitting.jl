@@ -99,9 +99,13 @@ function reformat_spectra(
 				log_λ_obs[:, i] .= log.(all_spectra[i].λ_obs[mask_inds, order_ind])
 				log_λ_star[:, i] .= log.(all_spectra[i].λ[mask_inds, order_ind])
 			end
-			lsf_f != nothing ?
-				data = SSOF.LSFData(flux_obs, var_obs, log_λ_obs, log_λ_star, lsf_f(exp.(log_λ_obs))) :
+			if lsf_f != nothing
+				is_NEID ?
+					data = SSOF.LSFData(flux_obs, var_obs, log_λ_obs, log_λ_star, lsf_f(order)) :
+					data = SSOF.LSFData(flux_obs, var_obs, log_λ_obs, log_λ_star, lsf_f(exp.(log_λ_obs)))
+			else
 				data = SSOF.GenericData(flux_obs, var_obs, log_λ_obs, log_λ_star)
+			end
 			# data_backup = copy(data)
 
 			SSOF.process!(data; order=2)
