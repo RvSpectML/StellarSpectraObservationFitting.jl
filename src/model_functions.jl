@@ -805,6 +805,8 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 
 	remove_lm_score_means!(lm_tel)
 	remove_lm_score_means!(lm_star)
+	flip_basis_vectors!(lm_tel)
+	flip_basis_vectors!(lm_star)
 
 	fill_TelModel!(om, lm_tel[1])
 	fill_StarModel!(om, lm_star[1])
@@ -825,6 +827,22 @@ end
 function remove_lm_score_means!(lms::Vector{<:LinearModel})
 	for lm in lms
 		remove_lm_score_means!(lm)
+	end
+end
+
+function flip_basis_vectors!(lm::FullLinearModel)
+	flipper = -sign.(mean(lm.M; dims=1))  # make basis vector be absorption features
+	lm.M .*= flipper
+	lm.s .*= flipper'
+end
+flip_basis_vectors!(lm::LinearModel) = nothing
+function flip_basis_vectors!(om::OrderModel)
+	flip_basis_vectors!(om.star.lm)
+	flip_basis_vectors!(om.tel.lm)
+end
+function flip_basis_vectors!(lms::Vector{<:LinearModel})
+	for lm in lms
+		flip_basis_vectors!(lm)
 	end
 end
 
@@ -883,7 +901,7 @@ function model_prior(lm, om::OrderModel, key::Symbol)
 				val -= gp_ℓ_precalc(sm.Δℓ_coeff, lm[1][:, i], sm.A_sde, sm.Σ_sde) * reg[:GP_M]
 			end
 		end
-		if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0) || (haskey(reg, :GP_M) && reg[:GP_M] != 0); val += L1(lm[2]) end
+		if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0) || (haskey(reg, :GP_M) && reg[:GP_M] != 0); val += L2(lm[2]) end
 	end
 	return val
 end

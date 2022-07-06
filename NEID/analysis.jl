@@ -22,7 +22,8 @@ desired_order = SSOF.parse_args(2, Int, 81)  # 81 has a bunch of tels, 60 has ve
 use_reg = SSOF.parse_args(3, Bool, true)
 which_opt = SSOF.parse_args(4, Int, 1)
 recalc = SSOF.parse_args(5, Bool, false)
-dpca = SSOF.parse_args(6, Bool, true)
+dpca = SSOF.parse_args(6, Bool, false)
+use_lsf = SSOF.parse_args(7, Bool, true)
 opt = SSOFU.valid_optimizers[which_opt]
 
 
@@ -42,6 +43,7 @@ if solar
 else
     model, data, times_nu, airmasses, lm_tel, lm_star = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, dpca=dpca)
 end
+if !use_lsf; data = SSOF.GenericData(data) end
 if all(isone.(model.tel.lm.μ)) && !SSOF.is_time_variable(model.tel); opt = "frozen-tel" end
 mws = SSOFU.create_workspace(model, data, opt)
 mws = SSOFU.downsize_model(mws, times_nu, lm_tel, lm_star; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path, use_aic=!solar)

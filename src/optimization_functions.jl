@@ -351,6 +351,7 @@ TotalWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
 	TotalWorkspace(om(inds), d(inds); kwargs...)
 TotalWorkspace(om::OrderModel, d::Data; kwargs...) =
 	TotalWorkspace(Output(om, d), om, d; kwargs...)
+Base.copy(mws::TotalWorkspace) = TotalWorkspace(copy(mws.om), mws.d)
 
 
 struct FrozenTelWorkspace <: AdamWorkspace

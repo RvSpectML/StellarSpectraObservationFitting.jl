@@ -17,11 +17,12 @@ star_choice = SSOF.parse_args(1, Int, 2)
 star = stars[star_choice]
 interactive = length(ARGS) == 0
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
-desired_order = SSOF.parse_args(2, Int, 67)  # 68 has a bunch of tels, 47 has very few
+desired_order = SSOF.parse_args(2, Int, 68)  # 68 has a bunch of tels, 47 has very few
 use_reg = SSOF.parse_args(3, Bool, true)
 which_opt = SSOF.parse_args(4, Int, 1)
 recalc = SSOF.parse_args(5, Bool, false)
-dpca = SSOF.parse_args(6, Bool, true)
+dpca = SSOF.parse_args(6, Bool, false)
+use_lsf = SSOF.parse_args(7, Bool, false)
 opt = SSOFU.valid_optimizers[which_opt]
 
 ## Loading in data and initializing model
@@ -34,6 +35,7 @@ end
 save_path = base_path * "results.jld2"
 
 model, data, times_nu, airmasses, lm_tel, lm_star = SSOFU.create_model(data_path, desired_order, "EXPRES", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, dpca=dpca)
+if !use_lsf; data = SSOF.GenericData(data) end
 if all(isone.(model.tel.lm.μ)) && !SSOF.is_time_variable(model.tel); opt = "frozen-tel" end
 mws = SSOFU.create_workspace(model, data, opt)
 mws = SSOFU.downsize_model(mws, times_nu, lm_tel, lm_star; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path)

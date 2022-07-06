@@ -59,7 +59,7 @@ function create_workspace(model, data, opt::String)
 	return mws
 end
 
-function improve_regularization!(mws::SSOF.ModelWorkspace; redo::Bool=false, print_stuff::Bool=true, testing_ratio::Real=0.25, save_fn::String="")
+function improve_regularization!(mws::SSOF.ModelWorkspace; redo::Bool=false, print_stuff::Bool=true, testing_ratio::Real=0.25, save_fn::String="", kwargs...)
 
 	save = save_fn!=""
 
@@ -72,7 +72,7 @@ function improve_regularization!(mws::SSOF.ModelWorkspace; redo::Bool=false, pri
 	    n_obs_test = Int(round(testing_ratio * n_obs))
 	    test_start_ind = max(1, Int(round(rand() * (n_obs - n_obs_test))))
 	    testing_inds = test_start_ind:test_start_ind+n_obs_test-1
-	    SSOF.fit_regularization!(mws, testing_inds)
+	    SSOF.fit_regularization!(mws, testing_inds; kwargs...)
 	    model.metadata[:todo][:reg_improved] = true
 	    if save; @save save_fn model end
 	end
