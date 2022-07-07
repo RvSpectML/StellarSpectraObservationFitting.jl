@@ -27,10 +27,10 @@ else
 end
 include("param.jl")  # filters df_files -> df_files_use
 
-include("lsf.jl")  # defines NEID_lsf()
+include("lsf.jl")  # defines NEIDLSF.NEID_lsf()
 SSOFU.reformat_spectra(
 	df_files_use,
 	neid_save_path * target_subdir,
 	NEID,
 	min_order(NEID2D()):max_order(NEID2D());
-	lsf_f = NEID_lsf)
+	lsf_f = NEIDLSF.neid_lsf)
