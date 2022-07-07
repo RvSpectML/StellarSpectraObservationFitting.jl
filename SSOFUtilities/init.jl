@@ -66,9 +66,8 @@ function reformat_spectra(
 	flux_inds = SSOF.flatten_ranges(flux_masks)
 
 	times_nu = [s.metadata[:bjd] for s in all_spectra]
-	is_EXPRES ?
-		airmasses = [parse(Float64, s.metadata[:airmass]) for s in all_spectra] :
-		airmasses = [s.metadata[:airmass] for s in all_spectra]
+	airmasses = [s.metadata[:airmass] for s in all_spectra]
+	# if is_EXPRES; airmasses = [parse(Float64, s.metadata[:airmass]) for s in all_spectra] end
 
 	## Switching to my data format
 	println("starting to write new files")
@@ -102,7 +101,7 @@ function reformat_spectra(
 			if lsf_f != nothing
 				is_NEID ?
 					data = SSOF.LSFData(flux_obs, var_obs, log_λ_obs, log_λ_star, lsf_f(order)) :
-					data = SSOF.LSFData(flux_obs, var_obs, log_λ_obs, log_λ_star, lsf_f(exp.(log_λ_obs)))
+					data = SSOF.LSFData(flux_obs, var_obs, log_λ_obs, log_λ_star, lsf_f(exp.(log_λ_obs), order))
 			else
 				data = SSOF.GenericData(flux_obs, var_obs, log_λ_obs, log_λ_star)
 			end
