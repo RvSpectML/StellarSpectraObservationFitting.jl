@@ -43,6 +43,7 @@ if solar
 else
     model, data, times_nu, airmasses, lm_tel, lm_star = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, dpca=dpca)
 end
+times_nu .-= 2400000.5
 if !use_lsf; data = SSOF.GenericData(data) end
 if all(isone.(model.tel.lm.μ)) && !SSOF.is_time_variable(model.tel); opt = "frozen-tel" end
 mws = SSOFU.create_workspace(model, data, opt)
@@ -53,6 +54,7 @@ rvs, rv_errors, tel_errors, star_errors = SSOFU.estimate_errors(mws; save_fn=sav
 
 ## Plots
 @load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv d_act_tot neid_tel d_lcs
+neid_time .-= 2400000.5
 
 # Compare RV differences to actual RVs from activity
 plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");

@@ -21,6 +21,7 @@ function create_model(
 	)
 
 	save = save_fn!=""
+	init_fn = save_fn[1:end-5]*"_init.jld2"
 
 	# save_path = save_path_base * star * "/$(desired_order)/"
 	@load data_fn n_obs data times_nu airmasses
@@ -30,20 +31,27 @@ function create_model(
 	if isfile(save_fn) && !recalc
 		println("using saved model at $save_fn")
 	    @load save_fn model
-		if !model.metadata[:todo][:downsized]
-			@load save_fn lm_tel lm_star
-		else
-			lm_tel, lm_star = SSOF.FullLinearModel[], SSOF.FullLinearModel[]
-		end
 	else
 	    model = SSOF.OrderModel(data, instrument, desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, oversamp=oversamp, dpca=dpca)
-	    lm_tel, lm_star = SSOF.initializations!(model, data; kwargs...)
 		if !use_reg
 			SSOF.rm_regularization!(model)
 			model.metadata[:todo][:reg_improved] = true
 		end
-		if save; @save save_fn model lm_tel lm_star end
+		if save
+			@save save_fn model
+		end
 	end
+
+	if isfile(init_fn) && !recalc
+		@load init_fn lm_tel lm_star
+	else
+		lm_tel, lm_star = SSOF.initializations!(model, data; kwargs...)
+		# lm_tel, lm_star = SSOF.FullLinearModel[], SSOF.FullLinearModel[]
+		if save
+			@save init_fn lm_tel lm_star
+		end
+	end
+
 	return model, data, times_nu, airmasses, lm_tel, lm_star
 end
 
@@ -129,7 +137,7 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 			end
 		end
 
-		if save; @save save_fn model lm_tel lm_star model_large end
+		if save; @save save_fn model model_large end
 
 		return mws_smol#, ℓ, aics, bics, comp_stds, comp_intra_stds
 	end

@@ -346,9 +346,9 @@ end
 
 # They need to be different or else the stellar μ will be surpressed
 # We only use the ones that have seemed useful
-default_reg_tel = Dict([(:GP_μ, 1e6), (:L1_μ, 1e5), (:L1_μ₊_factor, 6.),
+default_reg_tel = Dict([(:GP_μ, 1e6), (:L2_μ, 1e6), (:L1_μ, 1e5), (:L1_μ₊_factor, 6.),
 	(:GP_M, 1e7), (:L1_M, 1e7)])
-default_reg_star = Dict([(:GP_μ, 1e2), (:GP_M, 1e4), (:L1_M, 1e7)])
+default_reg_star = Dict([(:GP_μ, 1e2), (:L2_μ, 1e-2), (:GP_M, 1e4), (:L1_M, 1e7)])
 default_reg_tel_full = Dict([(:GP_μ, 1e6), (:L2_μ, 1e6), (:L1_μ, 1e5),
 	(:L1_μ₊_factor, 6.), (:GP_M, 1e7), (:L2_M, 1e4), (:L1_M, 1e7)])
 default_reg_star_full = Dict([(:GP_μ, 1e2), (:L2_μ, 1e-2), (:L1_μ, 1e1),

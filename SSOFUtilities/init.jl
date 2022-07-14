@@ -121,14 +121,14 @@ function reformat_spectra(
 			println("order $order skipped for being only $(length(mask_inds)) useful pixels wide")
 		end
 	end
-
-	if is_NEID; neid_extras(df_files, save_path_base) end
 end
 
 function neid_extras(df_files::DataFrame, save_path_base::String)
 	n_obs = nrow(df_files)
 	f = FITS(df_files.Filename[1])
 	neid_tel = zeros(n_obs, size(f[11], 1), size(f[11], 2))
+	neid_tel_wvapor = zeros(n_obs)
+	neid_tel_zenith = zeros(n_obs)
 	_df = DataFrame(f[14])
 	inds = _df.INDEX
 	lcs = _df.LINE_CENTER
@@ -158,6 +158,9 @@ function neid_extras(df_files::DataFrame, save_path_base::String)
 	for i in 1:n_obs # at every time
 		f = FITS(df_files.Filename[i])
 		neid_tel[i, :, :] .= read(f[11])
+		_df_h = read_header(f[11])
+		neid_tel_wvapor[i] = _df_h["WVAPOR"]
+		neid_tel_zenith[i] = _df_h["ZENITH"]
 		_df = DataFrame(f[14])
 		df_act[i, 1:2:end] = _df.VALUE
 		df_act[i, 2:2:end] = _df.UNCERTAINTY
@@ -174,5 +177,5 @@ function neid_extras(df_files::DataFrame, save_path_base::String)
 		d_act_tot[df_cols[i]] = df_act[:, i]
 		d_act_tot[df_cols[i+1]] = df_act[:, i+1]
 	end
-	@save save_path_base * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv d_act_tot neid_tel d_lcs
+	@save save_path_base * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv d_act_tot neid_tel d_lcs neid_tel_wvapor neid_tel_zenith
 end

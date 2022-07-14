@@ -3,6 +3,7 @@ module NEIDLSF
     using FITSIO
     using SpecialFunctions
     using SparseArrays
+    
     function conv_gauss_tophat(x::Real, σ::Real, boxhalfwidth::Real; amp::Real=1)
         scale = 1 / (sqrt(2) * σ)
         arg1 = (boxhalfwidth + x) * scale
@@ -15,17 +16,17 @@ module NEIDLSF
     no_lsf_orders = [all(iszero.(view(bhws, :, i))) for i in 1:size(bhws,2)]
     @assert all(no_lsf_orders .== [all(iszero.(view(σs, :, i))) for i in 1:size(σs,2)])
 
-    function conv_gauss_tophat_integral(σ::Real, bhw::Real, xmμ::Real)
-        x1 = xmμ - 0.5
-        x2 = xmμ + 0.5
-        scale = 1 / (sqrt(2) * σ)
-        z1 = (bhw + x1) * scale
-        zm1 = (bhw - x1) * scale
-        z2 = (bhw + x2) * scale
-        zm2 = (bhw - x2) * scale
-        return sqrt(2 / π) * σ * (exp(-(zm1^2)) - exp(-(z1^2)) - exp(-(zm2^2)) + exp(-(z2^2))) +
-            (bhw - x1) * erf(zm1) - (bhw + x1) * erf(z1) - (bhw - x2) * erf(zm2) + (bhw + x2) * erf(z2)
-    end
+    # function conv_gauss_tophat_integral(σ::Real, bhw::Real, xmμ::Real)
+    #     x1 = xmμ - 0.5
+    #     x2 = xmμ + 0.5
+    #     scale = 1 / (sqrt(2) * σ)
+    #     z1 = (bhw + x1) * scale
+    #     zm1 = (bhw - x1) * scale
+    #     z2 = (bhw + x2) * scale
+    #     zm2 = (bhw - x2) * scale
+    #     return sqrt(2 / π) * σ * (exp(-(zm1^2)) - exp(-(z1^2)) - exp(-(zm2^2)) + exp(-(z2^2))) +
+    #         (bhw - x1) * erf(zm1) - (bhw + x1) * erf(z1) - (bhw - x2) * erf(zm2) + (bhw + x2) * erf(z2)
+    # end
 
     threeish_sigma(σ::Real, bhw::Real) = 3 * abs(σ) + 0.87 * abs(bhw)
     function neid_lsf(order::Int)

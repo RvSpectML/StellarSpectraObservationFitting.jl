@@ -77,7 +77,7 @@ end
 
 
 _key_list = [:GP_μ, :L2_μ, :L1_μ, :L1_μ₊_factor, :GP_M, :L2_M, :L1_M, :shared_M]
-_key_list_fit = [:GP_μ, :L1_μ, :GP_M, :L1_M]
+_key_list_fit = [:GP_μ, :L2_μ, :L1_μ, :GP_M, :L2_M, :L1_M]
 _key_list_bases = [:GP_M, :L2_M, :L1_M, :shared_M]
 function check_for_valid_regularization(reg::Dict{Symbol, <:Real})
     for i in keys(reg)
