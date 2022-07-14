@@ -30,49 +30,38 @@ opt = SSOFU.valid_optimizers[which_opt]
 ## Loading in data and initializing model
 base_path = neid_save_path * star * "/$(desired_order)/"
 data_path = base_path * "data.jld2"
-if !dpca
+if dpca
+	base_path *= "dpca/"
+	mkpath(base_path)
+else
 	base_path *= "wobble/"
 	mkpath(base_path)
 end
 save_path = base_path * "results.jld2"
+init_path = base_path * "results_init.jld2"
 
 if solar
     @load neid_save_path * "10700/$(desired_order)/results.jld2" model
 	seed = model
-    model, data, times_nu, airmasses, lm_tel, lm_star = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, seed=seed, dpca=dpca)
+    model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, seed=seed, dpca=dpca)
 else
-    model, data, times_nu, airmasses, lm_tel, lm_star = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, dpca=dpca)
+    model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, dpca=dpca)
 end
 times_nu .-= 2400000.5
+lm_tel, lm_star = SSOFU.initialize_model!(model, data; init_fn=init_path, recalc=recalc)
 if !use_lsf; data = SSOF.GenericData(data) end
 if all(isone.(model.tel.lm.μ)) && !SSOF.is_time_variable(model.tel); opt = "frozen-tel" end
 mws = SSOFU.create_workspace(model, data, opt)
 mws = SSOFU.downsize_model(mws, times_nu, lm_tel, lm_star; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path, use_aic=!solar)
+mkpath(base_path*"noreg/")
+SSOFU.neid_plots(mws, airmasses, times_nu, SSOF.rvs(model), zeros(length(times_nu)), star, base_path*"noreg/", pipeline_path, desired_order;
+	display_plt=interactive)
 SSOFU.improve_regularization!(mws; save_fn=save_path)
 SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path, iter=300)
 rvs, rv_errors, tel_errors, star_errors = SSOFU.estimate_errors(mws; save_fn=save_path)
 
 ## Plots
-@load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ neid_order_rv d_act_tot neid_tel d_lcs
-neid_time .-= 2400000.5
-
-# Compare RV differences to actual RVs from activity
-plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, neid_rv, neid_rv_σ; display_plt=interactive, markerstrokewidth=1, title="$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
-png(plt, base_path * "model_rvs.png")
-
-lo, hi = exp.(quantile(vec(data.log_λ_star), [0.05, 0.95]))
-df_act = Dict()
-for wv in keys(d_lcs)
-	if lo < parse(Float64, wv) < hi
-		for key in d_lcs[wv]
-			df_act[key] = d_act_tot[key]
-			df_act[key*"_σ"] = d_act_tot[key*"_σ"]
-		end
-	end
-end
-SSOFU.save_model_plots(mws, airmasses, times_nu, base_path; display_plt=interactive, tel_errors=tel_errors, star_errors=star_errors, df_act=df_act)
-
-if all(.!iszero.(view(neid_order_rv, :, desired_order)))
-    plt = SSOFU.plot_model_rvs(times_nu, rvs, rv_errors, neid_time, view(neid_order_rv, :, desired_order), zeros(length(times_nu)); display_plt=interactive, title="$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
-    png(plt, base_path * "model_rvs_order.png")
-end
+pipeline_path = neid_save_path * star * "/neid_pipeline.jld2"
+df_act = SSOFU.neid_activity_indicators(pipeline_path, data)
+SSOFU.neid_plots(mws, airmasses, times_nu, rvs, rv_errors, star, base_path, pipeline_path, desired_order;
+	display_plt=interactive, df_act=df_act, tel_errors=tel_errors, star_errors=star_errors)

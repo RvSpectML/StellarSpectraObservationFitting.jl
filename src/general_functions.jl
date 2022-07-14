@@ -64,7 +64,7 @@ function shift_log_λ(v::Unitful.Velocity, log_λ::Vector{T}) where {T<:Real}
 	return log_λ .+ (log((1.0 + v / light_speed) / (1.0 - v / light_speed)) / 2)
 end
 
-function observation_night_inds(times_in_days::Vector{<:Real})
+function observation_night_inds(times_in_days::AbstractVector{<:Real})
     difs = times_in_days[2:end] - times_in_days[1:end-1] .> 0.5
     obs_in_first_night = findfirst(difs)
     if isnothing(findfirst(difs))
@@ -84,7 +84,7 @@ function observation_night_inds(times_in_days::Vector{<:Real})
     end
     return night_inds
 end
-observation_night_inds(times::Vector{<:Unitful.Time}) =
+observation_night_inds(times::AbstractVector{<:Unitful.Time}) =
     observation_night_inds(ustrip.(uconvert.(u"d", times)))
 
 function copy_dict!(to::Dict, from::Dict)

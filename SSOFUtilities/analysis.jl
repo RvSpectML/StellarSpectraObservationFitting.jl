@@ -21,7 +21,6 @@ function create_model(
 	)
 
 	save = save_fn!=""
-	init_fn = save_fn[1:end-5]*"_init.jld2"
 
 	# save_path = save_path_base * star * "/$(desired_order)/"
 	@load data_fn n_obs data times_nu airmasses
@@ -41,6 +40,17 @@ function create_model(
 			@save save_fn model
 		end
 	end
+	return model, data, times_nu, airmasses
+end
+function initialize_model!(
+	model::SSOF.OrderModel,
+	data::SSOF.Data;
+	init_fn::String="",
+	recalc::Bool=false,
+	kwargs...
+	)
+
+	save = init_fn!=""
 
 	if isfile(init_fn) && !recalc
 		@load init_fn lm_tel lm_star
@@ -51,8 +61,7 @@ function create_model(
 			@save init_fn lm_tel lm_star
 		end
 	end
-
-	return model, data, times_nu, airmasses, lm_tel, lm_star
+	return lm_tel, lm_star
 end
 
 function create_workspace(model, data, opt::String)
