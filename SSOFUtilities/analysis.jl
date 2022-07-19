@@ -131,7 +131,7 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 	    n_comps_best, ℓ, aics, bics, best_ind = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, mws.d.var; return_inters=true, kwargs...)
 	    if save_md; @save decision_fn comp_ls ℓ aics bics best_ind ks test_n_comp_tel test_n_comp_star comp_stds comp_intra_stds better_models end
 
-	    model_large = copy(model)
+	    # model_large = copy(model)
 		mws_smol = _downsize_model(mws, n_comps_best, better_models[best_ind], lm_tel, lm_star; print_stuff=print_stuff, iter=iter, ignore_regularization=ignore_regularization)
 
 		if save_plots
@@ -146,7 +146,7 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 			end
 		end
 
-		if save; @save save_fn model model_large end
+		if save; @save save_fn model end
 
 		return mws_smol#, ℓ, aics, bics, comp_stds, comp_intra_stds
 	end
@@ -235,8 +235,8 @@ function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="", n::Int=50)
 		else
 			star_errors = nothing
 		end
-	    if save; @save save_fn model rvs rv_errors tel_errors star_errors end
 		model.metadata[:todo][:err_estimated] = true
+	    if save; @save save_fn model rvs rv_errors tel_errors star_errors end
 		return rvs, rv_errors, tel_errors, star_errors
 	else
 		println("loading rvs")
