@@ -18,35 +18,41 @@ function eval_regularization(reg_fields::Vector{Symbol}, reg_key::Symbol, reg_va
     return _eval_regularization(om, mws, training_inds, testing_inds; kwargs...)
 end
 
-function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol, before_ℓ::Real, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; start::Real=10e3, kwargs...)
+function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol, before_ℓ::Real, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; start::Real=10e3, try_to_cull::Bool=true, kwargs...)
     if haskey(getfield(mws.om, reg_fields[1]), reg_key)
 
         om = mws.om
         @assert 0 < reg_min < reg_max < Inf
-
-        reg_min_ℓ = eval_regularization(reg_fields, reg_key, reg_min, mws, training_inds, testing_inds; kwargs...)
-        reg_max_ℓ = eval_regularization(reg_fields, reg_key, reg_max, mws, training_inds, testing_inds; kwargs...)
-        if reg_min_ℓ > before_ℓ && reg_max_ℓ > before_ℓ && reg_key!=:GP_μ
-            println("$(reg_fields[1])[:$reg_key] isn't useful, so setting it to 0")
-            return before_ℓ
-        end
-        start_ℓ = eval_regularization(reg_fields, reg_key, start, mws, training_inds, testing_inds; kwargs...)
         ℓs = Array{Float64}(undef, 2)
-        start_ind = argmin([reg_min_ℓ, start_ℓ, reg_max_ℓ])
-        if start_ind==1
-            reg_hold = [reg_min, reg_min*test_factor]
-            start_ℓ = ℓs[1] = reg_min_ℓ
-            start = reg_min
-            ℓs[2] = eval_regularization(reg_fields, reg_key, reg_hold[2], mws, training_inds, testing_inds; kwargs...)
-        elseif start_ind==2
-            reg_hold = [start, start*test_factor]
-            ℓs[1] = start_ℓ
-            ℓs[2] = eval_regularization(reg_fields, reg_key, reg_hold[2], mws, training_inds, testing_inds; kwargs...)
+        if try_to_cull
+            starting_ℓs =
+                [eval_regularization(reg_fields, reg_key, reg_min, mws, training_inds, testing_inds; kwargs...),
+                eval_regularization(reg_fields, reg_key, start, mws, training_inds, testing_inds; kwargs...),
+                eval_regularization(reg_fields, reg_key, reg_max, mws, training_inds, testing_inds; kwargs...)]
+            start_ind = argmin(starting_ℓs)
+            if starting_ℓs[start_ind] > before_ℓ && reg_key!=:GP_μ
+                println("a course search suggests $(reg_fields[1])[:$reg_key] isn't useful, so setting it to 0")
+                return before_ℓ
+            end
+            if start_ind==1
+                reg_hold = [reg_min, reg_min*test_factor]
+                start_ℓ = ℓs[1] = starting_ℓs[1]
+                start = reg_min
+                ℓs[2] = eval_regularization(reg_fields, reg_key, reg_hold[2], mws, training_inds, testing_inds; kwargs...)
+            elseif start_ind==2
+                reg_hold = [start, start*test_factor]
+                start_ℓ = ℓs[1] = starting_ℓs[2]
+                ℓs[2] = eval_regularization(reg_fields, reg_key, reg_hold[2], mws, training_inds, testing_inds; kwargs...)
+            else
+                reg_hold = [reg_max/test_factor, reg_max]
+                start_ℓ = ℓs[2] = starting_ℓs[3]
+                start = reg_max
+                ℓs[1] = eval_regularization(reg_fields, reg_key, reg_hold[1], mws, training_inds, testing_inds; kwargs...)
+            end
         else
-            reg_hold = [reg_max/test_factor, reg_max]
-            start_ℓ = ℓs[2] = reg_max_ℓ
-            start = reg_max
-            ℓs[1] = eval_regularization(reg_fields, reg_key, reg_hold[1], mws, training_inds, testing_inds; kwargs...)
+            reg_hold = [start, start*test_factor]
+            start_ℓ = ℓs[1] = eval_regularization(reg_fields, reg_key, reg_hold[1], mws, training_inds, testing_inds; kwargs...)
+            ℓs[2] = eval_regularization(reg_fields, reg_key, reg_hold[2], mws, training_inds, testing_inds; kwargs...)
         end
 
         # need to try decreasing regularization
@@ -85,7 +91,7 @@ function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol,
             for field in reg_fields
                 getfield(mws.om, field)[reg_key] = 0.
             end
-            println("$(reg_fields[1])[:$reg_key] isn't useful, so setting it to 0")
+            println("$(reg_fields[1])[:$reg_key] significantly increased the χ², so setting it to 0")
             return before_ℓ
         end
         return end_ℓ
@@ -126,13 +132,13 @@ function fit_regularization!(mws::ModelWorkspace, testing_inds::AbstractVecOrMat
             test_factor, reg_min, reg_max = 10, 1e-3, 1e12
         end
         if share_regs
-            before_ℓ = fit_regularization_helper!(_reg_fields, key, before_ℓ, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
+            before_ℓ = fit_regularization_helper!(_reg_fields, key, before_ℓ, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; start=hold_tel[key], kwargs...)
         else
             if (!(key in _key_list_bases)) || is_time_variable(om.star)
-                before_ℓ = fit_regularization_helper!([:reg_star], key, before_ℓ, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
+                before_ℓ = fit_regularization_helper!([:reg_star], key, before_ℓ, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; start=hold_star[key], kwargs...)
             end
             if (!(key in _key_list_bases)) || is_time_variable(om.tel)
-                before_ℓ = fit_regularization_helper!([:reg_tel], key, before_ℓ, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; kwargs...)
+                before_ℓ = fit_regularization_helper!([:reg_tel], key, before_ℓ, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; start=hold_tel[key], kwargs...)
             end
         end
     end
