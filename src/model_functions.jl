@@ -446,7 +446,7 @@ function OrderModel(
 		rv = zeros(n_obs)
 
 	bary_rvs = D_to_rv.([median(d.log_λ_star[:, i] - d.log_λ_obs[:, i]) for i in 1:n_obs])
-	todo = Dict([(:reg_improved, false), (:downsized, false), (:err_estimated, false)])
+	todo = Dict([(:initialized, false), (:reg_improved, false), (:downsized, false), (:err_estimated, false)])
 	metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
 	if dpca
 		if oversamp
@@ -811,6 +811,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 
 	fill_TelModel!(om, lm_tel[1])
 	fill_StarModel!(om, lm_star[1])
+	om.metadata[:todo][:initialized] = true
 
 	return lm_tel, lm_star
 end

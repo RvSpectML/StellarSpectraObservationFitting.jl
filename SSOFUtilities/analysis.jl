@@ -54,6 +54,11 @@ function initialize_model!(
 
 	if isfile(init_fn) && !recalc
 		@load init_fn lm_tel lm_star
+		if !model.metadata[:todo][:initialized]
+			SSOF.fill_TelModel!(model, lm_tel[1])
+			SSOF.fill_StarModel!(model, lm_star[1])
+			model.metadata[:todo][:initialized] = true
+		end
 	else
 		lm_tel, lm_star = SSOF.initializations!(model, data; kwargs...)
 		# lm_tel, lm_star = SSOF.FullLinearModel[], SSOF.FullLinearModel[]
