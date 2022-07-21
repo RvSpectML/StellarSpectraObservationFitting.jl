@@ -100,7 +100,7 @@ function neid_plots(mws::SSOF.ModelWorkspace,
 	plt = plot_model_rvs(view(times_nu, mask), view(rvs, mask), view(rv_errors, mask), view(neid_time, mask), view(neid_rv, mask), view(neid_rv_σ, mask); display_plt=display_plt, title="$star (median σ: $(round(median(vec(view(rv_errors, mask))), digits=3)))");
 	png(plt, base_path * "model_rvs.png")
 
-	save_model_plots(mws, airmasses, times_nu, base_path; display_plt=display_plt, tel_errors=tel_errors, star_errors=star_errors, df_act=df_act)
+	save_model_plots(mws, airmasses, times_nu, base_path; display_plt=display_plt, tel_errors=tel_errors, star_errors=star_errors, df_act=df_act);
 
 	if all(.!iszero.(view(neid_order_rv, :, desired_order)))
 	    plt = plot_model_rvs(view(times_nu, mask), view(rvs, mask), view(rv_errors, mask), view(neid_time, mask), view(neid_order_rv, mask, desired_order), zeros(length(view(neid_time, mask))); display_plt=display_plt, title="$star (median σ: $(round(median(vec(rv_errors)), digits=3)))");
