@@ -114,20 +114,21 @@ module EXPRESLSF
         expres_lsf(vec(median(λ; dims=2)), order; kwargs...)
 end
 
-# plt = SSOFU._plot(; xlabel=xlab, ylabel="LSF σ ($unit_str)")
-# scatter!(plt, wns[:], σ[:]; label="", xlabel=xlab, ylabel="LSF σ ($unit_str)")
-# for order in orders
-#     inds_temp = eo.order .== order
-#     plot!(plt, wns[inds_temp], lsf_σ(wns[inds_temp], order); label="", lw=4)
+# xx = EXPRESLSF.EXPRESLSF
+# plt = SSOFU._plot(; xlabel=xx.xlab, ylabel="LSF σ ($(xx.unit_str))")
+# scatter!(plt, xx.wns[:], xx.σ[:]; label="", xlabel=xx.xlab, ylabel="LSF σ ($(xx.unit_str))", markerstrokewidth = 0.5)
+# for order in xx.orders
+#     inds_temp = xx.eo.order .== order
+#     plot!(plt, xx.wns[inds_temp], xx.lsf_σ(xx.wns[inds_temp], order); label="", lw=4)
 # end
-# plot!(wns[:], lsf_σ(wns, 0); label="", lw=4)
-# # png(plt, "expres_lsf_model")
+# plot!(xx.wns[:], xx.lsf_σ(xx.wns, 0); label="", lw=4)
+# png(plt, "expres_lsf_model")
 #
-# plt = SSOFU._plot(; xlabel=xlab, ylabel="LSF σ ($unit_str)")
+# plt = SSOFU._plot(; xlabel=xx.xlab, ylabel="LSF σ ($(xx.unit_str))")
 # for order in [38,39]
-#     inds_temp = eo.order .== order
-#     scatter!(plt, wns[inds_temp], σ[inds_temp]; label="")
-#     plot!(plt, wns[inds_temp], lsf_σ(wns[inds_temp], order); label="", lw=4)
+#     inds_temp = xx.eo.order .== order
+#     scatter!(plt, xx.wns[inds_temp], xx.σ[inds_temp]; label="")
+#     plot!(plt, xx.wns[inds_temp], xx.lsf_σ(xx.wns[inds_temp], order); label="", lw=4)
 # end
 # plt
-# # png(plt, "expres_lsf_model_zoom")
+# png(plt, "expres_lsf_model_zoom")

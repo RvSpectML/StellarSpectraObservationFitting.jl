@@ -214,7 +214,7 @@ function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n
     for i in eachindex(test_n_comp_star)
         plot!(plt[2], test_n_comp_tel, ys[:, i]; label="$(test_n_comp_star[i]) stellar", xlabel="# of telluric components")
     end
-    display(plt)
+    # display(plt)
     return plt
 end
 

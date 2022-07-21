@@ -16,6 +16,7 @@ stars = ["10700", "26965", "34411"]
 star_choice = SSOF.parse_args(1, Int, 2)
 star = stars[star_choice]
 interactive = length(ARGS) == 0
+if !interactive; ENV["GKSwstype"] = "100" end
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 desired_order = SSOF.parse_args(2, Int, 68)  # 68 has a bunch of tels, 47 has very few
 use_reg = SSOF.parse_args(3, Bool, true)
