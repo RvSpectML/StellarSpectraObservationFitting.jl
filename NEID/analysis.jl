@@ -54,6 +54,7 @@ if all(isone.(model.tel.lm.μ)) && !SSOF.is_time_variable(model.tel); opt = "fro
 mws = SSOFU.create_workspace(model, data, opt)
 mws = SSOFU.downsize_model(mws, times_nu, lm_tel, lm_star; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path, use_aic=!solar)
 mkpath(base_path*"noreg/")
+pipeline_path = neid_save_path * star * "/neid_pipeline.jld2"
 SSOFU.neid_plots(mws, airmasses, times_nu, SSOF.rvs(model), zeros(length(times_nu)), star, base_path*"noreg/", pipeline_path, desired_order;
 	display_plt=interactive);
 SSOFU.improve_regularization!(mws; save_fn=save_path)
@@ -61,7 +62,6 @@ SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=sa
 rvs, rv_errors, tel_errors, star_errors = SSOFU.estimate_errors(mws; save_fn=save_path)
 
 ## Plots
-pipeline_path = neid_save_path * star * "/neid_pipeline.jld2"
 df_act = SSOFU.neid_activity_indicators(pipeline_path, data)
 SSOFU.neid_plots(mws, airmasses, times_nu, rvs, rv_errors, star, base_path, pipeline_path, desired_order;
 	display_plt=interactive, df_act=df_act, tel_errors=tel_errors, star_errors=star_errors);
