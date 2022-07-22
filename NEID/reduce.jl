@@ -20,7 +20,7 @@ include("data_locs.jl")  # defines neid_data_path and neid_save_path
 star_ind = SSOF.parse_args(1, Int, 2)
 dpca = SSOF.parse_args(2, Bool, true)
 if dpca
-    prep_str = ""
+    prep_str = "dpca_"
 else
     prep_str = "wobble_"
 end

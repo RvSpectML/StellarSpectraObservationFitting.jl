@@ -19,7 +19,7 @@ input_ind == 0 ? star_inds = (1:length(stars)) : star_inds = input_ind:input_ind
 orders_list = repeat([4:122], length(stars))
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
 if dpca
-    prep_str = ""
+    prep_str = "dpca/"
 else
     prep_str = "wobble/"
 end
