@@ -1,6 +1,7 @@
 module StellarSpectraObservationFitting
 
 include("general_functions.jl")
+include("EMPCA.jl")
 include("DPCA_functions.jl")
 include("model_functions.jl")
 include("flatten.jl")
