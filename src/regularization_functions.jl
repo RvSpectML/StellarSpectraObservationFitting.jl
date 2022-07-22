@@ -30,7 +30,7 @@ function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol,
                 eval_regularization(reg_fields, reg_key, start, mws, training_inds, testing_inds; kwargs...),
                 eval_regularization(reg_fields, reg_key, reg_max, mws, training_inds, testing_inds; kwargs...)]
             start_ind = argmin(starting_ℓs)
-            if starting_ℓs[start_ind] > before_ℓ && reg_key!=:GP_μ
+            if starting_ℓs[start_ind] > before_ℓ && reg_key!=:GP_μ && reg_key!=:GP_M
                 println("a course search suggests $(reg_fields[1])[:$reg_key] isn't useful, so setting it to 0")
                 return before_ℓ
             end
