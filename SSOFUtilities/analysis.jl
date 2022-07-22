@@ -182,6 +182,7 @@ end
 function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}; kwargs...)
 	model = SSOF.downsize(mws.om, max(0, n_comps[1]), n_comps[2])
 	model.metadata[:todo][:downsized] = true
+	model.metadata[:todo][:initialized] = true
 	return _finish_downsizing(mws, model; no_tels=n_comps[1]<0, kwargs...)
 end
 

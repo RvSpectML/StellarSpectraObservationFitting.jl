@@ -18,21 +18,26 @@ function eval_regularization(reg_fields::Vector{Symbol}, reg_key::Symbol, reg_va
     return _eval_regularization(om, mws, training_inds, testing_inds; kwargs...)
 end
 
-function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol, before_ℓ::Real, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; start::Real=10e3, try_to_cull::Bool=true, kwargs...)
+function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol, before_ℓ::Real, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; start::Real=10e3, cullable::Vector{Symbol}=Symbol[], robust_start::Bool=true, thres::Real=8, kwargs...)
     if haskey(getfield(mws.om, reg_fields[1]), reg_key)
 
         om = mws.om
         @assert 0 < reg_min < reg_max < Inf
         ℓs = Array{Float64}(undef, 2)
-        if try_to_cull
+        if robust_start
             starting_ℓs =
                 [eval_regularization(reg_fields, reg_key, reg_min, mws, training_inds, testing_inds; kwargs...),
                 eval_regularization(reg_fields, reg_key, start, mws, training_inds, testing_inds; kwargs...),
                 eval_regularization(reg_fields, reg_key, reg_max, mws, training_inds, testing_inds; kwargs...)]
             start_ind = argmin(starting_ℓs)
-            if starting_ℓs[start_ind] > before_ℓ && reg_key!=:GP_μ && reg_key!=:GP_M
-                println("a course search suggests $(reg_fields[1])[:$reg_key] isn't useful, so setting it to 0")
-                return before_ℓ
+            if reg_key in cullable
+                if starting_ℓs[start_ind] > before_ℓ
+                    for field in reg_fields
+                        getfield(mws.om, field)[reg_key] = 0.
+                    end
+                    println("a course search suggests $(reg_fields[1])[:$reg_key] isn't useful, so setting it to 0")
+                    return before_ℓ
+                end
             end
             if start_ind==1
                 reg_hold = [reg_min, reg_min*test_factor]
@@ -54,49 +59,69 @@ function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol,
             start_ℓ = ℓs[1] = eval_regularization(reg_fields, reg_key, reg_hold[1], mws, training_inds, testing_inds; kwargs...)
             ℓs[2] = eval_regularization(reg_fields, reg_key, reg_hold[2], mws, training_inds, testing_inds; kwargs...)
         end
-
         # need to try decreasing regularization
         if ℓs[2] > ℓs[1]
+            off_edge = reg_min < reg_hold[1]
             while (ℓs[2] > ℓs[1]) && (reg_min < reg_hold[1] < reg_max)
                 # println("trying a lower regularization")
                 ℓs[2] = ℓs[1]
                 reg_hold ./= test_factor
                 ℓs[1] = eval_regularization(reg_fields, reg_key, reg_hold[1], mws, training_inds, testing_inds; kwargs...)
             end
-            for field in reg_fields
-                getfield(om, field)[reg_key] = reg_hold[2]
+            if off_edge
+                last_checked_ℓ, end_ℓ = choose_reg_and_ℓ(reg_fields, om, reg_key, reg_hold, ℓs, 2)
+            else
+                last_checked_ℓ, end_ℓ = choose_reg_and_ℓ(reg_fields, om, reg_key, reg_hold, ℓs, 1)
             end
-            last_checked_ℓ, end_ℓ = ℓs
         # need to try increasing regularization
         else
+            off_edge = reg_hold[2] < reg_max
             while (ℓs[1] > ℓs[2]) && (reg_min < reg_hold[2] < reg_max)
                 # println("trying a higher regularization")
                 ℓs[1] = ℓs[2]
                 reg_hold .*= test_factor
                 ℓs[2] = eval_regularization(reg_fields, reg_key, reg_hold[2], mws, training_inds, testing_inds; kwargs...)
             end
-            for field in reg_fields
-                getfield(om, field)[reg_key] = reg_hold[1]
+            if off_edge
+                last_checked_ℓ, end_ℓ = choose_reg_and_ℓ(reg_fields, om, reg_key, reg_hold, ℓs, 1)
+            else
+                last_checked_ℓ, end_ℓ = choose_reg_and_ℓ(reg_fields, om, reg_key, reg_hold, ℓs, 2)
             end
-            end_ℓ, last_checked_ℓ = ℓs
         end
 
         println("$(reg_fields[1])[:$reg_key] : $start -> $(getfield(mws.om, reg_fields[1])[reg_key])")
         if isapprox(end_ℓ, last_checked_ℓ; rtol=1e-6)
             @warn "weak local minimum $end_ℓ vs. $last_checked_ℓ"
         end
-        println("$(reg_fields[1])[:$reg_key] χ²: $start_ℓ -> $end_ℓ ($(round(end_ℓ/start_ℓ; digits=3)))")
-        println("overall χ² change: $before_ℓ -> $end_ℓ ($(round(end_ℓ/before_ℓ; digits=3)))")
-        if end_ℓ > (1.1 * before_ℓ)
+        println("$(reg_fields[1])[:$reg_key] χ²: $start_ℓ -> $end_ℓ (" * ratio_clarifier_string(end_ℓ/start_ℓ) * ")")
+        println("overall χ² change: $before_ℓ -> $end_ℓ (" * ratio_clarifier_string(end_ℓ/before_ℓ) * ")")
+        if end_ℓ > ((1 + thres/100) * before_ℓ)
             for field in reg_fields
                 getfield(mws.om, field)[reg_key] = 0.
             end
-            println("$(reg_fields[1])[:$reg_key] significantly increased the χ², so setting it to 0")
+            println("$(reg_fields[1])[:$reg_key] significantly increased the χ² (by more than $thres%), so setting it to 0")
             return before_ℓ
         end
         return end_ℓ
     end
     return before_ℓ
+end
+function choose_reg_and_ℓ(reg_fields::Vector{Symbol}, om::OrderModel, reg_key::Symbol, reg_hold::Vector{<:Real}, ℓs::Vector{<:Real}, j::Int)
+    jis1 = j == 1
+    @assert jis1 || j == 2
+    for field in reg_fields
+        getfield(om, field)[reg_key] = reg_hold[j]
+    end
+    jis1 ? (return ℓs[2], ℓs[1]) : (return ℓs[1], ℓs[2])
+end
+function ratio_clarifier_string(ratio::Real)
+    x = round(ratio; digits=3)
+    if x == 1.
+        if ratio == 1; return "=1.0" end
+        ratio > 1 ? (return ">1.0") : (return "<1.0")
+    else
+        return string(x)
+    end
 end
 
 
