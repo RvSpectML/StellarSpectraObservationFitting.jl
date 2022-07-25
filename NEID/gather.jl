@@ -14,7 +14,7 @@ SSOFU = SSOFUtilities
 input_ind = SSOF.parse_args(1, Int, 0)
 dpca = SSOF.parse_args(2, Bool, true)
 
-stars = ["10700", "26965", "9407", "185144", "22049", "2021/12/19", "2021/12/20", "2021/12/23"]
+stars = ["10700", "26965", "22049", "3651", "2021/12/19", "2021/12/20", "2021/12/23"]
 input_ind == 0 ? star_inds = (1:length(stars)) : star_inds = input_ind:input_ind
 orders_list = repeat([4:122], length(stars))
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
