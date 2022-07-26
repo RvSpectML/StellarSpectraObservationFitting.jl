@@ -34,6 +34,10 @@ orders2inds(selected_orders::AbstractVector) = [searchsortedfirst(orders, order)
 
 ## RV reduction
 
+@load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ
+neid_rv .-= median(neid_rv)
+star=="10700" ? mask = .!(2459525 .< times_nu .< 2459530) : mask = Bool.(ones(length(times_nu)))
+
 @load "jld2/neid_$(prep_str)$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 # # plotting order means which don't matter because the are constant shifts for the reduced rv
 # _scatter(orders, mean(rvs; dims=2); series_annotations=annot, legend=:topleft)
@@ -41,27 +45,23 @@ rvs .-= median(rvs; dims=2)
 χ² = vec(sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2))
 med_rvs_σ = vec(median(rvs_σ; dims=2))
 rvs_std = vec(std(rvs; dims=2))
-σ_floor = 50
+σ_floor = round(10 * neid_rv)
 
 χ²_sortperm = [i for i in sortperm(χ²) if !iszero(χ²[i])]
 χ²_thres = 4.5e3 / 37 * size(rvs, 2)
 χ²_orders = [i for i in χ²_sortperm if χ²[i] < χ²_thres]
 χ²_orders = [orders[χ²_order] for χ²_order in χ²_orders]
-inds = orders2inds([orders[i] for i in eachindex(orders) if ((rvs_std[i] < σ_floor) && (med_rvs_σ[i] < σ_floor/5) && (orders[i] in χ²_orders))])
+inds = orders2inds([orders[i] for i in eachindex(orders) if ((rvs_std[i] < σ_floor) && (med_rvs_σ[i] < σ_floor/3) && (orders[i] in χ²_orders))])
 println("starting with $(length(orders)) orders")
 println("$(length(orders) - length(χ²_sortperm)) orders ignored for unfinished analyses or otherwise weird")
 println("$(length(χ²_sortperm) - length(χ²_orders)) worst orders (in χ²-sense) ignored")
-println("$(length(χ²_orders) - length(inds)) more orders ignored for having >$σ_floor m/s RMS or errors")
+println("$(length(χ²_orders) - length(inds)) more orders ignored for having >$σ_floor m/s RMS or >$(σ_floor/3) errors")
 println("$(length(inds)) orders used in total")
 
 rvs_red = collect(Iterators.flatten((sum(rvs[inds, :] ./ (rvs_σ[inds, :] .^ 2); dims=1) ./ sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1))'))
 rvs_red .-= median(rvs_red)
 rvs_σ_red = collect(Iterators.flatten(1 ./ sqrt.(sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1)')))
 rvs_σ2_red = rvs_σ_red .^ 2
-
-@load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ
-neid_rv .-= median(neid_rv)
-star=="10700" ? mask = .!(2459525 .< times_nu .< 2459530) : mask = Bool.(ones(length(times_nu)))
 
 using LinearAlgebra
 lin = SSOF.general_lst_sq_f(rvs_red, Diagonal(rvs_σ2_red), 1; x=times_nu)
@@ -119,8 +119,7 @@ cors[diagind(cors)] .= 1
 cors = Symmetric(cors)
 heatmap(cors)
 
-plt = SSOFU._plot(;ylabel="order")
+plt = SSOFU._plot(; xlabel="Order", title="Correlation with Bulk RVs", ylabel="Correlation")
 scatter!(orders, [cor(view(rvs, i, :), rvs_red) for i in 1:n_ord]; yerror=x_σ./40, ylims=(-0.5, 1.1), markerstrokewidth=0.5, label="Unused Orders")
 scatter!(orders[inds], [cor(view(rvs, i, :), rvs_red) for i in 1:n_ord][inds]; label="Used Orders", markerstrokewidth=0.5)
-
-inds
+png(plt, save_fn * "order_cor")

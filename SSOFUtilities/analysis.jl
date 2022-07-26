@@ -81,7 +81,7 @@ function create_workspace(model, data, opt::String)
 	return mws
 end
 
-function improve_regularization!(mws::SSOF.ModelWorkspace; redo::Bool=false, print_stuff::Bool=true, testing_ratio::Real=0.25, save_fn::String="", kwargs...)
+function improve_regularization!(mws::SSOF.ModelWorkspace; redo::Bool=false, print_stuff::Bool=true, testing_ratio::Real=0.33, save_fn::String="", kwargs...)
 
 	save = save_fn!=""
 

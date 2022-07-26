@@ -204,10 +204,33 @@ end
 
 function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector; size=(_plt_size[1],_plt_size[2]*1.5), ylabel="ℓ")
     plt = _plot(; ylabel=ylabel, layout=grid(2, 1), size=size)
-	lims = [maximum(ys[.!(isinf.(ys))]), minimum(ys[.!(isinf.(ys))])]
-	ylabel=="ℓ" ? lims[1] = maximum(ys) : lims[2] = minimum(ys)  # include the best model
-	buffer = 0.3 * (lims[1] - lims[2])
-	ylims!(plt, lims[2] - buffer, lims[1] + buffer)
+	# lims = [maximum(ys[.!(isinf.(ys))]), minimum(ys[.!(isinf.(ys))])]
+	lims = Array{Float64}(undef, 2)
+	lim_inds = ones(Int, 2)
+
+	if ylabel=="ℓ"
+		best = argmax(ys)
+		if test_n_comp_tel[1:2] == -1:0
+			lim_inds[1] = min(3, best[1])
+		end
+		if test_n_comp_star[1] == 0
+			lim_inds[2] = min(2, best[2])
+		end
+		lims[1] = minimum(ys[lim_inds[1]:end, lim_inds[2]:end])
+		lims[2] = ys[best]
+	else
+		best = argmin(ys)
+		if test_n_comp_tel[1:2] == -1:0
+			lim_inds[1] = min(3, best[1])
+		end
+		if test_n_comp_star[1] == 0
+			lim_inds[2] = min(2, best[2])
+		end
+		lims[1] = ys[best]
+		lims[2] = maximum(ys[lim_inds[1]:end, lim_inds[2]:end])
+	end
+	buffer = 0.3 * (lims[2] - lims[1])
+	ylims!(plt, lims[1] - buffer, lims[2] + buffer)
     for i in eachindex(test_n_comp_tel)
         plot!(plt[1], test_n_comp_star, ys[i, :]; label="$(test_n_comp_tel[i]) tel", xlabel="# of stellar components")
     end
