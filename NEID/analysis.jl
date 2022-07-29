@@ -50,17 +50,18 @@ else
 end
 times_nu .-= 2400000.5
 lm_tel, lm_star = SSOFU.initialize_model!(model, data; init_fn=init_path, recalc=recalc)
-if !use_lsf; data = SSOF.GenericData(data) end
 if all(isone.(model.tel.lm.μ)) && !SSOF.is_time_variable(model.tel); opt = "frozen-tel" end
+if !use_lsf; data = SSOF.GenericData(data) end
 mws = SSOFU.create_workspace(model, data, opt)
+mws = SSOFU._downsize_model(mws, [2,1], 1, lm_tel, lm_star; print_stuff=true, ignore_regularization=true)
 mws = SSOFU.downsize_model(mws, times_nu, lm_tel, lm_star; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path, use_aic=!solar)
 pipeline_path = neid_save_path * star * "/neid_pipeline.jld2"
 mkpath(base_path*"noreg/")
 SSOFU.neid_plots(mws, airmasses, times_nu, SSOF.rvs(mws.om), zeros(length(times_nu)), star, base_path*"noreg/", pipeline_path, desired_order;
 	display_plt=interactive);
 SSOFU.improve_regularization!(mws; save_fn=save_path)
-SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path, iter=300)
-rvs, rv_errors, tel_errors, star_errors = SSOFU.estimate_errors(mws; save_fn=save_path)
+SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path, iter=300, print_stuff=true)
+rvs, rv_errors, tel_errors, star_errors, rv_holder, tel_holder, star_holder = SSOFU.estimate_errors(mws; save_fn=save_path, return_holders=true)
 
 ## Plots
 df_act = SSOFU.neid_activity_indicators(pipeline_path, data)

@@ -72,7 +72,7 @@ end
 function create_workspace(model, data, opt::String)
 	@assert opt in valid_optimizers
 	if opt == "l-bfgs"
-		mws = SSOF.OptimWorkspace(model, data)
+		mws = SSOF.OptimTelStarWorkspace(model, data)
 	elseif opt == "frozen-tel"
 		mws = SSOF.FrozenTelWorkspace(model, data)
 	else
@@ -104,13 +104,15 @@ function improve_model!(mws::SSOF.ModelWorkspace; print_stuff::Bool=true, show_p
 	save = save_fn!=""
 	model = mws.om
     SSOF.train_OrderModel!(mws; print_stuff=print_stuff, kwargs...)  # 120s
-	SSOF.finalize_scores!(mws)
+	results = SSOF.finalize_scores!(mws; print_stuff=print_stuff, kwargs...)
     if show_plot; status_plot(mws) end
     if save; @save save_fn model end
+	return results
 end
 function improve_model!(mws::SSOF.ModelWorkspace, airmasses::AbstractVector, times::AbstractVector; show_plot::Bool=false, kwargs...)
-	improve_model!(mws; show_plot=show_plot, kwargs...)
+	results = improve_model!(mws; show_plot=show_plot, kwargs...)
 	if show_plot; plot_model(mws, airmasses, times) end
+	return results
 end
 
 function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel::Vector{<:SSOF.LinearModel}, lm_star::Vector{<:SSOF.LinearModel}; save_fn::String="", decision_fn::String="", print_stuff::Bool=true, plots_fn::String="", iter::Int=50, ignore_regularization::Bool=true, kwargs...)
@@ -165,7 +167,7 @@ function _finish_downsizing(mws::SSOF.ModelWorkspace, model::SSOF.OrderModel; no
 		mws_smol = typeof(mws)(model, mws.d)
 	end
 	SSOF.train_OrderModel!(mws_smol; kwargs...)  # 120s
-	SSOF.finalize_scores!(mws_smol)
+	SSOF.finalize_scores!(mws_smol; f_tol=SSOF._f_reltol_def_s, g_tol=SSOF._g_L∞tol_def_s)
 	return mws_smol
 end
 function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}, better_model::Int, lm_tel::Vector{<:SSOF.LinearModel}, lm_star::Vector{<:SSOF.LinearModel}; kwargs...)
@@ -187,7 +189,7 @@ function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}; kwarg
 end
 
 
-function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="", n::Int=50)
+function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="", n::Int=50, return_holders::Bool=false)
 	save = save_fn!=""
 	model = mws.om
 	data = mws.d
@@ -223,6 +225,7 @@ function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="", n::Int=50)
 			if time_var_star
 				star_holder[i, :, :] .= _mws.om.star.lm.s
 			end
+			if n%10==0; println("done with $i/$n bootstraps") end
 	    end
 	    rv_errors = vec(std(rv_holder; dims=1))
 		if time_var_tel
@@ -243,10 +246,18 @@ function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="", n::Int=50)
 		end
 		model.metadata[:todo][:err_estimated] = true
 	    if save; @save save_fn model rvs rv_errors tel_errors star_errors end
-		return rvs, rv_errors, tel_errors, star_errors
+		if return_holders
+			return rvs, rv_errors, tel_errors, star_errors, rv_holder, tel_holder, star_holder
+		else
+			return rvs, rv_errors, tel_errors, star_errors
+		end
 	else
 		println("loading rvs")
 		if save; @load save_fn rvs rv_errors tel_errors star_errors end
-		return rvs, rv_errors, tel_errors, star_errors
+		if return_holders
+			return rvs, rv_errors, tel_errors, star_errors, rv_holder, tel_holder, star_holder
+		else
+			return rvs, rv_errors, tel_errors, star_errors
+		end
 	end
 end

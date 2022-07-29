@@ -8,6 +8,7 @@ import StellarSpectraObservationFitting as SSOF
 using CSV, DataFrames
 using Statistics
 using Plots
+using LinearAlgebra
 
 ## Setting up necessary variables
 
@@ -45,7 +46,7 @@ rvs .-= median(rvs; dims=2)
 χ² = vec(sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2))
 med_rvs_σ = vec(median(rvs_σ; dims=2))
 rvs_std = vec(std(rvs; dims=2))
-σ_floor = round(10 * neid_rv)
+σ_floor = round(10 * std(neid_rv))
 
 χ²_sortperm = [i for i in sortperm(χ²) if !iszero(χ²[i])]
 χ²_thres = 4.5e3 / 37 * size(rvs, 2)

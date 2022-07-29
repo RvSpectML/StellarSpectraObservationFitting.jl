@@ -903,11 +903,19 @@ function model_prior(lm, om::OrderModel, key::Symbol)
 				val -= gp_ℓ_precalc(sm.Δℓ_coeff, lm[1][:, i], sm.A_sde, sm.Σ_sde) * reg[:GP_M]
 			end
 		end
-		if (haskey(reg, :L1_M) && reg[:L1_M] != 0) || (haskey(reg, :L2_M) && reg[:L2_M] != 0) || (haskey(reg, :GP_M) && reg[:GP_M] != 0); val += L2(lm[2]) end
+		val += model_s_prior(lm[2], reg)
 	end
 	return val
 end
 model_prior(lm::Union{FullLinearModel, TemplateModel}, om::OrderModel, key::Symbol) = model_prior(vec(lm), om, key)
+
+nonzero_key(reg, key) = haskey(reg, key) && reg[key] != 0
+function model_s_prior(s, reg::Dict)
+	if (nonzero_key(reg, :L1_M) || nonzero_key(reg, :L2_M) || nonzero_key(reg, :GP_M))
+		return L2(s)
+	end
+	return 0
+end
 
 tel_prior(om::OrderModel) = tel_prior(om.tel.lm, om)
 tel_prior(lm, om::OrderModel) = model_prior(lm, om, :tel)
