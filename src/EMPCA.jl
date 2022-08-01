@@ -12,7 +12,9 @@ function EMPCA!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix,
 end
 
 function _solve_coeffs!(eigvec::AbstractVector, coeff::AbstractVector, data::AbstractMatrix, weights::AbstractMatrix)
-	coeff[:] = [_solve(eigvec, view(data, :, i), view(weights, :, i)) for i in 1:size(data, 2)]
+	for i in 1:size(data, 2)
+		coeff[i] = _solve(eigvec, view(data, :, i), view(weights, :, i))
+	end
 end
 function _solve_coeffs!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix)
 	for i in 1:size(data, 2)
@@ -125,6 +127,9 @@ function _empca_vec_by_vec!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data:
 
 	_data = copy(data)
 	for i in 1:nvec
+		# I don't believe I have to explicitly enforce orthagonality as it is
+		# implicitly enforced by ftting the data without previous component's
+		# variances
 		eigvec[:, i] .= randn(nvar)
 		eigvec[:, i] ./= norm(view(eigvec, :, i))
 
