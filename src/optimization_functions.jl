@@ -710,12 +710,6 @@ train_rvs_optim!(ow::OptimTelStarWorkspace, optim_cb::Function; kwargs...) =
 		train_rvs_optim!(ow.rv, ow.om.rv, ow.om.star, optim_cb; kwargs...) :
 		train_rvs_optim!(ow.rv, ow.om.rv, optim_cb; kwargs...)
 
-
-
-
-result_rv = train_rvs_optim!(ow, optim_cb; f_tol=f_tol, g_tol=g_tol, kwargs...)
-
-
 function finalize_scores_setup(mws::ModelWorkspace; print_stuff::Bool=_print_stuff_def, f_tol::Real=_f_reltol_def_s, g_tol::Real=_g_L∞tol_def_s, kwargs...)
 	if is_time_variable(mws.om.tel) || is_time_variable(mws.om.star)
 		mws_s = OptimTotalWorkspace(mws.om, mws.d; only_s=true)  # does not converge reliably
