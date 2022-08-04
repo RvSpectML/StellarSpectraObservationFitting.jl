@@ -427,7 +427,7 @@ FrozenTelWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
 FrozenTelWorkspace(om::OrderModel, d::Data; kwargs...) =
 	FrozenTelWorkspace(Output(om, d), om, d; kwargs...)
 
-function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, shift_scores::Bool=true, kwargs...)
+function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, shift_scores::Bool=true, winsor::Bool=true, kwargs...)
 
     if ignore_regularization
         reg_tel_holder = copy(mws.om.reg_tel)
@@ -438,10 +438,10 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
 	function cb(as::AdamState)
 		if shift_scores
 			if !(typeof(mws) <: FrozenTelWorkspace)
-				remove_lm_score_means!(mws.om.tel.lm)
+				remove_lm_score_means!(mws.om.tel.lm; winsor=winsor)
 			end
 			if typeof(mws.om) <: OrderModelWobble
-				remove_lm_score_means!(mws.om.star.lm)
+				remove_lm_score_means!(mws.om.star.lm; winsor=winsor)
 			end
 		end
 		if print_stuff; println(as) end

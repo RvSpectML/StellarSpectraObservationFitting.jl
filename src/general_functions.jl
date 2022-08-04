@@ -265,3 +265,17 @@ function weighted_mean(x::AbstractMatrix, σ²::AbstractMatrix; default::Real=0.
 	ans[isnan.(ans)] .= default
 	return ans
 end
+
+"Return an amount of indices of local maxima of a data array"
+function find_modes(data::Vector{T}; amount::Integer=3) where {T<:Real}
+
+    # creating index list for inds at modes
+    mode_inds = [i for i in 2:(length(data)-1) if (data[i]>=data[i-1]) && (data[i]>=data[i+1])]
+    # if data[1] > data[2]; prepend!(mode_inds, 1) end
+    # if data[end] > data[end-1]; append!(mode_inds, length(data)) end
+
+    # return highest mode indices
+    # return mode_inds[partialsortperm(-data[mode_inds], 1:amount)]
+	return mode_inds[sortperm(-data[mode_inds])]
+
+end

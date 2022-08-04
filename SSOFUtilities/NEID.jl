@@ -40,6 +40,10 @@ function neid_extras(df_files::DataFrame, save_path_base::String)
 	neid_order_rv = zeros(n_obs, 122)
 	for i in 1:n_obs # at every time
 		f = FITS(df_files.Filename[i])
+		driftfun = read_header(f[1])["DRIFTFUN"]
+		if driftfun != "dailymodel0"
+			println("spectrum $i ($(df_files.Filename[i])) has a wavelength calib. drift func \"$driftfun\" instead of \"dailymodel0\", consider removing it from your analysis")
+		end
 		neid_tel[i, :, :] .= read(f[11])
 		_df_h = read_header(f[11])
 		neid_tel_wvapor[i] = _df_h["WVAPOR"]

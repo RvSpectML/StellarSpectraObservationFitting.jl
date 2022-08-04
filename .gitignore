@@ -20,3 +20,5 @@ alex_stuff/
 NEID/testing.jl
 *.fits
 *.par
+*analysis_wobble.jl
+*test_linearsolve.jl

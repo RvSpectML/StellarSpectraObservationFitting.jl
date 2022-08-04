@@ -13,6 +13,7 @@ using SparseArrays
 using SpecialFunctions
 using StaticArrays
 using Nabla
+import StatsBase: winsor
 
 abstract type OrderModel end
 abstract type Output end
@@ -24,7 +25,9 @@ function D_to_rv(D)
 	x = exp.(2 .* D)
 	return light_speed_nu .* ((1 .- x) ./ (1 .+ x))
 end
-rv_to_D(v) = log.((1 .- v ./ light_speed_nu) ./ (1 .+ v ./ light_speed_nu)) ./ 2
+
+rv_to_D(v) = (log1p.((-v ./ light_speed_nu)) - log1p.((v ./ light_speed_nu))) ./ 2
+# rv_to_D(v) = log.((1 .- v ./ light_speed_nu) ./ (1 .+ v ./ light_speed_nu)) ./ 2
 function _lower_inds(model_log_λ::AbstractVector{<:Real}, rvs, log_λ_obs::AbstractMatrix)
 	n_obs = length(rvs)
 	len = size(log_λ_obs, 1)
@@ -88,7 +91,7 @@ function spectra_interp(model_flux::AbstractMatrix, rvs::AbstractVector, sih::St
 	return (view(model_flux, sih.lower_inds).* (1 .- ratios)) + (view(model_flux, sih.lower_inds_p1) .* ratios)
 end
 function spectra_interp_nabla(model_flux, rvs, sih::StellarInterpolationHelper)
-	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_hi_m_lo
+	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_hi_m_lo # TODO divide log_λ_obs_m_model_log_λ_lo by model_log_λ_hi_m_lo
 	return (model_flux[sih.lower_inds] .* (1 .- ratios)) + (model_flux[sih.lower_inds_p1] .* ratios)
 end
 spectra_interp(model_flux, rvs, sih::StellarInterpolationHelper) =
@@ -178,7 +181,9 @@ end
 
 function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=1.)
     log_min_wav, log_max_wav = extrema(log_λ_obs)
-    Δ_logλ_og = minimum(view(log_λ_obs, size(log_λ_obs, 1), :) .- view(log_λ_obs, 1, :)) / size(log_λ_obs, 1)
+	# Δ_logλ_og = minimum(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :)) / size(log_λ_obs, 1)
+    # Δ_logλ_og = view(log_λ_obs, size(log_λ_obs, 1), :) .- view(log_λ_obs, 1, :) / size(log_λ_obs, 1)
+	Δ_logλ_og = maximum(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :)) / size(log_λ_obs, 1)
 	Δ_logλ = Δ_logλ_og / upscale
     log_λ_template = (log_min_wav - 2 * Δ_logλ_og):Δ_logλ:(log_max_wav + 2 * Δ_logλ_og)
     λ_template = exp.(log_λ_template)
@@ -816,8 +821,12 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 	return lm_tel, lm_star
 end
 
-function remove_lm_score_means!(lm::FullLinearModel)
-	mean_s = mean(lm.s; dims=2)
+function remove_lm_score_means!(lm::FullLinearModel; winsor::Bool=false)
+	if winsor
+		mean_s = mean(winsor(lm.s; prop=0.2); dims=2)
+	else
+		mean_s = mean(lm.s; dims=2)
+	end
 	lm.μ .+= lm.M * mean_s
 	lm.s .-= mean_s
 end
