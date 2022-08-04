@@ -189,7 +189,95 @@ function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}; kwarg
 end
 
 
-function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="", n::Int=50, return_holders::Bool=false)
+function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="", kwargs...)
+	save = save_fn!=""
+	model = mws.om
+	data = mws.d
+	if !model.metadata[:todo][:err_estimated] # 25 mins
+	    data.var[data.var.==Inf] .= 0
+	    data_noise = sqrt.(data.var)
+	    data.var[data.var.==0] .= Inf
+
+		time_var_tel = SSOF.is_time_variable(model.tel)
+		time_var_star = SSOF.is_time_variable(model.star)
+
+		typeof(model) <: SSOF.OrderModelDPCA ? rvs = copy(model.rv.lm.s) : rvs = copy(model.rv)
+		ℓ_rv(x) = SSOF._loss(mws.o, model, mws.d; rv=x)
+		rvs_σ = estimate_errors_helper(rvs, ℓ_rv; param_str="rv", kwargs...)
+		if typeof(model) <: SSOF.OrderModelDPCA
+			rvs .*= -light_speed_nu
+			rvs_σ .*= -light_speed_nu
+		end
+
+		if time_var_tel
+			ℓ_tel(x) = SSOF._loss(mws.o, model, mws.d; tel=vec(model.tel.lm)) + SSOF.model_s_prior(model.tel.lm.s, model.reg_tel)
+			tel_s_σ = reshape(estimate_errors_helper(model.tel.lm.s, ℓ_tel; param_str="tel_s", kwargs...), size(model.tel.lm.s))
+		else
+			tel_s_σ = nothing
+		end
+
+		if time_var_star
+			ℓ_star(x) = SSOF._loss(mws.o, model, mws.d; star=vec(model.star.lm)) + SSOF.model_s_prior(model.star.lm.s, model.reg_star)
+			star_s_σ = reshape(estimate_errors_helper(model.star.lm.s, ℓ_star; param_str="star_s", kwargs...), size(model.star.lm.s))
+		else
+			star_s_σ = nothing
+		end
+
+		model.metadata[:todo][:err_estimated] = true
+	    if save; @save save_fn model rvs rvs_σ tel_s_σ star_s_σ end
+		return rvs, rvs_σ, tel_s_σ, star_s_σ
+	else
+		println("loading σs")
+		if save; @load save_fn rvs rvs_σ tel_s_σ star_s_σ end
+		return rvs, rvs_σ, tel_s_σ, star_s_σ
+	end
+end
+
+
+using Nabla
+function estimate_errors_helper(x::AbstractVecOrMat, ℓ::Function; n::Int=7, param_str::String="", print_every::Int=10, use_gradient::Bool=false, print_stuff::Bool=false, show_plots::Bool=false)
+	x_test = Array{Float64}(undef, n)
+	σs = Array{Float64}(undef, length(x))
+	ℓs = Array{Float64}(undef, n)
+	if use_gradient; g = ∇(ℓ) end
+	for i in 1:length(x)
+		hold = x[i]
+		_std = std(x)
+		x_test[:] = x[i] .+ LinRange(-_std/1e3, _std/1e3, n)
+		for j in 1:n
+			x[i] = x_test[j]
+			if use_gradient
+				ℓs[j] = only(g(x))[i]
+			else
+				ℓs[j] = ℓ(x)
+			end
+		end
+		x[i] = hold
+
+		if use_gradient
+			poly_f = SSOF.ordinary_lst_sq_f(ℓs, 1; x=_x_test)
+			σs[i] = sqrt(1 / poly_f.w[2])
+			max_dif = maximum(poly_f.(x_test) .- ℓs)
+			if print_stuff; println("∇_$i: $(poly_f.w[1] + poly_f.w[2] * x[i])") end
+		else
+			poly_f = SSOF.ordinary_lst_sq_f(ℓs, 2; x=x_test)
+			# σs[i] = sqrt(1 / (2 * poly_f.w[3]))
+			max_dif = maximum(poly_f.(x_test) .- ℓs)
+			if print_stuff; println("∇_$i: $(poly_f.w[2] + 2 * poly_f.w[3] * x[i])") end
+		end
+		@assert max_dif < 1
+		if show_plots
+			plt = scatter(x_test, ℓs; label="ℓ")
+			plot!(x_test, poly_f.(x_test); label="polynomial fit")
+			display(plt)
+		end
+		if i%print_every==0; println("done with $i/$(length(x)) " * param_str * "_σ estimates") end
+		if i%length(x)==0; println("done with all " * param_str * "_σ estimates") end
+	end
+	return σs
+end
+
+function _estimate_errors(mws::SSOF.ModelWorkspace; save_fn="", n::Int=50, return_holders::Bool=false)
 	save = save_fn!=""
 	model = mws.om
 	data = mws.d
