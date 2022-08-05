@@ -52,26 +52,25 @@ end
 
 struct StellarInterpolationHelper{T1<:Real, T2<:Int}
     log_λ_obs_m_model_log_λ_lo::AbstractMatrix{T1}
-	model_log_λ_hi_m_lo::T1
+	model_log_λ_step::T1
 	lower_inds::AbstractMatrix{T2}
 	lower_inds_p1::AbstractMatrix{T2}
 	function StellarInterpolationHelper(
 		log_λ_obs_m_model_log_λ_lo::AbstractMatrix{T1},
-		model_log_λ_hi_m_lo::T1,
+		model_log_λ_step::T1,
 		lower_inds::AbstractMatrix{T2},
 		lower_inds_p1::AbstractMatrix{T2}) where {T1<:Real, T2<:Int}
 		# @assert some issorted thing?
-		return new{T1, T2}(log_λ_obs_m_model_log_λ_lo, model_log_λ_hi_m_lo, lower_inds, lower_inds_p1)
+		return new{T1, T2}(log_λ_obs_m_model_log_λ_lo, model_log_λ_step, lower_inds, lower_inds_p1)
 	end
 end
 function StellarInterpolationHelper(
 	model_log_λ::StepRangeLen,
-	bary_rvs::AbstractVector{T},
+	rvs::AbstractVector{T},
 	log_λ_obs::AbstractMatrix{T}) where {T<:Real}
 
-	lower_inds, lower_inds_adj = _lower_inds(model_log_λ, bary_rvs, log_λ_obs)
-	# @assert some issorted thing?
-	return StellarInterpolationHelper(log_λ_obs - (view(model_log_λ, lower_inds)), model_log_λ.step.hi, lower_inds_adj, lower_inds_adj .+ 1)
+	sih = StellarInterpolationHelper(Array{Float64}(undef, size(log_λ_obs)), model_log_λ.step.hi, Array{Int}(undef, size(log_λ_obs)), Array{Int}(undef, size(log_λ_obs)))
+	return StellarInterpolationHelper!(sih, model_log_λ, rvs, log_λ_obs)
 end
 function (sih::StellarInterpolationHelper)(inds::AbstractVecOrMat, len_model::Int)
 	lower_inds = copy(sih.lower_inds)
@@ -81,30 +80,31 @@ function (sih::StellarInterpolationHelper)(inds::AbstractVecOrMat, len_model::In
 	end
 	return StellarInterpolationHelper(
 		view(sih.log_λ_obs_m_model_log_λ_lo, :, inds),
-		sih.model_log_λ_hi_m_lo,
+		sih.model_log_λ_step,
 		lower_inds[:, inds],
 		lower_inds[:, inds] .+ 1)
 end
 function StellarInterpolationHelper!(
-	sih::StellarInterpolationHelper
+	sih::StellarInterpolationHelper,
 	model_log_λ::StepRangeLen,
 	total_rvs::AbstractVector{T},
 	log_λ_obs::AbstractMatrix{T}) where {T<:Real}
 
-	@assert sih.model_log_λ_hi_m_lo == model_log_λ.step.hi
+	@assert sih.model_log_λ_step == model_log_λ.step.hi
 	lower_inds, lower_inds_adj = _lower_inds(model_log_λ, total_rvs, log_λ_obs)
 
 	sih.log_λ_obs_m_model_log_λ_lo .= log_λ_obs - (view(model_log_λ, lower_inds))
 	sih.lower_inds .= lower_inds_adj
 	sih.lower_inds_p1 .= lower_inds_adj .+ 1
+	return sih
 end
 
 function spectra_interp(model_flux::AbstractMatrix, rvs::AbstractVector, sih::StellarInterpolationHelper)
-	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_hi_m_lo
+	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_step
 	return (view(model_flux, sih.lower_inds).* (1 .- ratios)) + (view(model_flux, sih.lower_inds_p1) .* ratios)
 end
 function spectra_interp_nabla(model_flux, rvs, sih::StellarInterpolationHelper)
-	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_hi_m_lo # TODO divide log_λ_obs_m_model_log_λ_lo by model_log_λ_hi_m_lo
+	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_step
 	return (model_flux[sih.lower_inds] .* (1 .- ratios)) + (model_flux[sih.lower_inds_p1] .* ratios)
 end
 spectra_interp(model_flux, rvs, sih::StellarInterpolationHelper) =

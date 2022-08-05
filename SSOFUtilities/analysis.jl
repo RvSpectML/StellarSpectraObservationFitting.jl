@@ -103,7 +103,8 @@ end
 function improve_model!(mws::SSOF.ModelWorkspace; print_stuff::Bool=true, show_plot::Bool=false, save_fn::String="", kwargs...)
 	save = save_fn!=""
 	model = mws.om
-    SSOF.train_OrderModel!(mws; print_stuff=print_stuff, kwargs...)  # 120s
+    SSOF.update_interpolation_locations!(mws)
+	SSOF.train_OrderModel!(mws; print_stuff=print_stuff, kwargs...)  # 120s
 	results = SSOF.finalize_scores!(mws; print_stuff=print_stuff, kwargs...)
     if show_plot; status_plot(mws) end
     if save; @save save_fn model end

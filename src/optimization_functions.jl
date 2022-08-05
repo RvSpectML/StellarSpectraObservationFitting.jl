@@ -743,3 +743,14 @@ end
 
 is_time_variable(lm::LinearModel) = !(typeof(lm) <: TemplateModel)
 is_time_variable(sm::Submodel) = is_time_variable(sm.lm)
+
+
+function update_interpolation_locations!(om::OrderModel, d::Data)
+	if typeof(om) <: OrderModelWobble
+		StellarInterpolationHelper!(om.b2o,
+			om.star.log_λ,
+			om.bary_rvs + om.rv,
+			d.log_λ_obs)
+	end
+end
+update_interpolation_locations!(mws::ModelWorkspace) = update_interpolation_locations!(mws.om, mws.d)
