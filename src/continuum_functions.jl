@@ -171,6 +171,6 @@ function process!(d; kwargs...)
 	enough_points = (sum(isinf.(d.var)) / length(d.var)) < 0.5
 	if (red_enough && enough_points); continuum_normalize!(d; kwargs...) end
 	mask_high_pixels!(d)
-	recognize_bad_normalization!(d)
-	recognize_bad_drift!(d)
+	recognize_bad_normalization!(d; thres=20)
+	recognize_bad_drift!(d; thres=20)
 end

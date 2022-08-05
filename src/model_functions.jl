@@ -85,6 +85,19 @@ function (sih::StellarInterpolationHelper)(inds::AbstractVecOrMat, len_model::In
 		lower_inds[:, inds],
 		lower_inds[:, inds] .+ 1)
 end
+function StellarInterpolationHelper!(
+	sih::StellarInterpolationHelper
+	model_log_λ::StepRangeLen,
+	total_rvs::AbstractVector{T},
+	log_λ_obs::AbstractMatrix{T}) where {T<:Real}
+
+	@assert sih.model_log_λ_hi_m_lo == model_log_λ.step.hi
+	lower_inds, lower_inds_adj = _lower_inds(model_log_λ, total_rvs, log_λ_obs)
+
+	sih.log_λ_obs_m_model_log_λ_lo .= log_λ_obs - (view(model_log_λ, lower_inds))
+	sih.lower_inds .= lower_inds_adj
+	sih.lower_inds_p1 .= lower_inds_adj .+ 1
+end
 
 function spectra_interp(model_flux::AbstractMatrix, rvs::AbstractVector, sih::StellarInterpolationHelper)
 	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_hi_m_lo
@@ -181,9 +194,10 @@ end
 
 function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=1.)
     log_min_wav, log_max_wav = extrema(log_λ_obs)
-	# Δ_logλ_og = minimum(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :)) / size(log_λ_obs, 1)
-    # Δ_logλ_og = view(log_λ_obs, size(log_λ_obs, 1), :) .- view(log_λ_obs, 1, :) / size(log_λ_obs, 1)
-	Δ_logλ_og = maximum(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :)) / size(log_λ_obs, 1)
+	# Δ_logλ_og = minimum(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :))  # minimum pixel sep
+	# Δ_logλ_og = minimum(view(log_λ_obs, size(log_λ_obs, 1), :) .- view(log_λ_obs, 1, :)) / size(log_λ_obs, 1)  # minimum avg pixel sep
+	# Δ_logλ_og = median(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :))  # median pixel sep
+	Δ_logλ_og = maximum(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :))  # maximum pixel sep
 	Δ_logλ = Δ_logλ_og / upscale
     log_λ_template = (log_min_wav - 2 * Δ_logλ_og):Δ_logλ:(log_max_wav + 2 * Δ_logλ_og)
     λ_template = exp.(log_λ_template)
@@ -821,23 +835,26 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 	return lm_tel, lm_star
 end
 
-function remove_lm_score_means!(lm::FullLinearModel; winsor::Bool=false)
-	if winsor
-		mean_s = mean(winsor(lm.s; prop=0.2); dims=2)
+function remove_lm_score_means!(lm::FullLinearModel; prop::Real=0.)
+	if prop != 0.
+		mean_s = Array{Float64}(undef, size(lm.s, 1), 1)
+		for i in 1:size(lm.s, 1)
+			mean_s[i, 1] = mean(winsor(view(lm.s, i, :); prop=prop))
+		end
 	else
 		mean_s = mean(lm.s; dims=2)
 	end
 	lm.μ .+= lm.M * mean_s
 	lm.s .-= mean_s
 end
-remove_lm_score_means!(lm::LinearModel) = nothing
-function remove_lm_score_means!(om::OrderModel)
-	remove_lm_score_means!(om.star.lm)
-	remove_lm_score_means!(om.tel.lm)
+remove_lm_score_means!(lm::LinearModel; kwargs...) = nothing
+function remove_lm_score_means!(om::OrderModel; kwargs...)
+	remove_lm_score_means!(om.star.lm; kwargs...)
+	remove_lm_score_means!(om.tel.lm; kwargs...)
 end
-function remove_lm_score_means!(lms::Vector{<:LinearModel})
+function remove_lm_score_means!(lms::Vector{<:LinearModel}; kwargs...)
 	for lm in lms
-		remove_lm_score_means!(lm)
+		remove_lm_score_means!(lm; kwargs...)
 	end
 end
 

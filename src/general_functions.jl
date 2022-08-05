@@ -279,3 +279,27 @@ function find_modes(data::Vector{T}; amount::Integer=3) where {T<:Real}
 	return mode_inds[sortperm(-data[mode_inds])]
 
 end
+
+function est_∇(f::Function, inputs::Vector{<:Real}; dif::Real=1e-7, ignore_0_inputs::Bool=false)
+    # original value
+    val = f(inputs)
+
+    #estimate gradient
+    j = 1
+    if ignore_0_inputs
+        grad = zeros(length(remove_zeros(inputs)))
+    else
+        grad = zeros(length(inputs))
+    end
+
+    for i in 1:length(inputs)
+        if !ignore_0_inputs || inputs[i]!=0
+            hold = inputs[i]
+            grad[j] = (f(inputs) - val) / dif
+            j += 1
+			inputs[i] = hold
+        end
+		if i%100==0; println("done with $i/$(length(inputs))") end
+    end
+    return grad
+end

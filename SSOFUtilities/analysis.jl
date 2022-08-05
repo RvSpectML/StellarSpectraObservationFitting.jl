@@ -243,7 +243,8 @@ function estimate_errors_helper(x::AbstractVecOrMat, ℓ::Function; n::Int=7, pa
 	for i in 1:length(x)
 		hold = x[i]
 		_std = std(x)
-		x_test[:] = x[i] .+ LinRange(-_std/1e3, _std/1e3, n)
+		# x_test[:] = x[i] .+ LinRange(-_std/1e3, _std/1e3, n)
+		x_test[:] = x[i] .+ LinRange(-_std, _std, n)
 		for j in 1:n
 			x[i] = x_test[j]
 			if use_gradient
@@ -261,7 +262,7 @@ function estimate_errors_helper(x::AbstractVecOrMat, ℓ::Function; n::Int=7, pa
 			if print_stuff; println("∇_$i: $(poly_f.w[1] + poly_f.w[2] * x[i])") end
 		else
 			poly_f = SSOF.ordinary_lst_sq_f(ℓs, 2; x=x_test)
-			# σs[i] = sqrt(1 / (2 * poly_f.w[3]))
+			σs[i] = sqrt(1 / (2 * poly_f.w[3]))
 			max_dif = maximum(poly_f.(x_test) .- ℓs)
 			if print_stuff; println("∇_$i: $(poly_f.w[2] + 2 * poly_f.w[3] * x[i])") end
 		end

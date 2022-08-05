@@ -438,10 +438,10 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
 	function cb(as::AdamState)
 		if shift_scores
 			if !(typeof(mws) <: FrozenTelWorkspace)
-				remove_lm_score_means!(mws.om.tel.lm; winsor=winsor)
+				remove_lm_score_means!(mws.om.tel.lm; prop=0.2)
 			end
 			if typeof(mws.om) <: OrderModelWobble
-				remove_lm_score_means!(mws.om.star.lm; winsor=winsor)
+				remove_lm_score_means!(mws.om.star.lm; prop=0.2)
 			end
 		end
 		if print_stuff; println(as) end
