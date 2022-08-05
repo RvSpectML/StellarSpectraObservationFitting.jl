@@ -101,6 +101,8 @@ end
 
 function spectra_interp(model_flux::AbstractMatrix, rvs::AbstractVector, sih::StellarInterpolationHelper)
 	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_step
+	# prop_bad = sum((ratios .> 1) + (ratios .< 0)) / length(ratios)
+	# if prop_bad > 0.01; println("$(Int(round((100*prop_bad))))% of ratios are outside [0,1]. Consider running update_interpolation_locations!(::ModelWorkspace)")
 	return (view(model_flux, sih.lower_inds).* (1 .- ratios)) + (view(model_flux, sih.lower_inds_p1) .* ratios)
 end
 function spectra_interp_nabla(model_flux, rvs, sih::StellarInterpolationHelper)

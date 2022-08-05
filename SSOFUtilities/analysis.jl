@@ -167,6 +167,7 @@ function _finish_downsizing(mws::SSOF.ModelWorkspace, model::SSOF.OrderModel; no
 	else
 		mws_smol = typeof(mws)(model, mws.d)
 	end
+	SSOF.update_interpolation_locations!(mws)
 	SSOF.train_OrderModel!(mws_smol; kwargs...)  # 120s
 	SSOF.finalize_scores!(mws_smol; f_tol=SSOF._f_reltol_def_s, g_tol=SSOF._g_L∞tol_def_s)
 	return mws_smol
