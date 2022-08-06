@@ -28,11 +28,10 @@ end
 
 rv_to_D(v) = (log1p.((-v ./ light_speed_nu)) - log1p.((v ./ light_speed_nu))) ./ 2
 # rv_to_D(v) = log.((1 .- v ./ light_speed_nu) ./ (1 .+ v ./ light_speed_nu)) ./ 2
-function _lower_inds(model_log_λ::AbstractVector{<:Real}, rvs, log_λ_obs::AbstractMatrix)
+function _lower_inds!(lower_inds::AbstractMatrix, lower_inds_adj::AbstractMatrix, model_log_λ::AbstractVector{<:Real}, rvs, log_λ_obs::AbstractMatrix)
 	n_obs = length(rvs)
 	len = size(log_λ_obs, 1)
-	lower_inds = Array{Int64}(undef, len, n_obs)
-	lower_inds_adj = Array{Int64}(undef, len, n_obs)
+	@assert size(lower_inds) == size(lower_inds_adj) == (len, n_obs)
 	log_λ_holder = Array{Float64}(undef, len)
 	len_model = length(model_log_λ)
 	for i in 1:n_obs
@@ -48,6 +47,13 @@ function _lower_inds(model_log_λ::AbstractVector{<:Real}, rvs, log_λ_obs::Abst
 		lower_inds_adj[:, i] .= ((i - 1) * len_model) .+ view(lower_inds, :, i)
 	end
 	return lower_inds, lower_inds_adj
+end
+function _lower_inds(model_log_λ::AbstractVector{<:Real}, rvs, log_λ_obs::AbstractMatrix)
+	n_obs = length(rvs)
+	len = size(log_λ_obs, 1)
+	lower_inds = Array{Int64}(undef, len, n_obs)
+	lower_inds_adj = Array{Int64}(undef, len, n_obs)
+	return _lower_inds!(lower_inds, lower_inds_adj, model_log_λ, rvs, log_λ_obs)
 end
 
 struct StellarInterpolationHelper{T1<:Real, T2<:Int}
@@ -91,11 +97,11 @@ function StellarInterpolationHelper!(
 	log_λ_obs::AbstractMatrix{T}) where {T<:Real}
 
 	@assert sih.model_log_λ_step == model_log_λ.step.hi
-	lower_inds, lower_inds_adj = _lower_inds(model_log_λ, total_rvs, log_λ_obs)
+	lower_inds = Array{Int}(undef, size(sih.lower_inds, 1), size(sih.lower_inds, 2))
+	_lower_inds!(lower_inds, sih.lower_inds, model_log_λ, total_rvs, log_λ_obs)
 
 	sih.log_λ_obs_m_model_log_λ_lo .= log_λ_obs - (view(model_log_λ, lower_inds))
-	sih.lower_inds .= lower_inds_adj
-	sih.lower_inds_p1 .= lower_inds_adj .+ 1
+	sih.lower_inds_p1 .= sih.lower_inds .+ 1
 	return sih
 end
 
@@ -111,6 +117,26 @@ function spectra_interp_nabla(model_flux, rvs, sih::StellarInterpolationHelper)
 end
 spectra_interp(model_flux, rvs, sih::StellarInterpolationHelper) =
 	spectra_interp_nabla(model_flux, rvs, sih)
+@explicit_intercepts spectra_interp Tuple{AbstractMatrix, AbstractVector, StellarInterpolationHelper} [true, false, false]
+function Nabla.∇(::typeof(spectra_interp), ::Type{Arg{1}}, _, y, ȳ, model_flux, rvs, sih)
+	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_step
+	ȳnew = zeros(size(model_flux, 1), size(ȳ, 2))
+	# samp is λ_obs x λ_model
+	for k in 1:size(ȳ, 1)  # λ_obs
+		for j in 1:size(ȳnew, 2)  # time
+			λ_model_lo = sih.lower_inds[k, j] - size(ȳnew, 1)*(j-1)
+			# for i in 1:size(ȳnew, 1)  # λ_model
+			# for i in λ_model_lo:(λ_model_lo+1) # λ_model
+			# ȳnew[i, j] += sampt[i, k] * ȳ[k, j]
+			# ȳnew[i, j] += samp[k, i] * ȳ[k, j]
+			# ȳnew[λ_model_lo, j] += samp[k, λ_model_lo] * ȳ[k, j]
+			ȳnew[λ_model_lo, j] += (1 - ratios[k, j]) * ȳ[k, j]
+			ȳnew[λ_model_lo+1, j] += ratios[k, j] * ȳ[k, j]
+			# end
+		end
+	end
+	return ȳnew
+end
 
 struct LSFData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
     flux::AM
@@ -266,8 +292,8 @@ LinearModel(lm::TemplateModel, s::AbstractMatrix) = lm
 # _eval_lm(μ, n::Int) = repeat(μ, 1, n)
 _eval_lm(μ, n::Int) = μ * ones(n)'  # this is faster I dont know why
 _eval_lm(M, s) = M * s
-_eval_lm(M, s, μ) =
-	_eval_lm(M, s) .+ μ
+# _eval_lm(M, s, μ) = muladd(M, s, μ)  # faster, but Nabla doesn't handle it
+_eval_lm(M, s, μ) = _eval_lm(M, s) .+ μ
 
 _eval_lm(flm::FullLinearModel) = _eval_lm(flm.M, flm.s, flm.μ)
 _eval_lm(blm::BaseLinearModel) = _eval_lm(blm.M, blm.s)
@@ -570,12 +596,11 @@ downsize(m::OrderModelWobble, n_comp_tel::Int, n_comp_star::Int) =
 
 spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
 	hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
-spectra_interp_nabla(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
-	hcat([interp_helper[i] * model[:, i] for i in 1:size(model, 2)]...)
-spectra_interp(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
-	spectra_interp_nabla(model, interp_helper)
-
-@explicit_intercepts spectra_interp Tuple{AbstractMatrix, AbstractVector{<:_current_matrix_modifier}}
+# spectra_interp_nabla(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
+# 	hcat([interp_helper[i] * model[:, i] for i in 1:size(model, 2)]...)
+# spectra_interp(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
+# 	spectra_interp_nabla(model, interp_helper)
+@explicit_intercepts spectra_interp Tuple{AbstractMatrix, AbstractVector{<:_current_matrix_modifier}} [true, false]
 Nabla.∇(::typeof(spectra_interp), ::Type{Arg{1}}, _, y, ȳ, model, interp_helper) =
 	hcat([interp_helper[i]' * view(ȳ, :, i) for i in 1:size(model, 2)]...)
 

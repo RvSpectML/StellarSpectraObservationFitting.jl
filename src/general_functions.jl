@@ -295,6 +295,7 @@ function est_∇(f::Function, inputs::Vector{<:Real}; dif::Real=1e-7, ignore_0_i
     for i in 1:length(inputs)
         if !ignore_0_inputs || inputs[i]!=0
             hold = inputs[i]
+			inputs[i] += dif
             grad[j] = (f(inputs) - val) / dif
             j += 1
 			inputs[i] = hold
