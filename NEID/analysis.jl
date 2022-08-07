@@ -61,7 +61,8 @@ SSOFU.neid_plots(mws, airmasses, times_nu, SSOF.rvs(mws.om), zeros(length(times_
 	display_plt=interactive);
 SSOFU.improve_regularization!(mws; save_fn=save_path)
 SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path, iter=300, print_stuff=true)
-rvs, rv_errors, tel_errors, star_errors = SSOFU.estimate_errors(mws; save_fn=save_path)
+# mws.om.metadata[:todo][:err_estimated] = false
+rvs, rv_errors, tel_errors, star_errors = SSOFU.estimate_σ(mws; save_fn=save_path)
 
 ## Plots
 df_act = SSOFU.neid_activity_indicators(pipeline_path, data)
