@@ -207,8 +207,8 @@ function estimate_σ(mws::SSOF.ModelWorkspace; save_fn="", kwargs...)
 		ℓ_rv(x) = SSOF._loss(mws.o, model, mws.d; rv=x)
 		rvs_σ = estimate_σ_helper(rvs, ℓ_rv; param_str="rv", kwargs...)
 		if typeof(model) <: SSOF.OrderModelDPCA
-			rvs .*= -light_speed_nu
-			rvs_σ .*= -light_speed_nu
+			rvs .*= -SSOF.light_speed_nu
+			rvs_σ .*= SSOF.light_speed_nu
 		end
 
 		if time_var_tel
