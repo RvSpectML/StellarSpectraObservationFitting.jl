@@ -692,15 +692,15 @@ function train_OrderModel!(ow::OptimTotalWorkspace; print_stuff::Bool=_print_stu
 end
 
 
-function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::Submodel, star::Submodel, optim_cb::Function; g_tol::Real=_g_L∞tol_def_s, f_tol::Real=_f_reltol_def_s, kwargs...)
-	options = Optim.Options(; callback=optim_cb, g_tol=g_tol, f_tol=f_tol, kwargs...)
+function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::Submodel, star::Submodel, optim_cb::Function; g_tol::Real=_g_L∞tol_def_s, f_tol::Real=_f_reltol_def_s, iter::Int=_iter_def, kwargs...)
+	options = Optim.Options(; callback=optim_cb, g_tol=g_tol, f_tol=f_tol, iterations=iter, kwargs...)
 	rv.lm.M .= calc_doppler_component_RVSKL(star.λ, star.lm.μ)
 	result_rv = _OSW_optimize!(rv_ws, options)
 	rv.lm.s[:] = rv_ws.unflatten(rv_ws.p0)
 	return result_rv
 end
-function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::AbstractVector, optim_cb::Function; g_tol::Real=_g_L∞tol_def_s, f_tol::Real=_f_reltol_def_s, kwargs...)
-	options = Optim.Options(; callback=optim_cb, g_tol=g_tol, f_tol=f_tol, kwargs...)
+function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::AbstractVector, optim_cb::Function; g_tol::Real=_g_L∞tol_def_s, f_tol::Real=_f_reltol_def_s, iter::Int=_iter_def, kwargs...)
+	options = Optim.Options(; callback=optim_cb, g_tol=g_tol, f_tol=f_tol, iterations=iter, kwargs...)
 	result_rv = _OSW_optimize!(rv_ws, options)
 	rv[:] = rv_ws.unflatten(rv_ws.p0)
 	return result_rv
