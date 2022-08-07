@@ -191,7 +191,7 @@ function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}; kwarg
 end
 
 
-function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="", kwargs...)
+function estimate_σ(mws::SSOF.ModelWorkspace; save_fn="", kwargs...)
 	save = save_fn!=""
 	model = mws.om
 	data = mws.d
@@ -205,7 +205,7 @@ function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="", kwargs...)
 
 		typeof(model) <: SSOF.OrderModelDPCA ? rvs = copy(model.rv.lm.s) : rvs = copy(model.rv)
 		ℓ_rv(x) = SSOF._loss(mws.o, model, mws.d; rv=x)
-		rvs_σ = estimate_errors_helper(rvs, ℓ_rv; param_str="rv", kwargs...)
+		rvs_σ = estimate_σ_helper(rvs, ℓ_rv; param_str="rv", kwargs...)
 		if typeof(model) <: SSOF.OrderModelDPCA
 			rvs .*= -light_speed_nu
 			rvs_σ .*= -light_speed_nu
@@ -213,14 +213,14 @@ function estimate_errors(mws::SSOF.ModelWorkspace; save_fn="", kwargs...)
 
 		if time_var_tel
 			ℓ_tel(x) = SSOF._loss(mws.o, model, mws.d; tel=vec(model.tel.lm)) + SSOF.model_s_prior(model.tel.lm.s, model.reg_tel)
-			tel_s_σ = reshape(estimate_errors_helper(model.tel.lm.s, ℓ_tel; param_str="tel_s", kwargs...), size(model.tel.lm.s))
+			tel_s_σ = reshape(estimate_σ_helper(model.tel.lm.s, ℓ_tel; param_str="tel_s", kwargs...), size(model.tel.lm.s))
 		else
 			tel_s_σ = nothing
 		end
 
 		if time_var_star
 			ℓ_star(x) = SSOF._loss(mws.o, model, mws.d; star=vec(model.star.lm)) + SSOF.model_s_prior(model.star.lm.s, model.reg_star)
-			star_s_σ = reshape(estimate_errors_helper(model.star.lm.s, ℓ_star; param_str="star_s", kwargs...), size(model.star.lm.s))
+			star_s_σ = reshape(estimate_σ_helper(model.star.lm.s, ℓ_star; param_str="star_s", kwargs...), size(model.star.lm.s))
 		else
 			star_s_σ = nothing
 		end
@@ -237,7 +237,7 @@ end
 
 
 using Nabla
-function estimate_errors_helper(x::AbstractVecOrMat, ℓ::Function; n::Int=7, param_str::String="", print_every::Int=10, use_gradient::Bool=false, print_stuff::Bool=false, show_plots::Bool=false)
+function estimate_σ_helper(x::AbstractVecOrMat, ℓ::Function; n::Int=7, param_str::String="", print_every::Int=10, use_gradient::Bool=false, print_stuff::Bool=false, show_plots::Bool=false)
 	x_test = Array{Float64}(undef, n)
 	σs = Array{Float64}(undef, length(x))
 	ℓs = Array{Float64}(undef, n)
@@ -280,7 +280,7 @@ function estimate_errors_helper(x::AbstractVecOrMat, ℓ::Function; n::Int=7, pa
 	return σs
 end
 
-function _estimate_errors(mws::SSOF.ModelWorkspace; save_fn="", n::Int=50, return_holders::Bool=false)
+function _estimate_σ(mws::SSOF.ModelWorkspace; save_fn="", n::Int=50, return_holders::Bool=false)
 	save = save_fn!=""
 	model = mws.om
 	data = mws.d
@@ -318,37 +318,37 @@ function _estimate_errors(mws::SSOF.ModelWorkspace; save_fn="", n::Int=50, retur
 			end
 			if n%10==0; println("done with $i/$n bootstraps") end
 	    end
-	    rv_errors = vec(std(rv_holder; dims=1))
+	    rvs_σ = vec(std(rv_holder; dims=1))
 		if time_var_tel
-			tel_errors = Array{Float64}(undef, size(mws.om.tel.lm.s, 1), size(mws.om.tel.lm.s, 2))
+			tel_s_σ = Array{Float64}(undef, size(mws.om.tel.lm.s, 1), size(mws.om.tel.lm.s, 2))
 			for i in 1:size(mws.om.tel.lm.s, 1)
-				tel_errors[i, :] .= vec(std(view(tel_holder, :, i, :); dims=1))
+				tel_s_σ[i, :] .= vec(std(view(tel_holder, :, i, :); dims=1))
 			end
 		else
-			tel_errors = nothing
+			tel_s_σ = nothing
 		end
 		if time_var_star
-			star_errors = Array{Float64}(undef, size(mws.om.star.lm.s, 1), size(mws.om.star.lm.s, 2))
+			star_s_σ = Array{Float64}(undef, size(mws.om.star.lm.s, 1), size(mws.om.star.lm.s, 2))
 			for i in 1:size(mws.om.star.lm.s, 1)
-				star_errors[i, :] .= vec(std(view(star_holder, :, i, :); dims=1))
+				star_s_σ[i, :] .= vec(std(view(star_holder, :, i, :); dims=1))
 			end
 		else
-			star_errors = nothing
+			star_s_σ = nothing
 		end
 		model.metadata[:todo][:err_estimated] = true
-	    if save; @save save_fn model rvs rv_errors tel_errors star_errors end
+	    if save; @save save_fn model rvs rvs_σ tel_s_σ star_s_σ end
 		if return_holders
-			return rvs, rv_errors, tel_errors, star_errors, rv_holder, tel_holder, star_holder
+			return rvs, rvs_σ, tel_s_σ, star_s_σ, rv_holder, tel_holder, star_holder
 		else
-			return rvs, rv_errors, tel_errors, star_errors
+			return rvs, rvs_σ, tel_s_σ, star_s_σ
 		end
 	else
 		println("loading rvs")
-		if save; @load save_fn rvs rv_errors tel_errors star_errors end
+		if save; @load save_fn rvs rvs_σ tel_s_σ star_s_σ end
 		if return_holders
-			return rvs, rv_errors, tel_errors, star_errors, rv_holder, tel_holder, star_holder
+			return rvs, rvs_σ, tel_s_σ, star_s_σ, rv_holder, tel_holder, star_holder
 		else
-			return rvs, rv_errors, tel_errors, star_errors
+			return rvs, rvs_σ, tel_s_σ, star_s_σ
 		end
 	end
 end

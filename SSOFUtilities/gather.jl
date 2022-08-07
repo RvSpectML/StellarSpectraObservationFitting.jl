@@ -17,14 +17,14 @@ function safe_retrieve(retrieve_f, args...; pre_string="order", kwargs...)
 end
 
 function _retrieve_rvs(fn::String; return_extra::Bool=false)
-    @load fn model rv_errors
+    @load fn model rvs_σ
     rvs_notel_opt = SSOF.rvs(model)
     if return_extra
         SSOF.is_time_variable(model.tel) ? n_comp_tel = size(model.tel.lm.M, 2) : n_comp_tel = 0
         SSOF.is_time_variable(model.star) ? n_comp_star = size(model.star.lm.M, 2) : n_comp_star = 0
-        return rvs_notel_opt, rv_errors, [n_comp_tel, n_comp_star], model.reg_tel, model.reg_star
+        return rvs_notel_opt, rvs_σ, [n_comp_tel, n_comp_star], model.reg_tel, model.reg_star
     end
-    return rvs_notel_opt, rv_errors
+    return rvs_notel_opt, rvs_σ
 end
 retrieve_rvs(args...; kwargs...) = safe_retrieve(_retrieve_rvs, args...; kwargs...)
 
