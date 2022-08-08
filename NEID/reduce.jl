@@ -46,17 +46,18 @@ rvs .-= median(rvs; dims=2)
 χ² = vec(sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2))
 med_rvs_σ = vec(median(rvs_σ; dims=2))
 rvs_std = vec(std(rvs; dims=2))
-σ_floor = round(10 * std(neid_rv))
+std_floor = round(10 * std(neid_rv))
+σ_floor = std_floor / 3
 
 χ²_sortperm = [i for i in sortperm(χ²) if !iszero(χ²[i])]
 χ²_thres = 4.5e3 / 37 * size(rvs, 2)
 χ²_orders = [i for i in χ²_sortperm if χ²[i] < χ²_thres]
 χ²_orders = [orders[χ²_order] for χ²_order in χ²_orders]
-inds = orders2inds([orders[i] for i in eachindex(orders) if ((rvs_std[i] < σ_floor) && (med_rvs_σ[i] < σ_floor/3) && (orders[i] in χ²_orders))])
+inds = orders2inds([orders[i] for i in eachindex(orders) if ((rvs_std[i] < std_floor) && (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders))])
 println("starting with $(length(orders)) orders")
 println("$(length(orders) - length(χ²_sortperm)) orders ignored for unfinished analyses or otherwise weird")
 println("$(length(χ²_sortperm) - length(χ²_orders)) worst orders (in χ²-sense) ignored")
-println("$(length(χ²_orders) - length(inds)) more orders ignored for having >$σ_floor m/s RMS or >$(σ_floor/3) errors")
+println("$(length(χ²_orders) - length(inds)) more orders ignored for having >$std_floor m/s RMS or >$σ_floor errors")
 println("$(length(inds)) orders used in total")
 
 rvs_red = collect(Iterators.flatten((sum(rvs[inds, :] ./ (rvs_σ[inds, :] .^ 2); dims=1) ./ sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1))'))
@@ -67,11 +68,11 @@ rvs_σ2_red = rvs_σ_red .^ 2
 using LinearAlgebra
 lin = SSOF.general_lst_sq_f(rvs_red, Diagonal(rvs_σ2_red), 1; x=times_nu)
 
-annot = text.(orders[rvs_std .< σ_floor], :center, :black, 3)
+annot = text.(orders[rvs_std .< std_floor], :center, :black, 3)
 plt = SSOFU._plot()
-scatter!(plt, orders[rvs_std .< σ_floor], rvs_std[rvs_std .< σ_floor]; legend=:topleft, label="", title="$star RV std", xlabel="Order", ylabel="m/s", size=(SSOFU._plt_size[1]*0.5,SSOFU._plt_size[2]*0.75), ylim=[0,σ_floor], series_annotations=annot, markerstrokewidth=0.5)
-annot = text.(orders[rvs_std .> σ_floor], :center, :black, 3)
-scatter!(plt, orders[rvs_std .> σ_floor], ones(sum(rvs_std .> σ_floor)) .* σ_floor; label="", series_annotations=annot, markershape=:utriangle, c=SSOFU.plt_colors[1], markerstrokewidth=0.5)
+scatter!(plt, orders[rvs_std .< std_floor], rvs_std[rvs_std .< std_floor]; legend=:topleft, label="", title="$star RV std", xlabel="Order", ylabel="m/s", size=(SSOFU._plt_size[1]*0.5,SSOFU._plt_size[2]*0.75), ylim=[0,σ_floor], series_annotations=annot, markerstrokewidth=0.5)
+annot = text.(orders[rvs_std .> std_floor], :center, :black, 3)
+scatter!(plt, orders[rvs_std .> std_floor], ones(sum(rvs_std .> std_floor)) .* std_floor; label="", series_annotations=annot, markershape=:utriangle, c=SSOFU.plt_colors[1], markerstrokewidth=0.5)
 png(plt, save_fn * "order_rv_std")
 
 annot = text.(orders[med_rvs_σ .< σ_floor], :center, :black, 3)
@@ -93,9 +94,9 @@ hline!(plt, [χ²_thres]; label="", lw=1, color=SSOFU.plt_colors[1])
 png(plt, save_fn * "χ²")
 
 # Compare RV differences to actual RVs from activity
-plt = SSOFU.plot_model_rvs(times_nu[mask], rvs_red[mask], rvs_σ_red[mask], neid_time[mask], neid_rv[mask], neid_rv_σ[mask]; markerstrokewidth=0.5, title="HD $star (median σ: $(round(median(rvs_σ_red), digits=3)))")
+plt = SSOFU.plot_model_rvs(times_nu, rvs_red, rvs_σ_red, neid_time, neid_rv, neid_rv_σ; markerstrokewidth=0.5, title="HD $star (median σ: $(round(median(rvs_σ_red), digits=3)))")
 png(plt, save_fn * "model_rvs.png")
-plt = SSOFU.plot_model_rvs(times_nu[mask], rvs_red[mask] .- lin.(times_nu[mask]), rvs_σ_red[mask], neid_time[mask], neid_rv[mask], neid_rv_σ[mask]; markerstrokewidth=0.5, title="HD $star (median σ: $(round(median(rvs_σ_red), digits=3)))")
+plt = SSOFU.plot_model_rvs(times_nu, rvs_red .- lin.(times_nu), rvs_σ_red, neid_time, neid_rv, neid_rv_σ; markerstrokewidth=0.5, title="HD $star (median σ: $(round(median(rvs_σ_red), digits=3)))")
 png(plt, save_fn * "model_rvs_detrend.png")
 #     end
 # end
