@@ -25,21 +25,21 @@ if dpca
 else
     prep_str = "wobble_"
 end
-save_fn = "figs/neid_" * prep_str * star * "_"
 
 # for star_ind in [1,2,5]
 #     for prep_str in ["wobble_", ""]
 star = stars[star_ind]
+save_fn = "figs/neid_" * prep_str * star * "_"
 orders = orders_list[star_ind]
 orders2inds(selected_orders::AbstractVector) = [searchsortedfirst(orders, order) for order in selected_orders]
 
 ## RV reduction
+@load "jld2/neid_$(prep_str)$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 
 @load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ
 neid_rv .-= median(neid_rv)
 star=="10700" ? mask = .!(2459525 .< times_nu .< 2459530) : mask = Bool.(ones(length(times_nu)))
 
-@load "jld2/neid_$(prep_str)$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 # # plotting order means which don't matter because the are constant shifts for the reduced rv
 # _scatter(orders, mean(rvs; dims=2); series_annotations=annot, legend=:topleft)
 rvs .-= median(rvs; dims=2)
@@ -54,6 +54,7 @@ std_floor = round(10 * std(neid_rv))
 χ²_orders = [i for i in χ²_sortperm if χ²[i] < χ²_thres]
 χ²_orders = [orders[χ²_order] for χ²_order in χ²_orders]
 inds = orders2inds([orders[i] for i in eachindex(orders) if ((rvs_std[i] < std_floor) && (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders))])
+inds = orders2inds([orders[i] for i in eachindex(orders) if ((rvs_std[i] < std_floor) && (med_rvs_σ[i] < σ_floor) && true)])
 println("starting with $(length(orders)) orders")
 println("$(length(orders) - length(χ²_sortperm)) orders ignored for unfinished analyses or otherwise weird")
 println("$(length(χ²_sortperm) - length(χ²_orders)) worst orders (in χ²-sense) ignored")
@@ -70,7 +71,7 @@ lin = SSOF.general_lst_sq_f(rvs_red, Diagonal(rvs_σ2_red), 1; x=times_nu)
 
 annot = text.(orders[rvs_std .< std_floor], :center, :black, 3)
 plt = SSOFU._plot()
-scatter!(plt, orders[rvs_std .< std_floor], rvs_std[rvs_std .< std_floor]; legend=:topleft, label="", title="$star RV std", xlabel="Order", ylabel="m/s", size=(SSOFU._plt_size[1]*0.5,SSOFU._plt_size[2]*0.75), ylim=[0,σ_floor], series_annotations=annot, markerstrokewidth=0.5)
+scatter!(plt, orders[rvs_std .< std_floor], rvs_std[rvs_std .< std_floor]; legend=:topleft, label="", title="$star RV std", xlabel="Order", ylabel="m/s", size=(SSOFU._plt_size[1]*0.5,SSOFU._plt_size[2]*0.75), ylim=[0, std_floor], series_annotations=annot, markerstrokewidth=0.5)
 annot = text.(orders[rvs_std .> std_floor], :center, :black, 3)
 scatter!(plt, orders[rvs_std .> std_floor], ones(sum(rvs_std .> std_floor)) .* std_floor; label="", series_annotations=annot, markershape=:utriangle, c=SSOFU.plt_colors[1], markerstrokewidth=0.5)
 png(plt, save_fn * "order_rv_std")
@@ -121,7 +122,7 @@ cors[diagind(cors)] .= 1
 cors = Symmetric(cors)
 heatmap(cors)
 
-plt = SSOFU._plot(; xlabel="Order", title="Correlation with Bulk RVs", ylabel="Correlation")
-scatter!(orders, [cor(view(rvs, i, :), rvs_red) for i in 1:n_ord]; yerror=x_σ./40, ylims=(-0.5, 1.1), markerstrokewidth=0.5, label="Unused Orders")
+plt = SSOFU._plot(; xlabel="Order", title="Correlation with Bulk RVs (error bars ∝ σᵣᵥ)", ylabel="Correlation")
+scatter!(orders, [cor(view(rvs, i, :), rvs_red) for i in 1:n_ord]; yerror=x_σ./20, ylims=(-0.5, 1.1), markerstrokewidth=0.5, label="Unused Orders")
 scatter!(orders[inds], [cor(view(rvs, i, :), rvs_red) for i in 1:n_ord][inds]; label="Used Orders", markerstrokewidth=0.5)
 png(plt, save_fn * "order_cor")

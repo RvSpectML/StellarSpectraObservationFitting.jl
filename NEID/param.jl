@@ -77,8 +77,18 @@ if fits_target_str == "Solar" || fits_target_str == "Sun"
 	  	DataFrame
 else
 	global df_files
+
+	# is the right star
 	global df_files_use = df_files |>
-	   @filter( _.target == fits_target_str ) |>
+		@filter( _.target == fits_target_str ) |>
+		DataFrame
+		
+   df_files_use = df_files_use |>
+	   @filter( _.driftfun == "dailymodel0" ) |>
+	   DataFrame
+
+   df_files_use = df_files_use |>
+	   @orderby(_.bjd) |>
 	   @take(max_spectra_to_use) |>
 	   DataFrame
 end
