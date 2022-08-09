@@ -46,7 +46,7 @@ rvs .-= median(rvs; dims=2)
 χ² = vec(sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2))
 med_rvs_σ = vec(median(rvs_σ; dims=2))
 rvs_std = vec(std(rvs; dims=2))
-std_floor = round(10 * std(neid_rv))
+std_floor = round(8 * std(neid_rv[mask]))
 σ_floor = std_floor / 3
 
 χ²_sortperm = [i for i in sortperm(χ²) if !iszero(χ²[i])]
@@ -95,7 +95,7 @@ hline!(plt, [χ²_thres]; label="", lw=1, color=SSOFU.plt_colors[1])
 png(plt, save_fn * "χ²")
 
 # Compare RV differences to actual RVs from activity
-plt = SSOFU.plot_model_rvs(times_nu, rvs_red, rvs_σ_red, neid_time, neid_rv, neid_rv_σ; markerstrokewidth=0.5, title="HD $star (median σ: $(round(median(rvs_σ_red), digits=3)))")
+plt = SSOFU.plot_model_rvs(times_nu[mask], rvs_red[mask], rvs_σ_red[mask], neid_time[mask], neid_rv[mask], neid_rv_σ[mask]; markerstrokewidth=0.5, title="HD $star (median σ: $(round(median(rvs_σ_red), digits=3)))")
 png(plt, save_fn * "model_rvs.png")
 plt = SSOFU.plot_model_rvs(times_nu, rvs_red .- lin.(times_nu), rvs_σ_red, neid_time, neid_rv, neid_rv_σ; markerstrokewidth=0.5, title="HD $star (median σ: $(round(median(rvs_σ_red), digits=3)))")
 png(plt, save_fn * "model_rvs_detrend.png")
