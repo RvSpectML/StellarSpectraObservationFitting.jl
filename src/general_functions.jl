@@ -60,9 +60,9 @@ function make_template(matrix::Matrix, σ²::Matrix; default::Real=1., use_mean:
 	return result
 end
 
-function shift_log_λ(v::Unitful.Velocity, log_λ::Vector{T}) where {T<:Real}
-	return log_λ .+ (log((1.0 + v / light_speed) / (1.0 - v / light_speed)) / 2)
-end
+# function shift_log_λ(v::Unitful.Velocity, log_λ::Vector{T}) where {T<:Real}
+# 	return log_λ .+ (log((1.0 + v / light_speed) / (1.0 - v / light_speed)) / 2)
+# end
 
 function observation_night_inds(times_in_days::AbstractVector{<:Real})
     difs = times_in_days[2:end] - times_in_days[1:end-1] .> 0.5

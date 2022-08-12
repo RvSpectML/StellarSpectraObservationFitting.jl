@@ -178,11 +178,11 @@ function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool
 		plt = plot_spectrum(; legend = :bottomright, layout = grid(3, 1, heights=[0.6, 0.2, 0.2]), ylabel="Flux + Constant Shift", kwargs...) :
 		plt = plot_spectrum(; legend = :bottomright, layout = grid(2, 1, heights=[0.85, 0.15]), kwargs...)
 
-	tel_model = time_average(mws.om.tel())
+	tel_model = time_average(mws.om.tel.lm())
     plot!(plt[1], mws.om.tel.λ, tel_model, label="Mean Telluric Model")
     shift = 1.1 - minimum(tel_model)
 
-	star_model = time_average(mws.om.star())
+	star_model = time_average(mws.om.star.lm())
 	# typeof(mws.om) <: SSOF.OrderModelWobble ?
 	# 	star_model = time_average(mws.om.star()) :
 	# 	star_model = time_average(mws.om.star() + mws.om.rv())
