@@ -11,8 +11,21 @@ module NEIDLSF
         return abs(amp * (erf(arg1) + erf(arg2)))
         # return abs(amp * (erf(arg1) + erf(arg2)) / (2 * erf(boxhalfwidth * scale)))  # used for some visual diagnostic
     end
+
+    # def conv_gauss_tophat(x, center, amp, sigma, boxhalfwidth):
+    #     '''
+    #     this is an analytical function for the convolution of a gaussian and tophat
+    #     should be a closer approximation to the HPF profile than a simple gaussian
+    #     '''
+    #     arg1 = (2. * center + boxhalfwidth - 2. * x) / (2. * sqrt(2) * sigma)
+    #     arg2 = (-2. * center + boxhalfwidth + 2. * x) / (2. * sqrt(2) * sigma)
+    #     part1 = scipy.special.erf(arg1)
+    #     part2 = scipy.special.erf(arg2)
+    #     out = amp * (part1 + part2)
+    #     return(out)
+
     σs = read(FITS("NEID/sigma_arr.fits")[1])
-    bhws = read(FITS("NEID/boxhalfwidth_arr.fits")[1])
+    bhws = read(FITS("NEID/boxhalfwidth_arr.fits")[1]) ./ 2 # Sam's formula has an extra factor of 2
     no_lsf_orders = [all(iszero.(view(bhws, :, i))) for i in 1:size(bhws,2)]
     @assert all(no_lsf_orders .== [all(iszero.(view(σs, :, i))) for i in 1:size(σs,2)])
 
