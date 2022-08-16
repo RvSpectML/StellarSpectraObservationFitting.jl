@@ -22,3 +22,4 @@ NEID/testing.jl
 *.par
 *analysis_wobble.jl
 *test_linearsolve.jl
+*.ipynb

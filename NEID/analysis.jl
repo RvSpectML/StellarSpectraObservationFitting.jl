@@ -20,12 +20,12 @@ interactive = length(ARGS) == 0
 if !interactive; ENV["GKSwstype"] = "100" end
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
 desired_order = SSOF.parse_args(2, Int, 81)  # 81 has a bunch of tels, 60 has very few
-use_reg = SSOF.parse_args(3, Bool, true)
-which_opt = SSOF.parse_args(4, Int, 1)
-recalc = SSOF.parse_args(5, Bool, false)
-dpca = SSOF.parse_args(6, Bool, false)
-log_lm = SSOF.parse_args(7, Bool, false)
-use_lsf = SSOF.parse_args(8, Bool, false)
+dpca = SSOF.parse_args(3, Bool, false)
+log_lm = SSOF.parse_args(4, Bool, false)
+use_lsf = SSOF.parse_args(5, Bool, false)
+recalc = SSOF.parse_args(6, Bool, false)
+use_reg = SSOF.parse_args(7, Bool, true)
+which_opt = SSOF.parse_args(8, Int, 1)
 opt = SSOFU.valid_optimizers[which_opt]
 
 
