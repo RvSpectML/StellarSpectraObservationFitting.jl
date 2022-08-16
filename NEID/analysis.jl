@@ -20,8 +20,8 @@ interactive = length(ARGS) == 0
 if !interactive; ENV["GKSwstype"] = "100" end
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
 desired_order = SSOF.parse_args(2, Int, 81)  # 81 has a bunch of tels, 60 has very few
-dpca = SSOF.parse_args(3, Bool, false)
-log_lm = SSOF.parse_args(4, Bool, false)
+log_lm = SSOF.parse_args(3, Bool, false)
+dpca = SSOF.parse_args(4, Bool, false)
 use_lsf = SSOF.parse_args(5, Bool, false)
 recalc = SSOF.parse_args(6, Bool, false)
 use_reg = SSOF.parse_args(7, Bool, true)
@@ -32,16 +32,9 @@ opt = SSOFU.valid_optimizers[which_opt]
 ## Loading in data and initializing model
 base_path = neid_save_path * star * "/$(desired_order)/"
 data_path = base_path * "data.jld2"
-if dpca
-	base_path *= "dpca/"
-else
-	base_path *= "wobble/"
-end
-if log_lm
-	base_path *= "log/"
-else
-	base_path *= "linear/"
-end
+log_lm ? base_path *= "log_" : base_path *= "lin_"
+dpca ? base_path *= "dcp_" : base_path *= "vil_"
+use_lsf ? base_path *= "lsf/" : base_path *= "nol/"
 mkpath(base_path)
 save_path = base_path * "results.jld2"
 init_path = base_path * "results_init.jld2"
