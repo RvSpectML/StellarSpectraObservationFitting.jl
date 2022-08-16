@@ -4,7 +4,16 @@
 
 using LinearAlgebra
 
-function EMPCA!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(M, 2), vec_by_vec::Bool=true, kwargs...)
+function EMPCA!(M::AbstractMatrix, scores::AbstractMatrix, μ::AbstractVector, Xtmp::AbstractMatrix, weights::AbstractMatrix; log_lm::Bool=false, kwargs...)
+	if log_lm
+		_empca!(M, scores, log.(Xtmp ./ μ), (Xtmp .^ 2) .* weights; kwargs...)
+	else
+		Xtmp .-= μ
+		_empca!(M, scores, Xtmp, weights; kwargs...)
+	end
+end
+
+function _empca!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(M, 2), vec_by_vec::Bool=true, kwargs...)
 	@assert inds[1] > 0
 	vec_by_vec ?
 		_empca_vec_by_vec!(view(M, :, inds), view(scores, inds, :), Xtmp, weights; nvec=length(inds), kwargs...) :

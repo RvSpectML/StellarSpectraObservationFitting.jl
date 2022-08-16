@@ -31,7 +31,7 @@ function create_model(
 		println("using saved model at $save_fn")
 	    @load save_fn model
 	else
-	    model = SSOF.OrderModel(data, instrument, desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, oversamp=oversamp, dpca=dpca)
+	    model = SSOF.OrderModel(data, instrument, desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, oversamp=oversamp, dpca=dpca, kwargs...)
 		if !use_reg
 			SSOF.rm_regularization!(model)
 			model.metadata[:todo][:reg_improved] = true
@@ -261,20 +261,20 @@ function estimate_σ_helper(x::AbstractVecOrMat, ℓ::Function; n::Int=7, param_
 		if use_gradient
 			poly_f = SSOF.ordinary_lst_sq_f(ℓs, 1; x=_x_test)
 			σs[i] = sqrt(1 / poly_f.w[2])
-			max_dif = maximum(poly_f.(x_test) .- ℓs)
+			max_dif = maximum(abs.((poly_f.(x_test)./ℓs) .- 1))
 			if print_stuff; println("∇_$i: $(poly_f.w[1] + poly_f.w[2] * x[i])") end
 		else
 			poly_f = SSOF.ordinary_lst_sq_f(ℓs, 2; x=x_test)
 			σs[i] = sqrt(1 / (2 * poly_f.w[3]))
-			max_dif = maximum(poly_f.(x_test) .- ℓs)
+			max_dif = maximum(abs.((poly_f.(x_test)./ℓs) .- 1))
 			if print_stuff; println("∇_$i: $(poly_f.w[2] + 2 * poly_f.w[3] * x[i])") end
 		end
-		@assert max_dif < 1
 		if show_plots
 			plt = scatter(x_test, ℓs; label="ℓ")
 			plot!(x_test, poly_f.(x_test); label="polynomial fit")
 			display(plt)
 		end
+		@assert max_dif < 1e-2
 		if i%print_every==0; println("done with $i/$(length(x)) " * param_str * "_σ estimates") end
 		if i%length(x)==0; println("done with all " * param_str * "_σ estimates") end
 	end

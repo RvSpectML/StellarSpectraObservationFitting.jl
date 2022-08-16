@@ -233,34 +233,41 @@ function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=1.)
 end
 
 abstract type LinearModel end
+_log_lm_default = false
 
 # Full (includes mean) linear model
 struct FullLinearModel{T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}, AV<:AbstractVector{T}}  <: LinearModel
 	M::AM1
 	s::AM2
 	μ::AV
-	function FullLinearModel(M::AM1, s::AM2, μ::AV) where {T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}, AV<:AbstractVector{T}}
+	log::Bool
+	function FullLinearModel(M::AM1, s::AM2, μ::AV, log::Bool) where {T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}, AV<:AbstractVector{T}}
 		@assert length(μ) == size(M, 1)
 		@assert size(M, 2) == size(s, 1)
-		return new{T, AM1, AM2, AV}(M, s, μ)
+		return new{T, AM1, AM2, AV}(M, s, μ, log)
 	end
 end
-Base.copy(flm::FullLinearModel) = FullLinearModel(copy(flm.M), copy(flm.s), copy(flm.μ))
+FullLinearModel(M::AM1, s::AM2, μ::AV; log::Bool=_log_lm_default) where {T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}, AV<:AbstractVector{T}} =
+	FullLinearModel(M, s, μ, log)
+Base.copy(flm::FullLinearModel) = FullLinearModel(copy(flm.M), copy(flm.s), copy(flm.μ), flm.log)
 LinearModel(flm::FullLinearModel, inds::AbstractVecOrMat) =
-	FullLinearModel(flm.M, view(flm.s, :, inds), flm.μ)
+	FullLinearModel(flm.M, view(flm.s, :, inds), flm.μ, flm.log)
 
 # Base (no mean) linear model
 struct BaseLinearModel{T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}} <: LinearModel
 	M::AM1
 	s::AM2
-	function BaseLinearModel(M::AM1, s::AM2) where {T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}}
+	log::Bool
+	function BaseLinearModel(M::AM1, s::AM2, log::Bool) where {T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}}
 		@assert size(M, 2) == size(s, 1)
-		return new{T, AM1, AM2}(M, s)
+		return new{T, AM1, AM2}(M, s, log)
 	end
 end
-Base.copy(blm::BaseLinearModel) = BaseLinearModel(copy(blm.M), copy(blm.s))
+BaseLinearModel(M::AM1, s::AM2; log::Bool=_log_lm_default) where {T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}} =
+	BaseLinearModel(M, s, log)
+Base.copy(blm::BaseLinearModel) = BaseLinearModel(copy(blm.M), copy(blm.s), blm.log)
 LinearModel(blm::BaseLinearModel, inds::AbstractVecOrMat) =
-	BaseLinearModel(blm.M, view(blm.s, :, inds))
+	BaseLinearModel(blm.M, view(blm.s, :, inds), blm.log)
 
 # Template (no bases) model
 struct TemplateModel{T<:Number, AV<:AbstractVector{T}} <: LinearModel
@@ -270,19 +277,22 @@ end
 Base.copy(tlm::TemplateModel) = TemplateModel(copy(tlm.μ), tlm.n)
 LinearModel(tm::TemplateModel, inds::AbstractVecOrMat) = TemplateModel(tm.μ, length(inds))
 
+log_lm(lm::TemplateModel) = false
+log_lm(lm::LinearModel) = lm.log
 Base.getindex(lm::LinearModel, s::Symbol) = getfield(lm, s)
-Base.eachindex(lm::T) where {T<:LinearModel} = fieldnames(T)
+Base.eachindex(lm::TemplateModel) = fieldnames(typeof(lm))
+Base.eachindex(lm::LinearModel) = fieldnames(typeof(lm))[1:end-1]  # dealing with log fieldname
 Base.setindex!(lm::LinearModel, a::AbstractVecOrMat, s::Symbol) = (lm[s] .= a)
 vec(lm::LinearModel) = [lm[i] for i in eachindex(lm)]
 vec(lm::TemplateModel) = [lm.μ]
 vec(lms::Vector{<:LinearModel}) = [vec(lm) for lm in lms]
 
-LinearModel(M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector) = FullLinearModel(M, s, μ)
-LinearModel(M::AbstractMatrix, s::AbstractMatrix) = BaseLinearModel(M, s)
+LinearModel(M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector; log_lm::Bool=_log_lm_default) = FullLinearModel(M, s, μ, log)
+LinearModel(M::AbstractMatrix, s::AbstractMatrix; log_lm::Bool=_log_lm_default) = BaseLinearModel(M, s, log)
 LinearModel(μ::AbstractVector, n::Int) = TemplateModel(μ, n)
 
-LinearModel(lm::FullLinearModel, s::AbstractMatrix) = FullLinearModel(lm.M, s, lm.μ)
-LinearModel(lm::BaseLinearModel, s::AbstractMatrix) = BaseLinearModel(lm.M, s)
+LinearModel(lm::FullLinearModel, s::AbstractMatrix) = FullLinearModel(lm.M, s, lm.μ, log)
+LinearModel(lm::BaseLinearModel, s::AbstractMatrix) = BaseLinearModel(lm.M, s, lm.log)
 LinearModel(lm::TemplateModel, s::AbstractMatrix) = lm
 
 # Ref(lm::FullLinearModel) = [Ref(lm.M), Ref(lm.s), Ref(lm.μ)]
@@ -291,38 +301,38 @@ LinearModel(lm::TemplateModel, s::AbstractMatrix) = lm
 
 # _eval_lm(μ, n::Int) = repeat(μ, 1, n)
 _eval_lm(μ, n::Int) = μ * ones(n)'  # this is faster I dont know why
-_eval_lm(M, s) = M * s
-# _eval_lm(M, s, μ) = muladd(M, s, μ)  # faster, but Nabla doesn't handle it
-_eval_lm(M, s, μ) = _eval_lm(M, s) .+ μ
+_eval_lm(M, s; log_lm::Bool=false) = log_lm ? (return exp.(M * s)) : (return (M * s))
+_eval_lm(M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector) = muladd(M, s, μ)  # faster, but Nabla doesn't handle it
+_eval_lm(M, s, μ; log_lm::Bool=false) = log_lm ? (return exp.(M * s) .* μ) : (return (M * s) .+ μ)
 
-_eval_lm(flm::FullLinearModel) = _eval_lm(flm.M, flm.s, flm.μ)
-_eval_lm(blm::BaseLinearModel) = _eval_lm(blm.M, blm.s)
+_eval_lm(flm::FullLinearModel) = _eval_lm(flm.M, flm.s, flm.μ; log_lm=flm.log)
+_eval_lm(blm::BaseLinearModel) = _eval_lm(blm.M, blm.s; log_lm=blm.log)
 _eval_lm(tlm::TemplateModel) = _eval_lm(tlm.μ, tlm.n)
 (lm::LinearModel)() = _eval_lm(lm)
 
-(flm::FullLinearModel)(inds::AbstractVecOrMat) = _eval_lm(view(flm.M, inds, :), flm.s, flm.μ)
-(blm::BaseLinearModel)(inds::AbstractVecOrMat) = _eval_lm(view(blm.M, inds, :), blm.s)
+(flm::FullLinearModel)(inds::AbstractVecOrMat) = _eval_lm(view(flm.M, inds, :), flm.s, flm.μ; log_lm=flm.log)
+(blm::BaseLinearModel)(inds::AbstractVecOrMat) = _eval_lm(view(blm.M, inds, :), blm.s; log_lm=blm.log)
 (tlm::TemplateModel)(inds::AbstractVecOrMat) = repeat(view(tlm.μ, inds), 1, tlm.n)
 
+function copy_to_LinearModel!(to::TemplateModel, from::LinearModel)
+	to.μ .= from.μ
+end
 function copy_to_LinearModel!(to::LinearModel, from::LinearModel)
-	# @assert typeof(to)==typeof(from)
-	if typeof(to) <: TemplateModel
-		to.μ .= from.μ
-	else
-		for i in fieldnames(typeof(from))
-			getfield(to, i) .= getfield(from, i)
-		end
+	@assert typeof(to) == typeof(from)
+	@assert to.log == from.log
+	for i in eachindex(from)
+		getfield(to, i) .= getfield(from, i)
 	end
 end
 copy_to_LinearModel!(to::TemplateModel, from::LinearModel, inds) =
 	copy_to_LinearModel!(to, from)
 function copy_to_LinearModel!(to::FullLinearModel, from::FullLinearModel, inds)
+	@assert to.log == from.log
 	to.μ .= from.μ
 	to.M .= view(from.M, :, inds)
 	to.s .= view(from.s, inds, :)
 end
 function copy_to_LinearModel!(to::LinearModel, from::Vector)
-	fns = fieldnames(typeof(to))
 	if typeof(to) <: TemplateModel
 		if typeof(from) <: Vector{<:Real}
 			to.μ .= from
@@ -331,6 +341,7 @@ function copy_to_LinearModel!(to::LinearModel, from::Vector)
 			to.μ .= from[1]
 		end
 	else
+		fns = eachindex(to)
 		@assert length(from) == length(fns)
 		for i in eachindex(fns)
 			getfield(to, fns[i]) .= from[i]
@@ -347,15 +358,15 @@ struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:A
 	Δℓ_coeff::AA
 end
 const _acceptable_types = [:star, :tel]
-function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=true, type=:star, kwargs...)
+function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=true, type=:star, log_lm::Bool=_log_lm_default, kwargs...)
 	@assert type in _acceptable_types
 	n_obs = size(log_λ_obs, 2)
 	log_λ, λ = create_λ_template(log_λ_obs; kwargs...)
 	len = length(log_λ)
 	if include_mean
-		lm = FullLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs), ones(len))
+		lm = FullLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs), ones(len), log_lm)
 	else
-		lm = BaseLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs))
+		lm = BaseLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs), log_lm)
 	end
 	if type == :star
 		A_sde, Σ_sde = SOAP_gp_sde_prediction_matrices(step(log_λ))
@@ -378,7 +389,6 @@ function Submodel(log_λ::AV1, λ::AV2, lm, A_sde::StaticMatrix, Σ_sde::StaticM
 end
 (sm::Submodel)(inds::AbstractVecOrMat) =
 	Submodel(sm.log_λ, sm.λ, LinearModel(sm.lm, inds), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff)
-(sm::Submodel)() = sm.lm()
 Base.copy(sm::Submodel) = Submodel(sm.log_λ, sm.λ, copy(sm.lm), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff)
 
 function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
@@ -553,14 +563,14 @@ function reset_regularization!(om::OrderModel)
 	end
 end
 
-function _eval_lm_vec(om::OrderModel, v)
+function _eval_lm_vec(om::OrderModel, v; log_lm::Bool=_log_lm_default)
 	@assert 0 < length(v) < 4
 	if length(v)==1
 		return _eval_lm(v[1], om.n)
 	elseif length(v)==2
-		return _eval_lm(v[1], v[2])
+		return _eval_lm(v[1], v[2]; log_lm=log_lm)
 	elseif length(v)==3
-		return _eval_lm(v[1], v[2], v[3])
+		return _eval_lm(v[1], v[2], v[3]; log_lm=log_lm)
 	end
 end
 
@@ -570,13 +580,13 @@ rvs(model::OrderModelWobble) = model.rv
 
 function downsize(lm::FullLinearModel, n_comp::Int)
 	if n_comp > 0
-		return FullLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :], copy(lm.μ))
+		return FullLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :], copy(lm.μ), lm.log)
 	else
 		return TemplateModel(copy(lm.μ), size(lm.s, 2))
 	end
 end
 downsize(lm::BaseLinearModel, n_comp::Int) =
-	BaseLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :])
+	BaseLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :], lm.log)
 function downsize(lm::TemplateModel, n_comp::Int)
 	@assert n_comp==0
 	return TemplateModel(copy(lm.μ), lm.n)
@@ -609,19 +619,19 @@ star_model(om::OrderModelDPCA; lm=om.star.lm::LinearModel) = spectra_interp(lm()
 rv_model(om::OrderModelDPCA; lm=om.rv.lm::LinearModel) = spectra_interp(lm(), om.b2o)
 star_model(om::OrderModelWobble; lm=om.star.lm::LinearModel) = spectra_interp(lm(), om.rv .+ om.bary_rvs, om.b2o)
 
-function fix_FullLinearModel_s!(flm, min::Number, max::Number)
-	@assert all(min .< flm.μ .< max)
-	result = ones(typeof(flm.μ[1]), length(flm.μ))
-	for i in 1:size(flm.s, 2)
-		result[:] = _eval_lm(flm.M, flm.s[:, i], flm.μ)
-		while any(result .> max) || any(result .< min)
-			# println("$i, old s: $(lm.s[:, i]), min: $(minimum(result)), max:  $(maximum(result))")
-			flm.s[:, i] ./= 2
-			result[:] = _eval_lm(flm.M, view(flm.s, :, i), flm.μ)
-			# println("$i, new s: $(lm.s[:, i]), min: $(minimum(result)), max:  $(maximum(result))")
-		end
-	end
-end
+# function fix_FullLinearModel_s!(flm, min::Number, max::Number)
+# 	@assert all(min .< flm.μ .< max)
+# 	result = ones(typeof(flm.μ[1]), length(flm.μ))
+# 	for i in 1:size(flm.s, 2)
+# 		result[:] = _eval_lm(flm.M, flm.s[:, i], flm.μ)
+# 		while any(result .> max) || any(result .< min)
+# 			# println("$i, old s: $(lm.s[:, i]), min: $(minimum(result)), max:  $(maximum(result))")
+# 			flm.s[:, i] ./= 2
+# 			result[:] = _eval_lm(flm.M, view(flm.s, :, i), flm.μ)
+# 			# println("$i, new s: $(lm.s[:, i]), min: $(minimum(result)), max:  $(maximum(result))")
+# 		end
+# 	end
+# end
 
 function get_marginal_GP(
     finite_GP::Distribution{Multivariate,Continuous},
@@ -735,7 +745,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 	flux_tel = ones(length(om.tel.log_λ), n_obs)
 	vars_tel = SOAP_gp_var .* ones(length(om.tel.log_λ), n_obs)
 	lm_tel = copy(om.tel.lm)
-	lm_star = FullLinearModel(zeros(size(om.star.lm.M, 1), n_comp_star + 1), zeros(n_comp_star + 1, size(om.star.lm.s, 2)), zeros(size(om.star.lm.M, 1)))
+	lm_star = FullLinearModel(zeros(size(om.star.lm.M, 1), n_comp_star + 1), zeros(n_comp_star + 1, size(om.star.lm.s, 2)), zeros(size(om.star.lm.M, 1)), om.star.lm.log)
 
 	# if we have a seed model to get tellurics from
 	# TODO should we also transfer basis vectors?
@@ -809,9 +819,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 	flux_star .= lm_star.μ
 	_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
 	lm_tel.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=seeded||use_mean)
-	flux_tel .-= lm_tel.μ
-	EMPCA!(lm_tel.M, lm_tel.s, flux_tel, 1 ./ vars_tel)
-
+	EMPCA!(lm_tel.M, lm_tel.s, lm_tel.μ, flux_tel, 1 ./ vars_tel; log_lm=log_lm(lm_tel))
 	# stellar models with n basis telluric model
 	if is_time_variable(om.tel)
 		n_comp_tel = size(om.tel.lm.M, 2)
@@ -821,8 +829,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 			_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
 			lm_star[i+1].μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=true)
 			doppler_comp = calc_doppler_component_RVSKL(om.star.λ, lm_star[i+1].μ)
-			flux_star .-= lm_star[i+1].μ
-			DEMPCA!(lm_star[i+1].M, lm_star[i+1].s, flux_star, 1 ./ vars_star, doppler_comp)
+			DEMPCA!(lm_star[i+1].M, lm_star[i+1].s, lm_star[i+1].μ, flux_star, 1 ./ vars_star, doppler_comp; log_lm=log_lm(lm_star[i+1]))
 		end
 	else
 		lm_star = [lm_star]
@@ -833,8 +840,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 	_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
 	lm_star[1].μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=seeded||use_mean)
 	doppler_comp = calc_doppler_component_RVSKL(om.star.λ, lm_star[1].μ)
-	flux_star .-= lm_star[1].μ
-	DEMPCA!(lm_star[1].M, lm_star[1].s, flux_star, 1 ./ vars_star, doppler_comp)
+	DEMPCA!(lm_star[1].M, lm_star[1].s, lm_star[1].μ, flux_star, 1 ./ vars_star, doppler_comp; log_lm=log_lm(lm_star[1]))
 
 	# telluric models with n basis stellar model
 	if is_time_variable(om.tel) #&& !seeded
@@ -843,8 +849,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 			flux_star .= lm_star[1].μ .+ (view(lm_star[1].M, :, 1:(i+1)) * view(lm_star[1].s, 1:(i+1), :))
 			_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
 			lm_tel[i+1].μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=true)
-			flux_tel .-= lm_tel[i+1].μ
-			EMPCA!(lm_tel[i+1].M, lm_tel[i+1].s, flux_tel, 1 ./ vars_tel)
+			EMPCA!(lm_tel[i+1].M, lm_tel[i+1].s, lm_tel[i+1].μ, flux_tel, 1 ./ vars_tel; log_lm=log_lm(lm_tel[i+1]))
 		end
 	else
 		lm_tel = [lm_tel]
@@ -871,7 +876,11 @@ function remove_lm_score_means!(lm::FullLinearModel; prop::Real=0.)
 	else
 		mean_s = mean(lm.s; dims=2)
 	end
-	lm.μ .+= lm.M * mean_s
+	if lm.log
+		lm.μ .*= exp.(lm.M * mean_s)
+	else
+		lm.μ .+= lm.M * mean_s
+	end
 	lm.s .-= mean_s
 end
 remove_lm_score_means!(lm::LinearModel; kwargs...) = nothing

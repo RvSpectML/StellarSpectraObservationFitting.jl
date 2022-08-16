@@ -72,16 +72,12 @@ function project_doppler_comp!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::
 	return rvs
 end
 
-function DEMPCA!(spectra::Matrix{T}, λs::Vector{T}, M::AbstractMatrix, scores::AbstractMatrix, weights::Matrix{T};
-	template::Vector{T}=make_template(spectra), kwargs...) where {T<:Real}
-	doppler_comp = calc_doppler_component_RVSKL(λs, template)
-    return DEMPCA!(M, scores, spectra .- template, weights, doppler_comp; kwargs...)
-end
-
-function DEMPCA!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, weights::AbstractMatrix, doppler_comp::Vector{T}; kwargs...) where {T<:Real}
+function DEMPCA!(M::AbstractMatrix, scores::AbstractMatrix, μ::AbstractVector, Xtmp::AbstractMatrix, weights::AbstractMatrix, doppler_comp::Vector{T}; kwargs...) where {T<:Real}
+	Xtmp .-= μ
 	rvs = project_doppler_comp!(M, scores, Xtmp, doppler_comp)
+	Xtmp .+= μ
 	if size(M, 2) > 1
-		EMPCA!(M, scores, Xtmp, weights; inds=2:size(M, 2), kwargs...)
+		EMPCA!(M, scores, μ, Xtmp, weights; inds=2:size(M, 2), kwargs...)
 	end
 	return rvs
 end

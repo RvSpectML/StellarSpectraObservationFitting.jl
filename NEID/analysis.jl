@@ -24,7 +24,8 @@ use_reg = SSOF.parse_args(3, Bool, true)
 which_opt = SSOF.parse_args(4, Int, 1)
 recalc = SSOF.parse_args(5, Bool, false)
 dpca = SSOF.parse_args(6, Bool, false)
-use_lsf = SSOF.parse_args(7, Bool, false)
+log_lm = SSOF.parse_args(7, Bool, false)
+use_lsf = SSOF.parse_args(8, Bool, false)
 opt = SSOFU.valid_optimizers[which_opt]
 
 
@@ -33,11 +34,15 @@ base_path = neid_save_path * star * "/$(desired_order)/"
 data_path = base_path * "data.jld2"
 if dpca
 	base_path *= "dpca/"
-	mkpath(base_path)
 else
 	base_path *= "wobble/"
-	mkpath(base_path)
 end
+if log_lm
+	base_path *= "log/"
+else
+	base_path *= "linear/"
+end
+mkpath(base_path)
 save_path = base_path * "results.jld2"
 init_path = base_path * "results_init.jld2"
 
@@ -46,7 +51,7 @@ if solar
 	seed = model
     model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, seed=seed, dpca=dpca)
 else
-    model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, dpca=dpca)
+    model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, dpca=dpca, log_lm=log_lm)
 end
 times_nu .-= 2400000.5
 lm_tel, lm_star = SSOFU.initialize_model!(model, data; init_fn=init_path, recalc=recalc)
@@ -62,7 +67,7 @@ SSOFU.neid_plots(mws, airmasses, times_nu, SSOF.rvs(mws.om), zeros(length(times_
 SSOFU.improve_regularization!(mws; save_fn=save_path)
 SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path, iter=300, print_stuff=true)
 # mws.om.metadata[:todo][:err_estimated] = false
-rvs, rv_errors, tel_errors, star_errors = SSOFU.estimate_σ(mws; save_fn=save_path)
+rvs, rv_errors, tel_errors, star_errors = SSOFU.estimate_σ(mws; save_fn=save_path, show_plots=true)
 
 ## Plots
 df_act = SSOFU.neid_activity_indicators(pipeline_path, data)
