@@ -825,7 +825,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 		n_comp_tel = size(om.tel.lm.M, 2)
 		lm_star = [copy(lm_star) for i in 1:(n_comp_tel+1)]
 		for i in 1:n_comp_tel
-			flux_tel .= lm_tel.μ .+ (view(lm_tel.M, :, 1:i) * view(lm_tel.s, 1:i, :))
+			flux_tel .= _eval_lm(view(lm_tel.M, :, 1:i), view(lm_tel.s, 1:i, :), lm_tel.μ; log_lm=log_lm(lm_tel))
 			_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
 			lm_star[i+1].μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=true)
 			doppler_comp = calc_doppler_component_RVSKL(om.star.λ, lm_star[i+1].μ)
@@ -846,7 +846,11 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 	if is_time_variable(om.tel) #&& !seeded
 		lm_tel = [copy(lm_tel) for i in 1:(n_comp_star+1)]
 		for i in 1:n_comp_star
-			flux_star .= lm_star[1].μ .+ (view(lm_star[1].M, :, 1:(i+1)) * view(lm_star[1].s, 1:(i+1), :))
+			if log_lm(lm_star[1])
+				flux_star .= _eval_lm(view(lm_star[1].M, :, 2:(i+1)), view(lm_star[1].s, 2:(i+1), :), _eval_lm(view(lm_star[1].M, :, 1:1), view(lm_star[1].s, 1:1, :), lm_star[1].μ); log_lm=log_lm(lm_star[1]))
+			else
+				flux_star .= _eval_lm(view(lm_star[1].M, :, 1:(i+1)), view(lm_star[1].s, 1:(i+1), :), lm_star[1].μ; log_lm=log_lm(lm_star[1]))
+			end
 			_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
 			lm_tel[i+1].μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=true)
 			EMPCA!(lm_tel[i+1].M, lm_tel[i+1].s, lm_tel[i+1].μ, flux_tel, 1 ./ vars_tel; log_lm=log_lm(lm_tel[i+1]))

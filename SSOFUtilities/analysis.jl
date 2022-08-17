@@ -12,11 +12,9 @@ function create_model(
 	instrument::String,
 	star::String;
 	max_components::Int=5,
-	oversamp::Bool=true,
 	use_reg::Bool=true,
 	save_fn::String="",
 	recalc::Bool=false,
-	dpca::Bool=true,
 	kwargs...
 	)
 
@@ -31,7 +29,7 @@ function create_model(
 		println("using saved model at $save_fn")
 	    @load save_fn model
 	else
-	    model = SSOF.OrderModel(data, instrument, desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, oversamp=oversamp, dpca=dpca, kwargs...)
+	    model = SSOF.OrderModel(data, instrument, desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, kwargs...)
 		if !use_reg
 			SSOF.rm_regularization!(model)
 			model.metadata[:todo][:reg_improved] = true

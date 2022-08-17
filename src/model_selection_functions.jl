@@ -101,6 +101,7 @@ function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector,
 
     n, mask = effective_length(var; return_mask=true)
     ℓ = -1/2 .* (ls .+ (sum(log.(var[mask])) + (n * log(2 * π))))
+	ℓ[isnan.(ℓ)] .= -Inf
     aic = 2 .* (ks - ℓ)
     ans_aic = argmin(aic)
 
