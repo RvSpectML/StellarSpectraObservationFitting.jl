@@ -189,21 +189,20 @@ function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}; kwarg
 end
 
 
-function estimate_σ(mws::SSOF.ModelWorkspace; save_fn="", kwargs...)
+function estimate_σ_curvature(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", kwargs...)
 	save = save_fn!=""
 	model = mws.om
-	data = mws.d
-	if !model.metadata[:todo][:err_estimated] # 25 mins
-	    data.var[data.var.==Inf] .= 0
-	    data_noise = sqrt.(data.var)
-	    data.var[data.var.==0] .= Inf
+	if recalc || !model.metadata[:todo][:err_estimated] # 25 mins
+	    mws.d.var[mws.d.var.==Inf] .= 0
+	    data_noise = sqrt.(mws.d.var)
+	    mws.d.var[mws.d.var.==0] .= Inf
 
 		time_var_tel = SSOF.is_time_variable(model.tel)
 		time_var_star = SSOF.is_time_variable(model.star)
 
 		typeof(model) <: SSOF.OrderModelDPCA ? rvs = copy(model.rv.lm.s) : rvs = copy(model.rv)
 		ℓ_rv(x) = SSOF._loss(mws.o, model, mws.d; rv=x)
-		rvs_σ = estimate_σ_helper(rvs, ℓ_rv; param_str="rv", kwargs...)
+		rvs_σ = estimate_σ_curvature_helper(rvs, ℓ_rv; param_str="rv", kwargs...)
 		if typeof(model) <: SSOF.OrderModelDPCA
 			rvs = vec(rvs)
 			rvs .*= -SSOF.light_speed_nu
@@ -212,14 +211,14 @@ function estimate_σ(mws::SSOF.ModelWorkspace; save_fn="", kwargs...)
 
 		if time_var_tel
 			ℓ_tel(x) = SSOF._loss(mws.o, model, mws.d; tel=vec(model.tel.lm)) + SSOF.model_s_prior(model.tel.lm.s, model.reg_tel)
-			tel_s_σ = reshape(estimate_σ_helper(model.tel.lm.s, ℓ_tel; param_str="tel_s", kwargs...), size(model.tel.lm.s))
+			tel_s_σ = reshape(estimate_σ_curvature_helper(model.tel.lm.s, ℓ_tel; param_str="tel_s", kwargs...), size(model.tel.lm.s))
 		else
 			tel_s_σ = nothing
 		end
 
 		if time_var_star
 			ℓ_star(x) = SSOF._loss(mws.o, model, mws.d; star=vec(model.star.lm)) + SSOF.model_s_prior(model.star.lm.s, model.reg_star)
-			star_s_σ = reshape(estimate_σ_helper(model.star.lm.s, ℓ_star; param_str="star_s", kwargs...), size(model.star.lm.s))
+			star_s_σ = reshape(estimate_σ_curvature_helper(model.star.lm.s, ℓ_star; param_str="star_s", kwargs...), size(model.star.lm.s))
 		else
 			star_s_σ = nothing
 		end
@@ -236,7 +235,7 @@ end
 
 
 using Nabla
-function estimate_σ_helper(x::AbstractVecOrMat, ℓ::Function; n::Int=7, param_str::String="", print_every::Int=10, use_gradient::Bool=false, print_stuff::Bool=false, show_plots::Bool=false)
+function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int=7, param_str::String="", print_every::Int=10, use_gradient::Bool=false, print_stuff::Bool=false, show_plots::Bool=false)
 	x_test = Array{Float64}(undef, n)
 	σs = Array{Float64}(undef, length(x))
 	ℓs = Array{Float64}(undef, n)
@@ -279,16 +278,21 @@ function estimate_σ_helper(x::AbstractVecOrMat, ℓ::Function; n::Int=7, param_
 	return σs
 end
 
-function _estimate_σ(mws::SSOF.ModelWorkspace; save_fn="", n::Int=50, return_holders::Bool=false)
+function estimate_σ_bootstrap_helper(shaper::AbstractArray, holder::AbstractArray, reducer::Function)
+	result = Array{Float64}(undef, size(shaper, 1), size(shaper, 2))
+	for i in 1:size(shaper, 1)
+		result[i, :] .= vec(reducer(view(holder, :, i, :); dims=1))
+	end
+end
+
+function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", n::Int=50, return_holders::Bool=false, recalc_mean::Bool=false)
 	save = save_fn!=""
 	model = mws.om
-	data = mws.d
-	if !model.metadata[:todo][:err_estimated] # 25 mins
-	    data.var[data.var.==Inf] .= 0
-	    data_noise = sqrt.(data.var)
-	    data.var[data.var.==0] .= Inf
+	if recalc || !model.metadata[:todo][:err_estimated] # 25 mins
+	    mws.d.var[mws.d.var.==Inf] .= 0
+	    data_noise = sqrt.(mws.d.var)
+	    mws.d.var[mws.d.var.==0] .= Inf
 
-		rvs = SSOF.rvs(model)
 	    typeof(mws.om) <: SSOF.OrderModelWobble ?
 		 	rv_holder = Array{Float64}(undef, n, length(model.rv)) :
 			rv_holder = Array{Float64}(undef, n, length(model.rv.lm.s))
@@ -302,12 +306,10 @@ function _estimate_σ(mws::SSOF.ModelWorkspace; save_fn="", n::Int=50, return_ho
 			star_holder = Array{Float64}(undef, n, size(mws.om.star.lm.s, 1), size(mws.om.star.lm.s, 2))
 		end
 
-	    _mws = typeof(mws)(copy(model), copy(data))
-	    _mws_score_finalizer() = SSOF.finalize_scores_setup(_mws)
 	    for i in 1:n
-	        _mws.d.flux .= data.flux .+ (data_noise .* randn(size(data.var)))
-	        SSOF.train_OrderModel!(_mws; shift_scores=false, iter=50)
-	        _mws_score_finalizer()
+			_mws = typeof(mws)(copy(model), copy(mws.d))
+	        _mws.d.flux .= mws.d.flux .+ (mws.d_noise .* randn(size(mws.d.var)))
+			improve_model!(_mws, iter=50, print_stuff=false)
 	        rv_holder[i, :] = SSOF.rvs(_mws.om)
 			if time_var_tel
 				tel_holder[i, :, :] .= _mws.om.tel.lm.s
@@ -315,39 +317,40 @@ function _estimate_σ(mws::SSOF.ModelWorkspace; save_fn="", n::Int=50, return_ho
 			if time_var_star
 				star_holder[i, :, :] .= _mws.om.star.lm.s
 			end
-			if n%10==0; println("done with $i/$n bootstraps") end
+			if i%10==0; println("done with $i/$n bootstraps") end
 	    end
+		recalc_mean ? rvs = vec(mean(rv_holder; dims=1)) : rvs = SSOF.rvs(model)
 	    rvs_σ = vec(std(rv_holder; dims=1))
+
 		if time_var_tel
-			tel_s_σ = Array{Float64}(undef, size(mws.om.tel.lm.s, 1), size(mws.om.tel.lm.s, 2))
-			for i in 1:size(mws.om.tel.lm.s, 1)
-				tel_s_σ[i, :] .= vec(std(view(tel_holder, :, i, :); dims=1))
-			end
+			recalc_mean ?
+				tel_s = estimate_σ_bootstrap_helper(mws.om.tel.lm.s, tel_holder, mean) :
+				tel_s = mws.om.tel.lm.s
+			tel_s_σ = estimate_σ_bootstrap_helper(mws.om.tel.lm.s, tel_holder, std)
 		else
+			tel_s = nothing
 			tel_s_σ = nothing
 		end
 		if time_var_star
-			star_s_σ = Array{Float64}(undef, size(mws.om.star.lm.s, 1), size(mws.om.star.lm.s, 2))
-			for i in 1:size(mws.om.star.lm.s, 1)
-				star_s_σ[i, :] .= vec(std(view(star_holder, :, i, :); dims=1))
-			end
+			recalc_mean ?
+				star_s = estimate_σ_bootstrap_helper(mws.om.star.lm.s, star_holder, mean) :
+				star_s = mws.om.star.lm.s
+			star_s_σ = estimate_σ_bootstrap_helper(mws.om.star.lm.s, star_holder, std)
 		else
+			star_s = nothing
 			star_s_σ = nothing
 		end
 		model.metadata[:todo][:err_estimated] = true
-	    if save; @save save_fn model rvs rvs_σ tel_s_σ star_s_σ end
+	    if save; @save save_fn rvs rvs_σ tel_s tel_s_σ star_s star_s_σ end
 		if return_holders
-			return rvs, rvs_σ, tel_s_σ, star_s_σ, rv_holder, tel_holder, star_holder
+			return rvs, rvs_σ, tel_s, tel_s_σ, star_s, star_s_σ, rv_holder, tel_holder, star_holder
 		else
-			return rvs, rvs_σ, tel_s_σ, star_s_σ
+			return rvs, rvs_σ, tel_s, tel_s_σ, star_s, star_s_σ
 		end
 	else
+		@assert isfile(save_fn)
 		println("loading rvs")
-		if save; @load save_fn rvs rvs_σ tel_s_σ star_s_σ end
-		if return_holders
-			return rvs, rvs_σ, tel_s_σ, star_s_σ, rv_holder, tel_holder, star_holder
-		else
-			return rvs, rvs_σ, tel_s_σ, star_s_σ
-		end
+		if save; @load save_fn rvs rvs_σ tel_s tel_s_σ star_s star_s_σ end
+		return rvs, rvs_σ, tel_s, tel_s_σ, star_s, star_s_σ
 	end
 end
