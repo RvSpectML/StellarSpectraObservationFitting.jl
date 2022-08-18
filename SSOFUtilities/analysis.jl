@@ -283,6 +283,7 @@ function estimate_σ_bootstrap_helper(shaper::AbstractArray, holder::AbstractArr
 	for i in 1:size(shaper, 1)
 		result[i, :] .= vec(reducer(view(holder, :, i, :); dims=1))
 	end
+	return result
 end
 
 function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", n::Int=50, return_holders::Bool=false, recalc_mean::Bool=false)
