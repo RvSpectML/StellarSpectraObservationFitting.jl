@@ -224,7 +224,7 @@ function estimate_σ_curvature(mws::SSOF.ModelWorkspace; recalc::Bool=false, sav
 		end
 
 		model.metadata[:todo][:err_estimated] = true
-	    if save; @save save_fn model rvs rvs_σ tel_s_σ star_s_σ end
+	    if save; @save save_fn rvs rvs_σ tel_s_σ star_s_σ end
 		return rvs, rvs_σ, tel_s_σ, star_s_σ
 	else
 		println("loading σs")
@@ -331,6 +331,7 @@ function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, sav
 		else
 			tel_s = nothing
 			tel_s_σ = nothing
+			tel_holder = nothing
 		end
 		if time_var_star
 			recalc_mean ?
@@ -340,6 +341,7 @@ function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, sav
 		else
 			star_s = nothing
 			star_s_σ = nothing
+			star_holder = nothing
 		end
 		model.metadata[:todo][:err_estimated] = true
 	    if save; @save save_fn rvs rvs_σ tel_s tel_s_σ star_s star_s_σ end
