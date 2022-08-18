@@ -308,7 +308,7 @@ function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, sav
 
 	    for i in 1:n
 			_mws = typeof(mws)(copy(model), copy(mws.d))
-	        _mws.d.flux .= mws.d.flux .+ (mws.d_noise .* randn(size(mws.d.var)))
+	        _mws.d.flux .= mws.d.flux .+ (data_noise .* randn(size(mws.d.var)))
 			improve_model!(_mws, iter=50, print_stuff=false)
 	        rv_holder[i, :] = SSOF.rvs(_mws.om)
 			if time_var_tel
