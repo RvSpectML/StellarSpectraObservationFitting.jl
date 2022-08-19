@@ -11,18 +11,18 @@ SSOFU = SSOFUtilities
 
 ## Setting up necessary variables
 
-input_ind = SSOF.parse_args(1, Int, 0)
-dpca = SSOF.parse_args(2, Bool, false)
+input_ind = SSOF.parse_args(1, Int, 2)
+log_lm = SSOF.parse_args(2, Bool, true)
+dpca = SSOF.parse_args(3, Bool, false)
+use_lsf = SSOF.parse_args(4, Bool, true)
 
 stars = ["10700", "26965", "22049", "3651", "2021/12/19", "2021/12/20", "2021/12/23"]
 input_ind == 0 ? star_inds = (1:length(stars)) : star_inds = input_ind:input_ind
 orders_list = repeat([4:122], length(stars))
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
-if dpca
-    prep_str = "dpca/"
-else
-    prep_str = "wobble/"
-end
+log_lm ? prep_str = "log_" : prep_str = "lin_"
+dpca ? prep_str *= "dcp_" : prep_str *= "vil_"
+use_lsf ? prep_str *= "lsf/" : prep_str *= "nol/"
 
 SSOFU.retrieve_all_rvs(
     [neid_save_path*star*"/60/data.jld2" for star in stars[star_inds]],
