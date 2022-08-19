@@ -6,11 +6,14 @@ using LinearAlgebra
 
 function EMPCA!(M::AbstractMatrix, scores::AbstractMatrix, μ::AbstractVector, Xtmp::AbstractMatrix, weights::AbstractMatrix; log_lm::Bool=false, kwargs...)
 	if log_lm
-		_empca!(M, scores, log.(Xtmp ./ μ), (Xtmp .^ 2) .* weights; kwargs...)
+		weights .*= (Xtmp .^ 2)
+		mask = weights.!=0
+		Xtmp[mask] = log.(view(Xtmp ./ μ, mask))
+		Xtmp[.!mask] .= 0
 	else
 		Xtmp .-= μ
-		_empca!(M, scores, Xtmp, weights; kwargs...)
 	end
+	_empca!(M, scores, Xtmp, weights; kwargs...)
 end
 
 function _empca!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(M, 2), vec_by_vec::Bool=true, kwargs...)
