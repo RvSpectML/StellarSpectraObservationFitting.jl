@@ -36,11 +36,13 @@ retrieve_md(args...; kwargs...) = safe_retrieve(_retrieve_md, args...; kwargs...
 
 function retrieve_all_rvs(n_obs::Int, fns::Vector{String})
     n_ord = length(fns)
-    rvs = zeros(n_ord,  n_obs)
-    rvs_σ = Inf .* ones(n_ord, n_obs)
+    all_rvs = zeros(n_ord,  n_obs)
+    all_rvs_σ = Inf .* ones(n_ord, n_obs)
     for i in 1:n_ord
         try
-            rvs[i, :], rvs_σ[i, :] = _retrieve_rvs(fns[i])
+            @load fns[i] rvs rvs_σ
+            all_rvs[i, :] = rvs
+            all_rvs_σ[i, :] = rvs_σ
         catch err
             if isa(err, SystemError)
                 println(fns[i] * " (orders[$i]) is missing")
@@ -51,7 +53,7 @@ function retrieve_all_rvs(n_obs::Int, fns::Vector{String})
             end
         end
     end
-    return rvs, rvs_σ
+    return all_rvs, all_rvs_σ
 end
 
 function retrieve_all_rvs(data_fns::Vector{String}, fns::Vector{Vector{String}}, save_fns::Vector{String})
