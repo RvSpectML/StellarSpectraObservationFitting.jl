@@ -22,7 +22,7 @@ include("data_locs.jl")  # defines neid_data_path and neid_save_path
 desired_order = SSOF.parse_args(2, Int, 81)  # 81 has a bunch of tels, 60 has very few
 log_lm = SSOF.parse_args(3, Bool, true)
 dpca = SSOF.parse_args(4, Bool, false)
-use_lsf = SSOF.parse_args(5, Bool, false)
+use_lsf = SSOF.parse_args(5, Bool, true)
 recalc = SSOF.parse_args(6, Bool, false)
 use_reg = SSOF.parse_args(7, Bool, true)
 which_opt = SSOF.parse_args(8, Int, 1)

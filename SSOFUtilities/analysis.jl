@@ -271,7 +271,7 @@ function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int
 			plot!(x_test, poly_f.(x_test); label="polynomial fit")
 			display(plt)
 		end
-		@assert max_dif < 1e-2
+		if max_dif > 1e-2; @warn param_str * "_σ[$i] misfit at $(round(100*max_dif; digits=2))% level" end
 		if i%print_every==0; println("done with $i/$(length(x)) " * param_str * "_σ estimates") end
 		if i%length(x)==0; println("done with all " * param_str * "_σ estimates") end
 	end
