@@ -33,7 +33,6 @@ function neid_extras(df_files::DataFrame, save_path_base::String)
 		append!(df_cols, [i, i*"_σ"])
 	end
 	df_act = zeros(n_obs, length(df_cols))
-	rv_ords = 57:122
 	neid_time = zeros(n_obs)
 	neid_rv = zeros(n_obs)
 	neid_rv_σ = zeros(n_obs)
@@ -55,8 +54,13 @@ function neid_extras(df_files::DataFrame, save_path_base::String)
 		neid_time[i] = ccf_header["CCFJDMOD"]
 		neid_rv[i] = ccf_header["CCFRVMOD"] * 1000  # m/s
 		neid_rv_σ[i] = ccf_header["DVRMSMOD"] * 1000  # m/s
-		for j in rv_ords
-			neid_order_rv[i, j] = ccf_header["CCFRV"*n2s(j)] * 1000  # m/s
+		ccfs_exist = vec(.!all(iszero.(read(f[13])); dims=1))
+		# neid_rv_ords = [j for j in 1:length(ccfs_exist) if ccfs_exist[j]]
+		# neid_rv_ords = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 72, 73, 74, 75, 76, 77, 78, 79, 81, 82, 83, 84, 85, 91, 92, 93, 95, 96]
+		for j in 1:length(ccfs_exist)
+		    if ccfs_exist[j]
+		        neid_order_rv[i, j] = ccf_header["CCFRV"*n2s(j)] * 1000  # m/s
+		    end
 		end
 	end
 	d_act_tot = Dict()

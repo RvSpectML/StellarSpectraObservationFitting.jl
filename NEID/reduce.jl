@@ -67,10 +67,9 @@ println("$(length(inds)) orders used in total")
 rvs_red = collect(Iterators.flatten((sum(rvs[inds, :] ./ (rvs_σ[inds, :] .^ 2); dims=1) ./ sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1))'))
 rvs_red .-= median(rvs_red)
 rvs_σ_red = collect(Iterators.flatten(1 ./ sqrt.(sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1)')))
-rvs_σ2_red = rvs_σ_red .^ 2
 
 using LinearAlgebra
-lin = SSOF.general_lst_sq_f(rvs_red, Diagonal(rvs_σ2_red), 1; x=times_nu)
+lin = SSOF.general_lst_sq_f(rvs_red, Diagonal(rvs_σ_red .^ 2), 1; x=times_nu)
 
 annot = text.(orders[rvs_std .< std_floor], :center, :black, 3)
 plt = SSOFU._plot()

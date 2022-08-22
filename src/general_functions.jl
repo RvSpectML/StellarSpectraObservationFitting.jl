@@ -46,7 +46,7 @@ function make_template(matrix::Matrix; use_mean::Bool=false, kwargs...)
 end
 function make_template(matrix::Matrix, σ²::Matrix; default::Real=1., use_mean::Bool=false, kwargs...)
 	if use_mean
-		result = weighted_mean(matrix, σ²; default=default)
+		result = vec(weighted_mean(matrix, σ²; default=default, dims=2))
 	else
 		result = Array{Float64}(undef, size(matrix, 1))
 		for i in 1:length(result)
@@ -260,10 +260,14 @@ vector_zero(θ::Vector{<:AbstractArray}) = [vector_zero(i) for i in θ]
 flatten_ranges(ranges::AbstractVector) = maximum([range[1] for range in ranges]):minimum([range[end] for range in ranges])
 flatten_ranges(ranges::AbstractMatrix) = [flatten_ranges(view(ranges, :, i)) for i in 1:size(ranges, 2)]
 
-function weighted_mean(x::AbstractMatrix, σ²::AbstractMatrix; default::Real=0.)
-	ans = vec(sum(x ./ σ²; dims=2) ./ sum(1 ./ σ²; dims=2))
-	ans[isnan.(ans)] .= default
-	return ans
+function weighted_mean(x::AbstractMatrix, σ²::AbstractMatrix; default::Real=0., kwargs...)
+	result = sum(x ./ σ²; kwargs...) ./ sum(1 ./ σ²; kwargs...)
+	if ndims(result) > 0
+		result[isnan.(result)] .= default
+	elseif isnan(result)
+		return default
+	end
+	return result
 end
 
 "Return an amount of indices of local maxima of a data array"
