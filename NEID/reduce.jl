@@ -19,22 +19,25 @@ stars = ["10700", "26965", "22049", "3651", "2021/12/19", "2021/12/20", "2021/12
 orders_list = repeat([4:122], length(stars))
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
 star_ind = SSOF.parse_args(1, Int, 2)
-dpca = SSOF.parse_args(2, Bool, false)
-if dpca
-    prep_str = "dpca_"
-else
-    prep_str = "wobble_"
-end
+bootstrap = SSOF.parse_args(2, Bool, false)
+log_lm = SSOF.parse_args(3, Bool, true)
+dpca = SSOF.parse_args(4, Bool, false)
+use_lsf = SSOF.parse_args(5, Bool, false)
+
+bootstrap ? appe_str = "_boot" : appe_str = "_curv"
+log_lm ? prep_str = "log_" : prep_str = "lin_"
+dpca ? prep_str *= "dcp_" : prep_str *= "vil_"
+use_lsf ? prep_str *= "lsf_" : prep_str *= "nol_"
 
 # for star_ind in [1,2,5]
 #     for prep_str in ["wobble_", ""]
 star = stars[star_ind]
-save_fn = "figs/neid_" * prep_str * star * "_"
+save_fn = "figs/neid_" * prep_str * star * appe_str * "_"
 orders = orders_list[star_ind]
 orders2inds(selected_orders::AbstractVector) = [searchsortedfirst(orders, order) for order in selected_orders]
 
 ## RV reduction
-@load "jld2/neid_$(prep_str)$(star)_rvs.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
+@load "jld2/neid_$(prep_str)$(star)_rvs$appe_str.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
 
 @load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ
 neid_rv .-= median(neid_rv)
@@ -120,7 +123,7 @@ for i in 1:n_ord
 end
 cors[diagind(cors)] .= 1
 cors = Symmetric(cors)
-heatmap(cors)
+heatmap(Matrix(cors))
 
 plt = SSOFU._plot(; xlabel="Order", title="Correlation with Bulk RVs (error bars ∝ σᵣᵥ)", ylabel="Correlation")
 scatter!(orders, [cor(view(rvs, i, :), rvs_red) for i in 1:n_ord]; yerror=x_σ./20, ylims=(-0.5, 1.1), markerstrokewidth=0.5, label="Unused Orders")
