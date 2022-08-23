@@ -5,10 +5,12 @@ using Statistics
 import StatsBase: winsor
 
 # using Plots
+
+_high_quantile_default = 0.9
 # These were initially defined to act on all of the orders of the spectra at a
 # given time, but I have defined them to act on all of the times of the spectra
 # at a given order. Should be equivalent
-function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVector; order::Int=6, nsigma::Vector{<:Real}=[0.3,3.0], maxniter::Int=50, plot_stuff::Bool=false, edge_mask::Int=0)
+function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVector; ignore_weights::Bool=false, order::Int=6, nsigma::Vector{<:Real}=[0.3,3.0], maxniter::Int=50, plot_stuff::Bool=false, edge_mask::Int=0)
     """Fit the continuum using sigma clipping
     Args:
         x: The wavelengths
@@ -26,6 +28,10 @@ function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVecto
 
     A = vander(x .- mean(x), order)
     m = fill(true, length(x))
+	# σ² = copy(σ²)
+	# σ²_thres = quantile(σ²[.!isinf.(σ²)], _high_quantile_default)/10
+	# σ²[σ² .< σ²_thres] .= σ²_thres
+	m[y .< 0.5] .= false  # mask out the bad pixels
 	m[σ² .== Inf] .= false  # mask out the bad pixels
 	if edge_mask > 0
 		# m[edge_pad+1:edge_mask+edge_pad] .= false
@@ -36,8 +42,13 @@ function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVecto
 		y[end-edge_mask+1:end] .= 1
 	end
     μ = ones(length(x))
+	w = Array{Float64}(undef, order+1)
     for i in 1:maxniter
-        w = general_lst_sq(view(A, m, :), view(y, m), view(σ², m))
+		if ignore_weights
+			w[:] = general_lst_sq(view(A, m, :), view(y, m))
+        else
+			w[:] = general_lst_sq(view(A, m, :), view(y, m), view(σ², m))
+		end
         μ[:] = A * w
 		# if plot_stuff
 		# 	plt = scatter(x[m], y[m]; label="used")
@@ -49,6 +60,8 @@ function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVecto
         # sigma = median(abs.(resid))
 		sigma = std(resid)
         m_new = (-nsigma[1]*sigma) .< resid .< (nsigma[2]*sigma)
+		m_new[y .< 0.5] .= false
+		m_new[σ² .== Inf] .= false  # mask out the bad pixels
         if sum(m) == sum(m_new); break end
         m = m_new
     end
@@ -56,15 +69,17 @@ function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVecto
 		y[1:edge_mask] .= hold_left
 		y[end-edge_mask+1:end] .= hold_right
 	end
-    return μ
+    return μ, w
 end
-function continuum_normalize!(d::Data; kwargs...)
+function continuum_normalize!(d::Data; order::Int=6, kwargs...)
 	continuum = ones(size(d.log_λ_obs, 1))
+	w = Array{Float64}(undef, order + 1, size(d.flux, 2))
 	for i in 1:size(d.log_λ_obs, 2)
-		continuum[:] = fit_continuum(view(d.log_λ_obs, :, i), view(d.flux, :, i), view(d.var, :, i); kwargs...)
+		continuum[:], w[:, i] = fit_continuum(view(d.log_λ_obs, :, i), view(d.flux, :, i), view(d.var, :, i); order=order, kwargs...)
 		d.flux[:, i] ./= continuum
 		d.var[:, i] ./= continuum .* continuum
 	end
+	return w
 end
 
 function mask_low_pixels!(y::AbstractVector, σ²::AbstractVector; min_flux::Real= 0., padding::Int= 2)
@@ -130,7 +145,7 @@ end
 
 function flat_normalize!(d::Data; kwargs...)
 	for i in 1:size(d.log_λ_obs, 2)
-		continuum = quantile(view(d.flux, .!(isnan.(view(d.flux, :, i))), i), 0.9)
+		continuum = quantile(view(d.flux, .!(isnan.(view(d.flux, :, i))), i), _high_quantile_default)
 		d.flux[:, i] ./= continuum
 		d.var[:, i] ./= continuum * continuum
 	end
@@ -166,11 +181,17 @@ end
 function process!(d; kwargs...)
 	flat_normalize!(d)
 	mask_low_pixels!(d)
-	mask_bad_edges!(d)
-	red_enough = minimum(d.log_λ_obs) > log(4410)  # is there likely to even be a continuum
-	enough_points = (sum(isinf.(d.var)) / length(d.var)) < 0.5
-	if (red_enough && enough_points); continuum_normalize!(d; kwargs...) end
 	mask_high_pixels!(d)
+	mask_bad_edges!(d)
+	# red_enough = minimum(d.log_λ_obs) > log(4410)  # is there likely to even be a continuum
+	red_enough = minimum(d.log_λ_obs) > log(6200)  # where neid blaze correction starts to break down (order 77+)
+	enough_points = (sum(isinf.(d.var)) / length(d.var)) < 0.5
+	if (red_enough && enough_points)
+		w = continuum_normalize!(d; kwargs...)
+	else
+		w = nothing
+	end
 	recognize_bad_normalization!(d; thres=20)
 	recognize_bad_drift!(d; thres=20)
+	return w
 end

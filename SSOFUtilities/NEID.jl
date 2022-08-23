@@ -5,6 +5,11 @@ using FITSIO
 using Statistics
 using Plots
 
+function n2s(i)
+	@assert -1 < i < 1000
+	ans = string(i)
+	return "0"^(3-length(ans))*ans
+end
 
 function neid_extras(df_files::DataFrame, save_path_base::String)
 	n_obs = nrow(df_files)
@@ -57,9 +62,11 @@ function neid_extras(df_files::DataFrame, save_path_base::String)
 		ccfs_exist = vec(.!all(iszero.(read(f[13])); dims=1))
 		# neid_rv_ords = [j for j in 1:length(ccfs_exist) if ccfs_exist[j]]
 		# neid_rv_ords = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 72, 73, 74, 75, 76, 77, 78, 79, 81, 82, 83, 84, 85, 91, 92, 93, 95, 96]
+		# println(ccf_header)
 		for j in 1:length(ccfs_exist)
 		    if ccfs_exist[j]
-		        neid_order_rv[i, j] = ccf_header["CCFRV"*n2s(j)] * 1000  # m/s
+				# neid_order_rv[i, j] = ccf_header["CCFRV"*n2s(j+51)] * 1000  # m/s
+				neid_order_rv[i, j] = ccf_header["CCFRV"*n2s(174-j)] * 1000  # m/s
 		    end
 		end
 	end

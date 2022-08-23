@@ -22,12 +22,6 @@ function mask2range(mask::AbstractVector)
 end
 mask2range(masks::AbstractMatrix) = [mask2range(view(masks, :, i)) for i in 1:size(masks, 2)]
 
-function n2s(i)
-	@assert -1 < i < 1000
-	ans = string(i)
-	return "0"^(3-length(ans))*ans
-end
-
 function reformat_spectra(
 		df_files::DataFrame,
 		save_path_base::String,
@@ -98,6 +92,10 @@ function reformat_spectra(
 				log_λ_obs[:, i] .= log.(all_spectra[i].λ_obs[mask_inds, order_ind])
 				log_λ_star[:, i] .= log.(all_spectra[i].λ[mask_inds, order_ind])
 			end
+			nan_mask = isnan.(var_obs)
+			@assert all(nan_mask .== isnan.(flux_obs))
+			flux_obs[nan_mask] .= 1
+			var_obs[nan_mask] .= Inf
 			if lsf_f != nothing
 				is_NEID ?
 					data = SSOF.LSFData(flux_obs, var_obs, log_λ_obs, log_λ_star, lsf_f(order)) :
@@ -107,7 +105,7 @@ function reformat_spectra(
 			end
 			# data_backup = copy(data)
 
-			SSOF.process!(data; order=2)
+			SSOF.process!(data; order=1)
 			@save save_path*"data.jld2" n_obs data times_nu airmasses
 			# plt = _plot(;size=(2 * _plt_size[1],_plt_size[2]), legend=:bottom)
 			# for j in 1:size(data_backup.flux, 2)
