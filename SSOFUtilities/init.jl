@@ -105,7 +105,7 @@ function reformat_spectra(
 			end
 			# data_backup = copy(data)
 
-			SSOF.process!(data; order=1)
+			SSOF.process!(data; order=2)
 			@save save_path*"data.jld2" n_obs data times_nu airmasses
 			# plt = _plot(;size=(2 * _plt_size[1],_plt_size[2]), legend=:bottom)
 			# for j in 1:size(data_backup.flux, 2)
