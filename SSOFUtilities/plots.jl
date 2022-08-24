@@ -40,7 +40,27 @@ function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat
     return plt
 end
 
-c_ind_f(i) = ((i + 3) % 16) + 1
+function plot_stellar_with_lsf!(plt, om::SSOF.OrderModel, y::AbstractVector; d::Union{SSOF.Data, Nothing}=nothing=nothing, alpha=1, label="", kwargs...)
+	if typeof(d) <: SSOF.LSFData
+		plot!(plt, om.star.λ, y; alpha=alpha/2, label="", kwargs...)
+		typeof(om) <: SSOF.OrderModelWobble ?
+			y2 = d.lsf * SSOF.spectra_interp(y, om.rv[1] + om.bary_rvs[1], om.b2o; sih_ind=1) :
+			y2 = d.lsf * SSOF.spectra_interp(y, om.b2o[1])
+		plot!(plt, exp.(d.log_λ_star[:, 1]), y2; alpha=alpha, label=label, kwargs...)
+	else
+		plot!(plt, om.star.λ, y; alpha=alpha, label=label, kwargs...)
+	end
+end
+function plot_telluric_with_lsf!(plt, om::SSOF.OrderModel, y::AbstractVector; d::Union{SSOF.Data, Nothing}=nothing=nothing, alpha=1, label="", kwargs...)
+	if typeof(d) <: SSOF.LSFData
+		plot!(plt, om.tel.λ, y; alpha=alpha/2, label="", kwargs...)
+		plot!(plt, exp.(d.log_λ_obs[:, 1]), d.lsf * SSOF.spectra_interp(y, om.t2o[1]); alpha=alpha, label=label, kwargs...)
+	else
+		plot!(plt, om.tel.λ, y; alpha=alpha, label=label, kwargs...)
+	end
+end
+
+c_ind_f(i) = ((i + 1) % 16) + 1
 function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; display_plt::Bool=true, d::Union{SSOF.Data, Nothing}=nothing, o::Union{SSOF.Output, Nothing}=nothing, incl_χ²::Bool=true, tel_errors::Union{AbstractMatrix, Nothing}=nothing, star_errors::Union{AbstractMatrix, Nothing}=nothing, df_act::Dict=Dict(), kwargs...)
 	plot_stellar = SSOF.is_time_variable(om.star)
 	plot_telluric = SSOF.is_time_variable(om.tel)
@@ -48,7 +68,8 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 	if (!plot_stellar) && (!plot_telluric)
 		plt = plot_spectrum(; title="Constant Model", legend=:outerright, kwargs...)
 		plot!(plt, om.tel.λ, om.tel.lm.μ; label="μₜₑₗ")
-		plot!(plt, om.star.λ, om.star.lm.μ .- 0.5; label="μₛₜₐᵣ")
+		plot_telluric_with_lsf!(plt, om, om.tel.lm.μ; d=d, color=plt_colors[1], label="μₜₑₗ")
+		plot_stellar_with_lsf!(plt, om, om.star.lm.μ .- 0.5; d=d, color=plt_colors[2], label="μₛₜₐᵣ")
 		if display_plt; display(plt) end
 		return plt
 	end
@@ -62,13 +83,13 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 		inds = 1:size(om.tel.lm.M, 2)
 
 		# basis plot
-		plot!(plt[1, 1], om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ", alpha=0.3, color=base_color, title="Telluric Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
-		plot!(plt[1, 1], om.tel.λ, om.tel.lm.μ; label="μₜₑₗ")
+		plot_stellar_with_lsf!(plt[1, 1], om, om.star.lm.μ; d=d, color=base_color, alpha=0.3, label="μₛₜₐᵣ", title="Telluric Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
+		plot_telluric_with_lsf!(plt[1, 1], om, om.tel.lm.μ; d=d, color=plt_colors[1], label="μₜₑₗ")
 
 		max_s_std = maximum([std(om.tel.lm.s[i, :] .* norm(om.tel.lm.M[:, i])) for i in inds])
 		shift_s = ceil(10 * max_s_std) / 2
-		_scatter!(plt[2, 1], times_nu, ((max_s_std / std(airmasses)) .* (airmasses .- mean(airmasses))) .+ shift_s; label="Airmasses (scaled)", color=plt_colors[1])
-		hline!(plt[2, 1], [shift_s]; label="", color=plt_colors[1], lw=3, alpha=0.4)
+		_scatter!(plt[2, 1], times_nu, ((max_s_std / std(airmasses)) .* (airmasses .- mean(airmasses))) .+ shift_s; label="Airmasses (scaled)", color=base_color)
+		hline!(plt[2, 1], [shift_s]; label="", color=base_color, lw=3, alpha=0.4)
 
 		# half_shift_s = ceil(shift_s) / 2
 		if incl_χ²; holder = copy(om.tel.lm.s) end
@@ -78,7 +99,7 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 			norm_M = norm(view(om.tel.lm.M, :, i))
 
 			# basis plot
-	        plot!(plt[1, 1], om.tel.λ, (view(om.tel.lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); label="Basis $i", color=plt_colors[c_ind])
+			plot_telluric_with_lsf!(plt[1, 1], om, (view(om.tel.lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); d=d, label="Basis $i", color=plt_colors[c_ind])
 
 			# weights plot
 			if incl_χ²
@@ -99,8 +120,8 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 		inds = 1:size(om.star.lm.M, 2)
 
 		# basis plot
-		plot!(plt[1, n_plots], om.tel.λ, om.tel.lm.μ; label="μₜₑₗ", alpha=0.3, color=base_color, title="Stellar Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
-		plot!(plt[1, n_plots], om.star.λ, om.star.lm.μ; label="μₛₜₐᵣ")
+		plot_telluric_with_lsf!(plt[1, n_plots], om, om.tel.lm.μ; d=d, color=base_color, alpha=0.3, label="μₜₑₗ", title="Stellar Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
+		plot_stellar_with_lsf!(plt[1, n_plots], om, om.star.lm.μ; d=d, color=plt_colors[1], label="μₛₜₐᵣ")
 
 		max_s_std = maximum([std(om.star.lm.s[inds[i], :] .* norm(om.star.lm.M[:, inds[i]])) for i in inds])
 		shift_s = ceil(10 * max_s_std) / 2
@@ -121,7 +142,7 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 			norm_M = norm(view(om.star.lm.M, :, i))
 
 			# basis plot
-			plot!(plt[1, n_plots], om.star.λ, (view(om.star.lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); label="Basis $i", color=plt_colors[c_ind])
+			plot_stellar_with_lsf!(plt[1, n_plots], om, (view(om.star.lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); d=d, label="Basis $i", color=plt_colors[c_ind])
 
 			# weights plot
 			if incl_χ²

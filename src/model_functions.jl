@@ -105,6 +105,10 @@ function StellarInterpolationHelper!(
 	return sih
 end
 
+function spectra_interp(model_flux::AbstractVector, rv::Real, sih::StellarInterpolationHelper; sih_ind::Int=1)
+	ratios = (view(sih.log_λ_obs_m_model_log_λ_lo, :, sih_ind) .+ rv_to_D(rv)) ./ sih.model_log_λ_step
+	return (view(model_flux, view(sih.lower_inds, :, sih_ind)) .* (1 .- ratios)) + (view(model_flux, view(sih.lower_inds_p1, :, sih_ind)) .* ratios)
+end
 function spectra_interp(model_flux::AbstractMatrix, rvs::AbstractVector, sih::StellarInterpolationHelper)
 	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_step
 	# prop_bad = sum((ratios .> 1) + (ratios .< 0)) / length(ratios)
@@ -604,8 +608,10 @@ downsize(m::OrderModelWobble, n_comp_tel::Int, n_comp_star::Int) =
 		downsize(m.star, n_comp_star),
 		copy(m.rv), copy(m.reg_tel), copy(m.reg_star), m.b2o, m.bary_rvs, m.t2o, copy(m.metadata), m.n)
 
+spectra_interp(model::AbstractVector, interp_helper::_current_matrix_modifier) =
+	interp_helper * model
 spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
-	hcat([interp_helper[i] * view(model, :, i) for i in 1:size(model, 2)]...)
+	hcat([spectra_interp(view(model, :, i), interp_helper[i]) for i in 1:size(model, 2)]...)
 # spectra_interp_nabla(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
 # 	hcat([interp_helper[i] * model[:, i] for i in 1:size(model, 2)]...)
 # spectra_interp(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
