@@ -3,6 +3,7 @@ import StellarSpectraObservationFitting as SSOF
 using JLD2
 using Statistics
 import StatsBase
+using Base.Threads
 
 valid_optimizers = ["adam", "l-bfgs", "frozen-tel"]
 
@@ -114,7 +115,7 @@ function improve_model!(mws::SSOF.ModelWorkspace, airmasses::AbstractVector, tim
 	return results
 end
 
-function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel::Vector{<:SSOF.LinearModel}, lm_star::Vector{<:SSOF.LinearModel}; save_fn::String="", decision_fn::String="", print_stuff::Bool=true, plots_fn::String="", iter::Int=50, ignore_regularization::Bool=true, kwargs...)
+function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel::Vector{<:SSOF.LinearModel}, lm_star::Vector{<:SSOF.LinearModel}; save_fn::String="", decision_fn::String="", print_stuff::Bool=true, plots_fn::String="", iter::Int=50, ignore_regularization::Bool=true, multithread::Bool=nthreads() > 4, kwargs...)
 	model = mws.om
 
 	if !model.metadata[:todo][:downsized]  # 1.5 hrs (for 9x9)
@@ -129,11 +130,19 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 	    comp_stds = zeros(length(test_n_comp_tel), length(test_n_comp_star))
 	    comp_intra_stds = zeros(length(test_n_comp_tel), length(test_n_comp_star))
 		better_models = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
-	    for (i, n_tel) in enumerate(test_n_comp_tel)
-	        for (j, n_star) in enumerate(test_n_comp_star)
-	            comp_ls[i, j], ks[i, j], comp_stds[i, j], comp_intra_stds[i, j], better_models[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star], mws, times, lm_tel, lm_star; iter=iter, ignore_regularization=ignore_regularization)
-	        end
-	    end
+		if multithread
+			pairwise = collect(Iterators.product(1:length(test_n_comp_tel), 1:length(test_n_comp_star)))
+			@threads for p_i in pairwise
+				i, j = p_i
+				comp_ls[i, j], ks[i, j], comp_stds[i, j], comp_intra_stds[i, j], better_models[i, j] = SSOF.test_ℓ_for_n_comps([test_n_comp_tel[i], test_n_comp_star[j]], mws, times, lm_tel, lm_star; iter=iter, ignore_regularization=ignore_regularization)
+		    end
+		else
+			for (i, n_tel) in enumerate(test_n_comp_tel)
+				for (j, n_star) in enumerate(test_n_comp_star)
+					comp_ls[i, j], ks[i, j], comp_stds[i, j], comp_intra_stds[i, j], better_models[i, j] = SSOF.test_ℓ_for_n_comps([n_tel, n_star], mws, times, lm_tel, lm_star; iter=iter, ignore_regularization=ignore_regularization)
+				end
+			end
+		end
 	    n_comps_best, ℓ, aics, bics, best_ind = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel, test_n_comp_star, mws.d.var; return_inters=true, kwargs...)
 	    if save_md; @save decision_fn comp_ls ℓ aics bics best_ind ks test_n_comp_tel test_n_comp_star comp_stds comp_intra_stds better_models end
 
