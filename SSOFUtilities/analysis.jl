@@ -249,9 +249,9 @@ function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int
 	σs = Array{Float64}(undef, length(x))
 	ℓs = Array{Float64}(undef, n)
 	if use_gradient; g = ∇(ℓ) end
+	_std = std(x)
 	for i in 1:length(x)
 		hold = x[i]
-		_std = std(x)
 		# x_test[:] = x[i] .+ LinRange(-_std/1e3, _std/1e3, n)
 		x_test[:] = x[i] .+ LinRange(-_std, _std, n)
 		for j in 1:n
