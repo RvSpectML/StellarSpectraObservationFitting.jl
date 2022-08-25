@@ -144,11 +144,11 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 			diagnostics = [ℓ, aics, bics, comp_stds, comp_intra_stds]
 			diagnostics_labels = ["ℓ", "AIC", "BIC", "RV std", "Intra-night RV std"]
 			diagnostics_fn = ["l", "aic", "bic", "rv", "rv_intra"]
-			# mask = ℓ .< 0
 			for i in 1:length(diagnostics)
-				# diagnostics[i][mask] .= Inf
-				plt = component_test_plot(diagnostics[i], test_n_comp_tel, test_n_comp_star, ylabel=diagnostics_labels[i]);
-				png(plt, plots_fn * diagnostics_fn[i] * "_choice.png")
+				if !all(isinf.(diagnostics[i]))
+					plt = component_test_plot(diagnostics[i], test_n_comp_tel, test_n_comp_star, ylabel=diagnostics_labels[i]);
+					png(plt, plots_fn * diagnostics_fn[i] * "_choice.png")
+				end
 			end
 		end
 

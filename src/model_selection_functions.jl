@@ -11,15 +11,15 @@ function effective_length(x; return_mask::Bool=false, masked_val::Real = Inf)
         return sum(mask)
     end
 end
-function intra_night_std(rvs::AbstractVector, times::AbstractVector; thres::Int=3)
+function intra_night_std(rvs::AbstractVector, times::AbstractVector; thres::Int=3, show_warn::Bool=true)
     intra_night_stds = [std(rvs[i]) for i in observation_night_inds(times) if length(i)>(thres-1)]
     if length(intra_night_stds) < 1
-        @warn "no nights to base the intra night std of the RVs on. Returning the std of all of the observations"
-        return std(rvs)
+        if show_warn; @warn "no nights to base the intra night std of the RVs on. Returning the std of all of the observations" end
+        return Inf
     elseif length(intra_night_stds) < 2
-        @warn "only one night to base the intra night std of the RVs on"
+        if show_warn; @warn "only one night to base the intra night std of the RVs on" end
     elseif length(intra_night_stds) < 3
-        @warn "only a couple of nights to base the intra night std of the RVs on"
+        if show_warn; @warn "only a couple of nights to base the intra night std of the RVs on" end
     end
     return median(intra_night_stds)
 end
@@ -46,7 +46,7 @@ function _test_om(mws_inp::ModelWorkspace, om::OrderModel, times::AbstractVector
     train_OrderModel!(mws; kwargs...)  # 16s
     n = total_length(mws) #- n_negligible(mws)
     model_rvs = rvs(mws.om)
-    return _loss(mws), n, std(model_rvs), intra_night_std(model_rvs, times)
+    return _loss(mws), n, std(model_rvs), intra_night_std(model_rvs, times; show_warn=false)
 end
 function test_ℓ_for_n_comps(n_comps::Vector, mws_inp::ModelWorkspace, times::AbstractVector, lm_tel::Vector{<:LinearModel}, lm_star::Vector{<:LinearModel}; return_inters::Bool=false, kwargs...)
     _om = downsize(mws_inp.om, max(0, n_comps[1]), n_comps[2])
