@@ -178,13 +178,15 @@ function recognize_bad_drift!(d::Data; kwargs...)
 	end
 end
 
-function process!(d; kwargs...)
+function process!(d; λ_thres::Int=4000, kwargs...)
 	flat_normalize!(d)
 	mask_low_pixels!(d)
 	mask_high_pixels!(d)
 	mask_bad_edges!(d)
-	# red_enough = minimum(d.log_λ_obs) > log(4410)  # is there likely to even be a continuum
-	red_enough = minimum(d.log_λ_obs) > log(6200)  # where neid blaze correction starts to break down (order 77+)
+	# λ_thres = 4000 # is there likely to even be a continuum (neid index order 22+)
+	# λ_thres = 6200 # where neid blaze correction starts to break down (neid index order 77+)
+	# red_enough = minimum(d.log_λ_obs) > log(6200)
+	red_enough = minimum(d.log_λ_obs) > log(λ_thres)
 	enough_points = (sum(isinf.(d.var)) / length(d.var)) < 0.5
 	if (red_enough && enough_points)
 		w = continuum_normalize!(d; kwargs...)
