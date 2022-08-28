@@ -51,7 +51,7 @@ function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVecto
 		end
         μ[:] = A * w
 		# if plot_stuff
-		# 	plt = scatter(x[m], y[m]; label="used")
+		# 	plt = scatter(x[m], y[m]; label="used", legend=:bottomleft)
 		# 	scatter!(plt, x[.!m], y[.!m]; label="masked")
 		# 	plot!(plt, x, μ; label="model")
 		# 	display(plt)
@@ -82,7 +82,7 @@ function continuum_normalize!(d::Data; order::Int=6, kwargs...)
 	return w
 end
 
-function mask_low_pixels!(y::AbstractVector, σ²::AbstractVector; min_flux::Real= 0., padding::Int= 2)
+function mask_low_pixels!(y::AbstractVector, σ²::AbstractVector; min_flux::Real= 0., padding::Int= 2, using_weights::Bool=false)
 	bad = y .< min_flux
 	for i in eachindex(bad)
 		bad[i] = bad[i] || !isfinite(y[i])
@@ -92,15 +92,16 @@ function mask_low_pixels!(y::AbstractVector, σ²::AbstractVector; min_flux::Rea
 	for i in findall(bad)
 		bad[max(1, i - padding):min(i - padding, l)] .= true
 	end
-	σ²[bad] .= Inf
+	using_weights ? σ²[bad] .= 0 : σ²[bad] .= Inf
 end
-function mask_low_pixels!(d::Data; kwargs...)
-	for i in 1:size(d.log_λ_obs, 2)
-		mask_low_pixels!(view(d.flux, :, i), view(d.var, :, i); kwargs...)
+function mask_low_pixels!(y::AbstractMatrix, σ²::AbstractMatrix; kwargs...)
+	for i in 1:size(y, 2)
+		mask_low_pixels!(view(y, :, i), view(σ², :, i); kwargs...)
 	end
 end
+mask_low_pixels!(d::Data; kwargs...) = mask_low_pixels!(d.flux, d.var; kwargs...)
 
-function mask_high_pixels!(y::AbstractVector, σ²::AbstractVector; max_flux::Real= 2., padding::Int= 2)
+function mask_high_pixels!(y::AbstractVector, σ²::AbstractVector; max_flux::Real= 2., padding::Int= 2, using_weights::Bool=false)
 	bad = y .> max_flux
 	for i in eachindex(bad)
 		bad[i] = bad[i] || !isfinite(y[i])
@@ -110,13 +111,14 @@ function mask_high_pixels!(y::AbstractVector, σ²::AbstractVector; max_flux::Re
 	for i in findall(bad)
 		bad[max(1, i - padding):min(i - padding, l)] .= true
 	end
-	σ²[bad] .= Inf
+	using_weights ? σ²[bad] .= 0 : σ²[bad] .= Inf
 end
-function mask_high_pixels!(d::Data; kwargs...)
-	for i in 1:size(d.log_λ_obs, 2)
-		mask_high_pixels!(view(d.flux, :, i), view(d.var, :, i); kwargs...)
+function mask_high_pixels!(y::AbstractMatrix, σ²::AbstractMatrix; kwargs...)
+	for i in 1:size(y, 2)
+		mask_high_pixels!(view(y, :, i), view(σ², :, i); kwargs...)
 	end
 end
+mask_high_pixels!(d::Data; kwargs...) = mask_high_pixels!(d.flux, d.var; kwargs...)
 
 function mask_bad_edges!(y::AbstractVector, σ²::AbstractVector; window_width::Int=128, min_snr::Real=5.)
 	n_pix = length(y)

@@ -731,9 +731,6 @@ function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix
 			end
 		end
 	end
-	if return_weights
-		vars .= 1 ./ vars
-	end
 end
 function _spectra_interp_gp_div_gp(log_λ::AbstractVector, flux_obs::AbstractMatrix, var_obs::AbstractMatrix, log_λ_obs::AbstractMatrix, flux_other::AbstractMatrix, var_other::AbstractMatrix, log_λ_other::AbstractMatrix; kwargs...)
 	fluxes = Array{Float64}(undef, length(log_λ), size(flux_obs, 2))
@@ -749,7 +746,7 @@ end
 # end
 
 function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Number=1.25,
-	seed::Union{OrderModel, Nothing}=nothing, use_mean::Bool=true, multithread::Bool=nthreads() > 4)
+	seed::Union{OrderModel, Nothing}=nothing, use_mean::Bool=true, multithread::Bool=nthreads() > 3)
 
 	seeded = !isnothing(seed)
 
@@ -765,6 +762,22 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 	vars_tel = SOAP_gp_var .* ones(length(om.tel.log_λ), n_obs)
 	lm_tel = copy(om.tel.lm)
 	lm_star = FullLinearModel(zeros(size(om.star.lm.M, 1), n_comp_star + 1), zeros(n_comp_star + 1, size(om.star.lm.s, 2)), zeros(size(om.star.lm.M, 1)), om.star.lm.log)
+
+	function update_tel(lm_tel::LinearModel, use_mean::Bool)
+		_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
+		lm_tel.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=seeded||use_mean)
+		mask_low_pixels!(flux_tel, vars_tel)
+		mask_high_pixels!(flux_tel, vars_tel)
+		EMPCA!(lm_tel.M, lm_tel.s, lm_tel.μ, flux_tel, 1 ./ vars_tel; log_lm=log_lm(lm_tel))
+	end
+
+	function update_star(lm_star::LinearModel, use_mean::Bool)
+		_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
+		lm_star.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=seeded||use_mean)
+		mask_low_pixels!(flux_star, vars_star)
+		mask_high_pixels!(flux_star, vars_star)
+		DEMPCA!(lm_star.M, lm_star.s, lm_star.μ, flux_star, 1 ./ vars_star, calc_doppler_component_RVSKL(om.star.λ, lm_star.μ); log_lm=log_lm(lm_star))
+	end
 
 	# if we have a seed model to get tellurics from
 	# TODO should we also transfer basis vectors?
@@ -831,21 +844,37 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 		# stellar flux assuming no tellurics
 		_spectra_interp_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var .+ SOAP_gp_var, d.log_λ_star; gp_mean=1.)
 	end
-	# stellar template assuming no tellurics (only used for telluric initialization)
+	# stellar template assuming no tellurics
 	lm_star.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=seeded)
 
-	# telluric model with stellar template
-	flux_star .= lm_star.μ
-	_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
-	lm_tel.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=seeded||use_mean)
-	EMPCA!(lm_tel.M, lm_tel.s, lm_tel.μ, flux_tel, 1 ./ vars_tel; log_lm=log_lm(lm_tel))
+	if !seeded
+		star_template_χ² = sum(_χ²_loss(star_model(om; lm=lm_star), d))
 
-	# stellar model with telluric template
-	flux_tel .= lm_tel.μ
-	_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
-	lm_star.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=seeded||use_mean)
-	doppler_comp = calc_doppler_component_RVSKL(om.star.λ, lm_star.μ)
-	DEMPCA!(lm_star.M, lm_star.s, lm_star.μ, flux_star, 1 ./ vars_star, doppler_comp; log_lm=log_lm(lm_star))
+		# telluric template assuming no stellar
+		_spectra_interp_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var .+ SOAP_gp_var, d.log_λ_obs; gp_mean=1.)
+		lm_tel.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=seeded)
+		tel_template_χ² = sum(_χ²_loss(tel_model(om; lm=lm_tel), d))
+	end
+
+	stellar_dominated = seeded || tel_template_χ² > star_template_χ²
+	# use the better model as the initial basis
+	if stellar_dominated
+		println("using stellar model as initial template")
+		# telluric model with stellar template
+		flux_star .= lm_star.μ
+		update_tel(lm_tel, seeded||use_mean)
+		# updating stellar model with modified telluric template
+		flux_tel .= lm_tel.μ
+		update_star(lm_star, seeded||use_mean)
+	else
+		println("using telluric model as initial template")
+		# stellar model with telluric template
+		flux_tel .= lm_tel.μ
+		update_star(lm_star, seeded||use_mean)
+		# updating telluric model with modified stellar template
+		flux_star .= lm_star.μ
+		update_tel(lm_tel, seeded||use_mean)
+	end
 
 	# stellar models with n basis telluric model
 	if is_time_variable(om.tel)
@@ -855,15 +884,14 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 			@threads for i in 1:n_comp_tel
 				_flux_star, _vars_star = _spectra_interp_gp_div_gp(om.star.log_λ, d.flux, d.var, d.log_λ_star, _eval_lm(view(lm_tel.M, :, 1:i), view(lm_tel.s, 1:i, :), lm_tel.μ; log_lm=log_lm(lm_tel)), vars_tel, tel_log_λ_star)
 				lm_star[i+1].μ[:] = make_template(_flux_star, _vars_star; min=μ_min, max=μ_max, use_mean=true)
+				mask_low_pixels!(_flux_star, _vars_star)
+				mask_high_pixels!(_flux_star, _vars_star)
 				DEMPCA!(lm_star[i+1].M, lm_star[i+1].s, lm_star[i+1].μ, _flux_star, 1 ./ _vars_star, calc_doppler_component_RVSKL(om.star.λ, lm_star[i+1].μ); log_lm=log_lm(lm_star[i+1]))
 			end
 		else
 			for i in 1:n_comp_tel
 				flux_tel .= _eval_lm(view(lm_tel.M, :, 1:i), view(lm_tel.s, 1:i, :), lm_tel.μ; log_lm=log_lm(lm_tel))
-				_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
-				lm_star[i+1].μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=true)
-				doppler_comp = calc_doppler_component_RVSKL(om.star.λ, lm_star[i+1].μ)
-				DEMPCA!(lm_star[i+1].M, lm_star[i+1].s, lm_star[i+1].μ, flux_star, 1 ./ vars_star, doppler_comp; log_lm=log_lm(lm_star[i+1]))
+				update_star(lm_star[i+1], true)
 			end
 		end
 	else
@@ -882,6 +910,8 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 				end
 				_flux_tel, _vars_tel = _spectra_interp_gp_div_gp(om.tel.log_λ, d.flux, d.var, d.log_λ_obs, _flux_star, vars_star, star_log_λ_tel)
 				lm_tel[i+1].μ[:] = make_template(_flux_tel, _vars_tel; min=μ_min, max=μ_max, use_mean=true)
+				mask_low_pixels!(_flux_tel, _vars_tel)
+				mask_high_pixels!(_flux_tel, _vars_tel)
 				EMPCA!(lm_tel[i+1].M, lm_tel[i+1].s, lm_tel[i+1].μ, _flux_tel, 1 ./ _vars_tel; log_lm=log_lm(lm_tel[i+1]))
 			end
 		else
@@ -891,9 +921,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 				else
 					flux_star .= _eval_lm(view(lm_star[1].M, :, 1:(i+1)), view(lm_star[1].s, 1:(i+1), :), lm_star[1].μ; log_lm=log_lm(lm_star[1]))
 				end
-				_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
-				lm_tel[i+1].μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=true)
-				EMPCA!(lm_tel[i+1].M, lm_tel[i+1].s, lm_tel[i+1].μ, flux_tel, 1 ./ vars_tel; log_lm=log_lm(lm_tel[i+1]))
+				update_tel(lm_tel[i+1], true)
 			end
 		end
 	else
@@ -909,7 +937,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 	fill_StarModel!(om, lm_star[1])
 	om.metadata[:todo][:initialized] = true
 
-	return lm_tel, lm_star
+	return lm_tel, lm_star, stellar_dominated
 end
 
 function remove_lm_score_means!(lm::FullLinearModel; prop::Real=0.)

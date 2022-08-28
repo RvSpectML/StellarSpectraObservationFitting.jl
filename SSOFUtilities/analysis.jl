@@ -52,20 +52,20 @@ function initialize_model!(
 	save = init_fn!=""
 
 	if isfile(init_fn) && !recalc
-		@load init_fn lm_tel lm_star
+		@load init_fn lm_tel lm_star stellar_dominated
 		if !model.metadata[:todo][:initialized]
 			SSOF.fill_TelModel!(model, lm_tel[1])
 			SSOF.fill_StarModel!(model, lm_star[1])
 			model.metadata[:todo][:initialized] = true
 		end
 	else
-		lm_tel, lm_star = SSOF.initializations!(model, data; kwargs...)
+		lm_tel, lm_star, stellar_dominated = SSOF.initializations!(model, data; kwargs...)
 		# lm_tel, lm_star = SSOF.FullLinearModel[], SSOF.FullLinearModel[]
 		if save
-			@save init_fn lm_tel lm_star
+			@save init_fn lm_tel lm_star stellar_dominated
 		end
 	end
-	return lm_tel, lm_star
+	return lm_tel, lm_star, stellar_dominated
 end
 
 function create_workspace(model, data, opt::String)
@@ -115,7 +115,7 @@ function improve_model!(mws::SSOF.ModelWorkspace, airmasses::AbstractVector, tim
 	return results
 end
 
-function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel::Vector{<:SSOF.LinearModel}, lm_star::Vector{<:SSOF.LinearModel}; save_fn::String="", decision_fn::String="", print_stuff::Bool=true, plots_fn::String="", iter::Int=50, ignore_regularization::Bool=true, multithread::Bool=nthreads() > 4, kwargs...)
+function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel::Vector{<:SSOF.LinearModel}, lm_star::Vector{<:SSOF.LinearModel}; save_fn::String="", decision_fn::String="", print_stuff::Bool=true, plots_fn::String="", iter::Int=50, ignore_regularization::Bool=true, multithread::Bool=nthreads() > 3, kwargs...)
 	model = mws.om
 
 	if !model.metadata[:todo][:downsized]  # 1.5 hrs (for 9x9)
@@ -337,7 +337,7 @@ function estimate_σ_bootstrap_helper!(rv_holder::AbstractMatrix, tel_holder, st
 	if i%10==0; println("done with $i/$n bootstraps") end
 end
 
-function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", n::Int=50, return_holders::Bool=false, recalc_mean::Bool=false, multithread::Bool=nthreads() > 4)
+function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", n::Int=50, return_holders::Bool=false, recalc_mean::Bool=false, multithread::Bool=nthreads() > 3)
 	save = save_fn!=""
 	if recalc || !mws.om.metadata[:todo][:err_estimated] # 25 mins
 	    mws.d.var[mws.d.var.==Inf] .= 0
