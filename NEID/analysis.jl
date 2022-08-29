@@ -47,7 +47,7 @@ else
     model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, dpca=dpca, log_lm=log_lm)
 end
 times_nu .-= 2400000.5
-lm_tel, lm_star, stellar_dominated = SSOFU.initialize_model!(model, data; init_fn=init_path, recalc=true)
+lm_tel, lm_star, stellar_dominated = SSOFU.initialize_model!(model, data; init_fn=init_path, recalc=recalc)
 if all(isone.(model.tel.lm.μ)) && !SSOF.is_time_variable(model.tel); opt = "frozen-tel" end
 if !use_lsf; data = SSOF.GenericData(data) end
 mws = SSOFU.create_workspace(model, data, opt)
