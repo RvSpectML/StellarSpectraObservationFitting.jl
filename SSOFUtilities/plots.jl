@@ -67,7 +67,6 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 	# plot the two templates if there is no time variation
 	if (!plot_stellar) && (!plot_telluric)
 		plt = plot_spectrum(; title="Constant Model", legend=:outerright, kwargs...)
-		plot!(plt, om.tel.λ, om.tel.lm.μ; label="μₜₑₗ")
 		plot_telluric_with_lsf!(plt, om, om.tel.lm.μ; d=d, color=plt_colors[1], label="μₜₑₗ")
 		plot_stellar_with_lsf!(plt, om, om.star.lm.μ .- 0.5; d=d, color=plt_colors[2], label="μₛₜₐᵣ")
 		if display_plt; display(plt) end

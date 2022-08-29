@@ -766,7 +766,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 
 	function update_tel(lm_tel::LinearModel, use_mean::Bool)
 		_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
-		lm_tel.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=seeded||use_mean)
+		lm_tel.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
 		mask_low_pixels!(flux_tel, vars_tel)
 		mask_high_pixels!(flux_tel, vars_tel)
 		EMPCA!(lm_tel.M, lm_tel.s, lm_tel.μ, flux_tel, 1 ./ vars_tel; log_lm=log_lm(lm_tel))
@@ -774,7 +774,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 
 	function update_star(lm_star::LinearModel, use_mean::Bool)
 		_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
-		lm_star.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=seeded||use_mean)
+		lm_star.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
 		mask_low_pixels!(flux_star, vars_star)
 		mask_high_pixels!(flux_star, vars_star)
 		DEMPCA!(lm_star.M, lm_star.s, lm_star.μ, flux_star, 1 ./ vars_star, calc_doppler_component_RVSKL(om.star.λ, lm_star.μ); log_lm=log_lm(lm_star))

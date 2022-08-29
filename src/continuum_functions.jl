@@ -82,15 +82,15 @@ function continuum_normalize!(d::Data; order::Int=6, kwargs...)
 	return w
 end
 
-function mask_low_pixels!(y::AbstractVector, σ²::AbstractVector; min_flux::Real= 0., padding::Int= 2, using_weights::Bool=false)
-	bad = y .< min_flux
-	for i in eachindex(bad)
-		bad[i] = bad[i] || !isfinite(y[i])
-	end
+_min_flux_default = 0.
+_max_flux_default = 2.
+
+function mask_low_pixels!(y::AbstractVector, σ²::AbstractVector; min_flux::Real=_min_flux_default, padding::Int=2, using_weights::Bool=false)
+	bad = (y .< min_flux) .|| .!isfinite.(y)
 	y[bad] .= min_flux
 	l = length(bad)
 	for i in findall(bad)
-		bad[max(1, i - padding):min(i - padding, l)] .= true
+		bad[max(1, i - padding):min(i + padding, l)] .= true
 	end
 	using_weights ? σ²[bad] .= 0 : σ²[bad] .= Inf
 end
@@ -101,15 +101,12 @@ function mask_low_pixels!(y::AbstractMatrix, σ²::AbstractMatrix; kwargs...)
 end
 mask_low_pixels!(d::Data; kwargs...) = mask_low_pixels!(d.flux, d.var; kwargs...)
 
-function mask_high_pixels!(y::AbstractVector, σ²::AbstractVector; max_flux::Real= 2., padding::Int= 2, using_weights::Bool=false)
-	bad = y .> max_flux
-	for i in eachindex(bad)
-		bad[i] = bad[i] || !isfinite(y[i])
-	end
+function mask_high_pixels!(y::AbstractVector, σ²::AbstractVector; max_flux::Real=_max_flux_default, padding::Int=2, using_weights::Bool=false)
+	bad = (y .> max_flux) .|| .!isfinite.(y)
 	y[bad] .= max_flux
 	l = length(bad)
 	for i in findall(bad)
-		bad[max(1, i - padding):min(i - padding, l)] .= true
+		bad[max(1, i - padding):min(i + padding, l)] .= true
 	end
 	using_weights ? σ²[bad] .= 0 : σ²[bad] .= Inf
 end

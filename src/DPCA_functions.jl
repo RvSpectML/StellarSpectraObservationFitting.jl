@@ -72,10 +72,12 @@ function project_doppler_comp!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::
 	return rvs
 end
 
-function DEMPCA!(M::AbstractMatrix, scores::AbstractMatrix, μ::AbstractVector, Xtmp::AbstractMatrix, weights::AbstractMatrix, doppler_comp::Vector{T}; kwargs...) where {T<:Real}
+function DEMPCA!(M::AbstractMatrix, scores::AbstractMatrix, μ::AbstractVector, Xtmp::AbstractMatrix, weights::AbstractMatrix, doppler_comp::Vector{T}; min_flux::Real=_min_flux_default, max_flux::Real=_max_flux_default, kwargs...) where {T<:Real}
 	Xtmp .-= μ
 	rvs = project_doppler_comp!(M, scores, Xtmp, doppler_comp)
 	Xtmp .+= μ
+	mask_low_pixels!(Xtmp, weights; min_flux=min_flux, using_weights=true)
+	mask_high_pixels!(Xtmp, weights; max_flux=max_flux, using_weights=true)
 	if size(M, 2) > 1
 		EMPCA!(M, scores, μ, Xtmp, weights; inds=2:size(M, 2), kwargs...)
 	end
