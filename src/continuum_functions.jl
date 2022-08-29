@@ -180,7 +180,7 @@ function recognize_bad_drift!(d::Data; kwargs...)
 	end
 end
 
-function process!(d; λ_thres::Int=4000, kwargs...)
+function process!(d; λ_thres::Real=4000., kwargs...)
 	flat_normalize!(d)
 	mask_low_pixels!(d)
 	mask_high_pixels!(d)

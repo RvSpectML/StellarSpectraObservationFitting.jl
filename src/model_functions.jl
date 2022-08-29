@@ -15,6 +15,7 @@ using StaticArrays
 using Nabla
 import StatsBase: winsor
 using Base.Threads
+using ThreadsX
 
 abstract type OrderModel end
 abstract type Output end
@@ -881,7 +882,8 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 		n_comp_tel = size(om.tel.lm.M, 2)
 		lm_star = [copy(lm_star) for i in 1:(n_comp_tel+1)]
 		if multithread
-			@threads for i in 1:n_comp_tel
+			# @threads for i in 1:n_comp_tel
+			ThreadsX.foreach(1:n_comp_tel) do i
 				_flux_star, _vars_star = _spectra_interp_gp_div_gp(om.star.log_λ, d.flux, d.var, d.log_λ_star, _eval_lm(view(lm_tel.M, :, 1:i), view(lm_tel.s, 1:i, :), lm_tel.μ; log_lm=log_lm(lm_tel)), vars_tel, tel_log_λ_star)
 				lm_star[i+1].μ[:] = make_template(_flux_star, _vars_star; min=μ_min, max=μ_max, use_mean=true)
 				mask_low_pixels!(_flux_star, _vars_star)
@@ -902,7 +904,8 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 	if is_time_variable(om.tel) #&& !seeded
 		lm_tel = [copy(lm_tel) for i in 1:(n_comp_star+1)]
 		if multithread
-			@threads for i in 1:n_comp_star
+			# @threads for i in 1:n_comp_star
+			ThreadsX.foreach(1:n_comp_star) do i
 				if log_lm(lm_star[1])
 					_flux_star = _eval_lm(view(lm_star[1].M, :, 2:(i+1)), view(lm_star[1].s, 2:(i+1), :), _eval_lm(view(lm_star[1].M, :, 1:1), view(lm_star[1].s, 1:1, :), lm_star[1].μ); log_lm=log_lm(lm_star[1]))
 				else

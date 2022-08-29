@@ -21,6 +21,7 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 StellarSpectraObservationFitting = "6b1189bd-9150-44f8-8055-f6ca7d16451e"
 TemporalGPs = "e155a3c4-0841-43e1-8b83-a0e4f03cc18f"
+ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
 [compat]
 TemporalGPs = "≥ 0.5"

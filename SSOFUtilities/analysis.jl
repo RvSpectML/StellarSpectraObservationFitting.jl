@@ -4,6 +4,7 @@ using JLD2
 using Statistics
 import StatsBase
 using Base.Threads
+using ThreadsX
 
 valid_optimizers = ["adam", "l-bfgs", "frozen-tel"]
 
@@ -131,11 +132,14 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 	    comp_intra_stds = zeros(length(test_n_comp_tel), length(test_n_comp_star))
 		better_models = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
 		if multithread
-			pairwise = collect(Iterators.product(1:length(test_n_comp_tel), 1:length(test_n_comp_star)))
-			@threads for p_i in pairwise
-				i, j = p_i
-				comp_ls[i, j], ks[i, j], comp_stds[i, j], comp_intra_stds[i, j], better_models[i, j] = SSOF.test_ℓ_for_n_comps([test_n_comp_tel[i], test_n_comp_star[j]], mws, times, lm_tel, lm_star; iter=iter, ignore_regularization=ignore_regularization)
-		    end
+			# @threads for p_i in collect(Iterators.product(1:length(test_n_comp_tel), 1:length(test_n_comp_star)))
+			# 	i, j = p_i
+			# 	comp_ls[i, j], ks[i, j], comp_stds[i, j], comp_intra_stds[i, j], better_models[i, j] = SSOF.test_ℓ_for_n_comps([test_n_comp_tel[i], test_n_comp_star[j]], mws, times, lm_tel, lm_star; iter=iter, ignore_regularization=ignore_regularization)
+		    # end
+			# using ThreadsX  # tiny bit better performance
+			ThreadsX.foreach(collect(Iterators.product(1:length(test_n_comp_tel), 1:length(test_n_comp_star)))) do (i, j)
+			   comp_ls[i, j], ks[i, j], comp_stds[i, j], comp_intra_stds[i, j], better_models[i, j] = SSOF.test_ℓ_for_n_comps([test_n_comp_tel[i], test_n_comp_star[j]], mws, times, lm_tel, lm_star; iter=iter, ignore_regularization=ignore_regularization)
+			end
 		else
 			for (i, n_tel) in enumerate(test_n_comp_tel)
 				for (j, n_star) in enumerate(test_n_comp_star)
@@ -245,30 +249,36 @@ end
 
 function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int=7, use_gradient::Bool=false, multithread::Bool=false, kwargs...)
 	σs = Array{Float64}(undef, length(x))
-	if !multithread
+	if multithread
+		x_test = Array{Float64}(undef, n, nthreads())
+		ℓs = Array{Float64}(undef, n, nthreads())
+	else
 		x_test = Array{Float64}(undef, n)
 		ℓs = Array{Float64}(undef, n)
 	end
 	if use_gradient; g = ∇(ℓ) end
 	_std = std(x)
 	if multithread
-		@threads for i in 1:length(x)
+		# @threads for i in 1:length(x)
+		# using ThreadsX  # tiny bit better performance
+		ThreadsX.foreach(1:length(x)) do i
+			local tid = threadid()
 			# _x = deepcopy(x)
-			_x = copy(x)
+			local _x = copy(x)
 			# x_test = _x[i] .+ LinRange(-_std/1e3, _std/1e3, n)
-			x_test = _x[i] .+ LinRange(-_std, _std, n)
+			x_test[:, tid] .= _x[i] .+ LinRange(-_std, _std, n)
 			# _ℓs = ones(n)
-			_ℓs = Array{Float64}(undef, n)
+			# ℓs = Array{Float64}(undef, n)
 			for j in 1:n
-				_x[i] = x_test[j]
+				_x[i] = x_test[j, tid]
 				if use_gradient
-					_ℓs[j] = only(g(_x))[i]
+					ℓs[j, tid] = only(g(_x))[i]
 				else
-					_ℓs[j] = ℓ(_x)
+					ℓs[j, tid] = ℓ(_x)
 				end
 			end
-			println("$i: ", _ℓs .- _ℓs[Int(round(n//2))])
-			estimate_σ_curvature_helper_finalizer!(σs, _ℓs, x_test, i; use_gradient=use_gradient, kwargs...)
+			# println("$i: ", _ℓs .- _ℓs[Int(round(n//2))])
+			estimate_σ_curvature_helper_finalizer!(σs, view(ℓs, :, tid), view(x_test, :, threadid()), i; use_gradient=use_gradient, kwargs...)
 		end
 	else
 		for i in 1:length(x)
@@ -284,14 +294,14 @@ function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int
 				end
 			end
 			x[i] = hold
-			println("$i: ", ℓs .- ℓs[Int(round(n//2))])
+			# println("$i: ", ℓs .- ℓs[Int(round(n//2))])
 			estimate_σ_curvature_helper_finalizer!(σs, ℓs, x_test, i; use_gradient=use_gradient, kwargs...)
 		end
 	end
 	return reshape(σs, size(x))
 end
 
-function estimate_σ_curvature_helper_finalizer!(σs::AbstractVecOrMat, _ℓs::Vector, x_test::AbstractVector, i::Int; use_gradient::Bool=false, param_str::String="", print_every::Int=10, print_stuff::Bool=false, show_plots::Bool=false, )
+function estimate_σ_curvature_helper_finalizer!(σs::AbstractVecOrMat, _ℓs::AbstractVector, x_test::AbstractVector, i::Int; use_gradient::Bool=false, param_str::String="", print_every::Int=10, print_stuff::Bool=false, show_plots::Bool=false, )
 	if use_gradient
 		poly_f = SSOF.ordinary_lst_sq_f(_ℓs, 1; x=x_test)
 		σs[i] = sqrt(1 / poly_f.w[2])
@@ -357,7 +367,11 @@ function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, sav
 			star_holder = Array{Float64}(undef, n, size(mws.om.star.lm.s, 1), size(mws.om.star.lm.s, 2)) :
 			star_holder = nothing
 		if multithread
-			@threads for i in 1:n
+			# @threads for i in 1:n
+			# # using Polyester  # same performance
+			# @batch per=core for i in 1:n
+			# using ThreadsX  # tiny bit better performance
+			ThreadsX.foreach(1:n) do i
 				estimate_σ_bootstrap_helper!(rv_holder, tel_holder, star_holder, i, mws, data_noise, n)
 			end
 		else
