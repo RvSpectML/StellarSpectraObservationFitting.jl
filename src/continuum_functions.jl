@@ -87,7 +87,7 @@ _max_flux_default = 2.
 
 function mask_low_pixels!(y::AbstractVector, σ²::AbstractVector; min_flux::Real=_min_flux_default, padding::Int=2, using_weights::Bool=false)
 	bad = (y .< min_flux) .|| .!isfinite.(y)
-	y[bad] .= min_flux
+	# y[bad] .= min_flux
 	l = length(bad)
 	for i in findall(bad)
 		bad[max(1, i - padding):min(i + padding, l)] .= true
@@ -100,10 +100,26 @@ function mask_low_pixels!(y::AbstractMatrix, σ²::AbstractMatrix; kwargs...)
 	end
 end
 mask_low_pixels!(d::Data; kwargs...) = mask_low_pixels!(d.flux, d.var; kwargs...)
+function mask_low_pixels_all_times!(y::AbstractMatrix, σ²::AbstractMatrix; min_flux::Real=_min_flux_default, padding::Int=2, using_weights::Bool=false)
+	bad = (y .< min_flux) .|| .!isfinite.(y)
+	# y[bad] .= min_flux
+	l = length(bad)
+	low_pix = Int64[]
+	for ij in findall(bad)
+		i = ij[1]
+		if !(i in low_pix)
+			append!(low_pix, [i])
+			bad[max(1, i - padding):min(i + padding, l), :] .= true  # masking the low pixel at all times
+		end
+	end
+	if length(low_pix) > 0; println("masked out low pixels $low_pix (±$padding pixels) at all times") end
+	using_weights ? σ²[bad] .= 0 : σ²[bad] .= Inf
+end
+mask_low_pixels_all_times!(d::Data; kwargs...) = mask_low_pixels_all_times!(d.flux, d.var; kwargs...)
 
 function mask_high_pixels!(y::AbstractVector, σ²::AbstractVector; max_flux::Real=_max_flux_default, padding::Int=2, using_weights::Bool=false)
 	bad = (y .> max_flux) .|| .!isfinite.(y)
-	y[bad] .= max_flux
+	# y[bad] .= max_flux
 	l = length(bad)
 	for i in findall(bad)
 		bad[max(1, i - padding):min(i + padding, l)] .= true
@@ -177,10 +193,39 @@ function recognize_bad_drift!(d::Data; kwargs...)
 	end
 end
 
+function accel(y::AbstractArray, σ²::AbstractArray)
+	@assert size(y) == size(σ²)
+	acc = Array{Float64}(undef, size(y, 1), size(y, 2))
+	m = .!isinf.(σ²)
+	l = size(m, 1)
+	acc[1, :] .= 2 * abs.(view(y, 2, :) - view(y, 1, :)) .* view(m, 2, :)
+	acc[end, :] .= 2 * abs.(view(y, l-1, :) - view(y, l, :)) .* view(m, l-1, :)
+	acc[2:end-1, :] .= abs.(view(y, 3:l, :) - view(y, 2:(l-1), :)) .* view(m, 3:l, :) + abs.(view(y, 2:(l-1), :) - view(y, 1:(l-2), :)) .* view(m, 1:(l-2), :)
+	acc[σ².==Inf] .= 0
+	return acc
+end
+function bad_pixel_flagger(y::AbstractArray, σ²::AbstractArray; kwargs...)
+	acc = accel(y, σ²)
+	acc = vec(mean(acc; dims=2))
+	high_accel_pixels = find_modes(acc)
+	return high_accel_pixels[.!outlier_mask(acc[high_accel_pixels]; kwargs...)]
+end
+bad_pixel_flagger(d::Data; kwargs...) = bad_pixel_flagger(d.flux, d.var; kwargs...)
+function mask_bad_pixel!(y::AbstractArray, σ²::AbstractArray; kwargs...)
+	i = bad_pixel_flagger(y, σ²; kwargs...)
+	if length(i) > 0
+		# y[i, :] .= 1
+		σ²[i, :] .= Inf
+		println("masked out high acceleration pixels $i at all times")
+	end
+end
+mask_bad_pixel!(d::Data; kwargs...) = mask_bad_pixel!(d.flux, d.var; kwargs...)
+
 function process!(d; λ_thres::Real=4000., kwargs...)
 	flat_normalize!(d)
-	mask_low_pixels!(d)
-	mask_high_pixels!(d)
+	mask_low_pixels_all_times!(d; padding=0)
+	mask_high_pixels!(d; padding=0)
+	mask_bad_pixel!(d)
 	mask_bad_edges!(d)
 	# λ_thres = 4000 # is there likely to even be a continuum (neid index order 22+)
 	# λ_thres = 6200 # where neid blaze correction starts to break down (neid index order 77+)
