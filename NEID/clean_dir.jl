@@ -9,7 +9,7 @@ using Dates
 ## Setting up necessary variables
 
 stars = ["10700", "26965", "22049", "3651", "2021/12/19", "2021/12/20", "2021/12/23"]
-orders_list = repeat([4:122], length(stars))
+orders_list = repeat([4:118], length(stars))
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 cutoff = now() - Week(1)
 # cutoff = DateTime(2022,8,19)

@@ -16,7 +16,7 @@ SSOF_path = dirname(dirname(pathof(SSOF)))
 include(SSOF_path * "/SSOFUtilities/SSOFUtilities.jl")
 SSOFU = SSOFUtilities
 stars = ["10700", "26965", "22049", "3651", "2021/12/19", "2021/12/20", "2021/12/23"]
-orders_list = repeat([4:122], length(stars))
+orders_list = repeat([4:118], length(stars))
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
 star_ind = SSOF.parse_args(1, Int, 2)
 bootstrap = SSOF.parse_args(2, Bool, false)

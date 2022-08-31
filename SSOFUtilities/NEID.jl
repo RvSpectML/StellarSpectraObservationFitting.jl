@@ -41,7 +41,7 @@ function neid_extras(df_files::DataFrame, save_path_base::String)
 	neid_time = zeros(n_obs)
 	neid_rv = zeros(n_obs)
 	neid_rv_σ = zeros(n_obs)
-	neid_order_rv = zeros(n_obs, 122)
+	neid_order_rv = zeros(n_obs, 118)
 	for i in 1:n_obs # at every time
 		f = FITS(df_files.Filename[i])
 		driftfun = read_header(f[1])["DRIFTFUN"]

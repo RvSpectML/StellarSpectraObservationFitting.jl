@@ -18,7 +18,7 @@ prep_str = "nolsf_"
 
 # for date_ind in 1:2
 date_ind = SSOF.parse_args(1, Int, 3)
-orders_list = [4:122, 4:122, 4:122, 4:122]
+orders_list = [4:118, 4:118, 4:118, 4:118]
 date = dates[date_ind]
 date_ = replace(date, "/" => "_")
 orders = orders_list[date_ind]

@@ -62,7 +62,7 @@ function fit_var(optim, data_base, interps; n::Int=30)
     return vec(std(results_holder; dims=1)) .^ 2
 end
 
-# for desired_order in 4:122
+# for desired_order in 4:118
 for desired_order in 60:85
     base_path = neid_save_path * star * "/$(desired_order)/"
     data_path = base_path * "data.jld2"
