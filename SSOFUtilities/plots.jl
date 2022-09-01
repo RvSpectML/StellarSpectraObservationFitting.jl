@@ -21,7 +21,12 @@ theme(_theme)
 _scatter!(plt::Union{Plots.AbstractPlot,Plots.AbstractLayout}, x::AbstractVecOrMat, y::AbstractVecOrMat; markerstrokewidth::Real=0, kwargs...) = scatter!(plt, x, y; markerstrokewidth=markerstrokewidth, kwargs...)
 _theme == :default ? plt_colors = palette(_theme).colors.colors : plt_colors = PlotThemes._themes[_theme].defaults[:palette].colors.colors
 
-plot_model_rvs!(plt, times, rvs, rvs_σ; label="", xlabel="", kwargs...) = scatter!(plt, times, rvs; markerstrokewidth=0.5, yerror=rvs_σ, label=label*" RVs, std: $(round(std(rvs), digits=3)), intra night std: $(round(SSOF.intra_night_std(rvs, times; show_warn=false), digits=3))", xlabel=xlabel, kwargs...)
+function rv_legend(label, rvs, times)
+	intra_night = SSOF.intra_night_std(rvs, times; show_warn=false)
+	isinf(intra_night) ? appen = "" : appen = ", intra night std: $(round(intra_night, digits=3))"
+	return label * " RVs, std: $(round(std(rvs), digits=3))" * appen
+end
+plot_model_rvs!(plt, times, rvs, rvs_σ; label="", xlabel="", kwargs...) = scatter!(plt, times, rvs; markerstrokewidth=0.5, yerror=rvs_σ, label=rv_legend(label, rvs, times), xlabel=xlabel, kwargs...)
 function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat{T}, model_rvs_σ::AbstractVecOrMat{T}, inst_times::AbstractVector{T}, inst_rvs::AbstractVector{T}, inst_rvs_σ::AbstractVector{T}; display_plt::Bool=true, kwargs...) where {T<:Real}
     plt = plot_rv(; legend=:bottomleft, layout=grid(2, 1, heights=[0.7, 0.3]))
     ervs = inst_rvs .- median(inst_rvs)
@@ -35,7 +40,7 @@ function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat
 end
 function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat{T}, model_rvs_σ::AbstractVecOrMat{T}, inst_times::AbstractVector{T}, inst_rvs::AbstractVector{T}, inst_rvs_σ::AbstractVector{T}, ccf_rvs::AbstractVector{T}; display_plt::Bool=true, kwargs...) where {T<:Real}
     plt = plot_model_rvs(times_nu, model_rvs, model_rvs_σ, inst_times, inst_rvs, inst_rvs_σ)
-    _scatter!(plt[1], inst_times, ccf_rvs .- median(ccf_rvs); label="CCF RVs,      std: $(round(std(ccf_rvs), digits=3)), intra night std: $(round(SSOF.intra_night_std(ccf_rvs, inst_times; show_warn=false), digits=3))", alpha = 0.7, markerstrokewidth=0.5, kwargs...)
+    _scatter!(plt[1], inst_times, ccf_rvs .- median(ccf_rvs); label=rv_legend("CCF", ccf_rvs, inst_times), alpha = 0.7, markerstrokewidth=0.5, kwargs...)
     if display_plt; display(plt) end
     return plt
 end
@@ -267,4 +272,18 @@ function save_model_plots(mws, airmasses, times_nu, save_path::String; display_p
 
 	plt = status_plot(mws; display_plt=display_plt, kwargs...);
 	png(plt, save_path * "status_plot.png")
+end
+
+
+function data_usage_plot(d::SSOF.Data; save_path::String="")
+	ever_used = vec(any(.!isinf.(d.var); dims=2))
+	always_used = vec(all(.!(isinf.(d.var)); dims=2))
+	sometimes_used = xor.(ever_used, always_used)
+
+	plt = _plot(; title="Data usage", legend=:bottomright)
+	plot!(plt, (1:size(d.flux, 1))[always_used], vec(mean(view(d.flux, always_used, :); dims=2)); label="Used at all times", c=base_color)
+	scatter!(plt, (1:size(d.flux, 1))[sometimes_used], vec(mean(view(d.flux, sometimes_used, :); dims=2)); label="Used sometimes", c=plt_colors[1], alpha=0.5, markerstrokewidth=0)
+	scatter!(plt, (1:size(d.flux, 1))[.!ever_used], vec(mean(view(d.flux, .!ever_used, :); dims=2)); label="Never Used", c=plt_colors[2], alpha=0.5, markerstrokewidth=0)
+	if save_path != ""; png(plt, save_path * "data_usage.png") end
+	return plt
 end

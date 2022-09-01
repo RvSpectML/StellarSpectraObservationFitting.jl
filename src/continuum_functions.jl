@@ -103,7 +103,7 @@ mask_low_pixels!(d::Data; kwargs...) = mask_low_pixels!(d.flux, d.var; kwargs...
 function mask_low_pixels_all_times!(y::AbstractMatrix, σ²::AbstractMatrix; min_flux::Real=_min_flux_default, padding::Int=2, using_weights::Bool=false)
 	bad = (y .< min_flux) .|| .!isfinite.(y)
 	# y[bad] .= min_flux
-	l = length(bad)
+	l = size(bad, 1)
 	low_pix = Int64[]
 	for ij in findall(bad)
 		i = ij[1]
@@ -138,7 +138,7 @@ function mask_high_pixels!(y::AbstractMatrix, σ²::AbstractMatrix; kwargs...)
 end
 mask_high_pixels!(d::Data; kwargs...) = mask_high_pixels!(d.flux, d.var; kwargs...)
 
-function mask_bad_edges!(y::AbstractVector, σ²::AbstractVector; window_width::Int=128, min_snr::Real=5.)
+function mask_bad_edges!(y::AbstractVector, σ²::AbstractVector; window_width::Int=128, min_snr::Real=8.)
 	n_pix = length(y)
 	for window_start in 1:Int(floor(window_width/10)):(n_pix - window_width)
 		window_end = window_start + window_width
@@ -157,10 +157,41 @@ function mask_bad_edges!(y::AbstractVector, σ²::AbstractVector; window_width::
 		end
 	end
 end
-function mask_bad_edges!(d::Data; kwargs...)
-	for i in 1:size(d.log_λ_obs, 2)
-		mask_bad_edges!(view(d.flux, :, i), view(d.var, :, i); kwargs...)
+function mask_bad_edges!(y::AbstractMatrix, σ²::AbstractMatrix; window_width::Int=128, min_snr::Real=8.)
+	n_pix = size(y, 1)
+	window_start_tot = 0
+	window_end_tot = n_pix + 1
+	for i in 1:size(y, 2)
+		for window_start in 1:Int(floor(window_width/10)):(n_pix - window_width)
+			window_end = window_start + window_width
+			mean_snr = sqrt(mean((y[window_start:window_end, i] .^2) ./ abs.(σ²[window_start:window_end, i])))
+			if mean_snr > min_snr
+				window_start_tot = max(window_start_tot, window_start)
+				break
+			end
+		end
 	end
+	if window_start_tot > 1
+		σ²[1:window_start_tot, :] .= Inf # trim everything to left of window
+		println("masking out low SNR edge from 1:$window_start_tot")
+	end
+	for i in 1:size(y,2)
+		for window_end in n_pix:-Int(floor(window_width/10)):(window_width + 1)
+			window_start = window_end - window_width
+			mean_snr = sqrt(mean((y[window_start:window_end] .^2) ./ abs.(σ²[window_start:window_end])))
+			if mean_snr > min_snr
+				window_end_tot = min(window_end_tot, window_end)
+				break
+			end
+		end
+	end
+	if window_end_tot < n_pix
+		σ²[window_end_tot:end, :] .= Inf # trim everything to right of window
+		println("masking out low SNR edge from $window_end_tot:end")
+	end
+end
+function mask_bad_edges!(d::Data; kwargs...)
+	mask_bad_edges!(d.flux, d.var; kwargs...)
 end
 
 function flat_normalize!(d::Data; kwargs...)
@@ -198,7 +229,7 @@ function recognize_bad_drift!(d::Data; kwargs...)
 	end
 end
 
-function snap(y::AbstractArray, σ²::AbstractArray)
+function snap(y::AbstractMatrix, σ²::AbstractMatrix)
 	@assert size(y) == size(σ²)
 	snp = Array{Float64}(undef, size(y, 1), size(y, 2))
 	m = .!isinf.(σ²)
@@ -206,17 +237,18 @@ function snap(y::AbstractArray, σ²::AbstractArray)
 	snp[1:2, :] .= 0
 	snp[end-1:end, :] .= 0
 	snp[3:end-2, :] .= abs.(view(y, 5:l, :) - 4view(y, 4:(l-1), :) + 6view(y, 3:(l-2), :) - 4view(y, 2:(l-3), :) + view(y, 1:(l-4), :)) .* view(m, 5:l, :) .* view(m, 4:(l-1), :) .* view(m, 2:(l-3), :) .* view(m, 1:(l-4), :)
-	snp[σ².==Inf] .= 0
+	# snp[.!m] .= 0
+	snp[all(.!m; dims=2), :] .= 0
 	return snp
 end
-function bad_pixel_flagger(y::AbstractArray, σ²::AbstractArray; prop::Real=.001, thres::Real=8)
+function bad_pixel_flagger(y::AbstractMatrix, σ²::AbstractMatrix; prop::Real=.001, thres::Real=8)
 	snp = snap(y, σ²)
 	snp = vec(mean(snp; dims=2))
 	high_snap_pixels = find_modes(snp)
-	return high_snap_pixels[.!outlier_mask(snp[high_snap_pixels]; prop=prop, thres=thres)]
+	return high_snap_pixels[.!outlier_mask(snp[high_snap_pixels]; prop=prop*length(snp)/length(high_snap_pixels), thres=thres)]
 end
 bad_pixel_flagger(d::Data; kwargs...) = bad_pixel_flagger(d.flux, d.var; kwargs...)
-function mask_bad_pixel!(y::AbstractArray, σ²::AbstractArray; kwargs...)
+function mask_bad_pixel!(y::AbstractMatrix, σ²::AbstractMatrix; kwargs...)
 	i = bad_pixel_flagger(y, σ²; kwargs...)
 	if length(i) > 15
 		println("lots of snappy pixels, investigate?")
@@ -232,8 +264,8 @@ function process!(d; λ_thres::Real=4000., kwargs...)
 	flat_normalize!(d)
 	mask_low_pixels_all_times!(d; padding=0)
 	mask_high_pixels!(d; padding=0)
-	mask_bad_pixel!(d;)  # thres from 4-11 seems good
-	mask_bad_edges!(d)
+	mask_bad_pixel!(d)  # thres from 4-11 seems good
+	mask_bad_edges!(d; min_snr=8)
 	# λ_thres = 4000 # is there likely to even be a continuum (neid index order 22+)
 	# λ_thres = 6200 # where neid blaze correction starts to break down (neid index order 77+)
 	# red_enough = minimum(d.log_λ_obs) > log(6200)

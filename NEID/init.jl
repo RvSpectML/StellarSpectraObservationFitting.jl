@@ -31,6 +31,6 @@ SSOFU.reformat_spectra(
 	df_files_use,
 	neid_save_path * target_subdir,
 	NEID,
-	min_order(NEID2D()):max_order(NEID2D());
+	min_order(NEID2D()):118;
 	lsf_f = NEIDLSF.neid_lsf)
 SSOFU.neid_extras(df_files_use, neid_save_path * target_subdir)

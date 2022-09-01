@@ -17,6 +17,7 @@ function create_model(
 	use_reg::Bool=true,
 	save_fn::String="",
 	recalc::Bool=false,
+	min_pix::Int=800,
 	kwargs...
 	)
 
@@ -24,6 +25,9 @@ function create_model(
 
 	# save_path = save_path_base * star * "/$(desired_order)/"
 	@load data_fn n_obs data times_nu airmasses
+	if sum(all(.!(isinf.(data.var)); dims=2)) < min_pix
+		@error "quitting analysis as there is not enough useful data (<$min_pix pixels used at all times)"
+	end
 	data.var[data.var .== 0] .= Inf
 
 	# takes a couple mins now
