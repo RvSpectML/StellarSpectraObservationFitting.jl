@@ -10,7 +10,7 @@ _high_quantile_default = 0.9
 # These were initially defined to act on all of the orders of the spectra at a
 # given time, but I have defined them to act on all of the times of the spectra
 # at a given order. Should be equivalent
-function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVector; ignore_weights::Bool=false, order::Int=6, nsigma::Vector{<:Real}=[0.3,3.0], maxniter::Int=50, plot_stuff::Bool=false, edge_mask::Int=0)
+function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVector; ignore_weights::Bool=false, order::Int=6, nsigma::Vector{<:Real}=[0.5,3.0], maxniter::Int=50, plot_stuff::Bool=false, edge_mask::Int=0)
     """Fit the continuum using sigma clipping
     Args:
         x: The wavelengths
@@ -266,12 +266,14 @@ function process!(d; λ_thres::Real=4000., kwargs...)
 	mask_high_pixels!(d; padding=0)
 	mask_bad_pixel!(d)  # thres from 4-11 seems good
 	mask_bad_edges!(d; min_snr=8)
-	# λ_thres = 4000 # is there likely to even be a continuum (neid index order 22+)
+	# λ_thres = 4000 # is there likely to even be a continuum (neid index order 23+)
 	# λ_thres = 6200 # where neid blaze correction starts to break down (neid index order 77+)
 	# red_enough = minimum(d.log_λ_obs) > log(6200)
 	red_enough = minimum(d.log_λ_obs) > log(λ_thres)
-	enough_points = (sum(isinf.(d.var)) / length(d.var)) < 0.5
+	# enough_points = (sum(isinf.(d.var)) / length(d.var)) < 0.5
+	enough_points = true
 	if (red_enough && enough_points)
+		println("normalizing")
 		w = continuum_normalize!(d; kwargs...)
 	else
 		w = nothing
