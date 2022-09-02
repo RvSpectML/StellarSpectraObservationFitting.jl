@@ -15,6 +15,7 @@ stars = ["10700", "26965", "22049", "3651", "2021/12/19", "2021/12/20", "2021/12
 star_choice = SSOF.parse_args(1, Int, 2)
 star = stars[star_choice]
 solar = star_choice > 5
+if length(ARGS) != 0; ENV["GKSwstype"] = "100" end
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
 target_subdir = star * "/"  # needed for param.jl
 if solar
