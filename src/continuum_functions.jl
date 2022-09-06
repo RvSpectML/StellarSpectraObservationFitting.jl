@@ -202,32 +202,43 @@ function flat_normalize!(d::Data; kwargs...)
 	end
 end
 
-function outlier_mask(v::AbstractVecOrMat; thres::Real=10, prop::Real=0.2)
+function outlier_mask(v::AbstractVecOrMat; thres::Real=10, prop::Real=0.2, return_stats::Bool=false, only_low::Bool=false)
 	wv = winsor(v; prop=prop)
 	μ = mean(wv)
 	σ = stdm(wv, μ)
-	return (v .< (μ + thres * σ)) .&& (v .> (μ - thres * σ))
+	if only_low
+		mask = v .> (μ - thres * σ)
+		if return_stats
+			return mask, (v .- μ) ./ σ
+		end
+	else
+		mask = (v .< (μ + thres * σ)) .&& (v .> (μ - thres * σ))
+	end
+	if return_stats
+		return mask, abs.((v .- μ) ./ σ)
+	end
+	return mask
 end
 
-function recognize_bad_normalization!(d::Data; kwargs...)
-	mask = outlier_mask([mean(view(d.var, .!isinf.(view(d.var, :, i)), i)) for i in 1:size(d.var, 2)]; kwargs...) .|| outlier_mask(vec(std(d.flux; dims=1)); kwargs...)
-	for i in 1:size(d.log_λ_obs, 2)
-		if !mask[i]
-			# d.var[:, i] .= Inf
-			println("spectrum $i has a weird continuum normalization, consider removing it from your analysis")
-		end
-	end
-end
+# function recognize_bad_normalization!(d::Data; kwargs...)
+# 	mask = outlier_mask([mean(view(d.var, .!isinf.(view(d.var, :, i)), i)) for i in 1:size(d.var, 2)]; kwargs...) .|| outlier_mask(vec(std(d.flux; dims=1)); kwargs...)
+# 	for i in 1:size(d.log_λ_obs, 2)
+# 		if !mask[i]
+# 			# d.var[:, i] .= Inf
+# 			println("spectrum $i has a weird continuum normalization, consider removing it from your analysis")
+# 		end
+# 	end
+# end
 
-function recognize_bad_drift!(d::Data; kwargs...)
-	mask = outlier_mask(d.log_λ_obs[1, :]; kwargs...)
-	for i in 1:size(d.log_λ_obs, 2)
-		if !mask[i]
-			# d.var[:, i] .= Inf
-			println("spectrum $i has a weird drift, consider removing it from your analysis")
-		end
-	end
-end
+# function recognize_bad_drift!(d::Data; kwargs...)
+# 	mask = outlier_mask(d.log_λ_obs[1, :]; kwargs...)
+# 	for i in 1:size(d.log_λ_obs, 2)
+# 		if !mask[i]
+# 			# d.var[:, i] .= Inf
+# 			println("spectrum $i has a weird drift, consider removing it from your analysis")
+# 		end
+# 	end
+# end
 
 function snap(y::AbstractMatrix, σ²::AbstractMatrix)
 	@assert size(y) == size(σ²)
@@ -278,7 +289,7 @@ function process!(d; λ_thres::Real=4000., kwargs...)
 	else
 		w = nothing
 	end
-	recognize_bad_normalization!(d; thres=20)
-	recognize_bad_drift!(d; thres=20)
+	# recognize_bad_normalization!(d; thres=20)
+	# recognize_bad_drift!(d; thres=20)
 	return w
 end

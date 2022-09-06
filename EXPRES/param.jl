@@ -9,4 +9,9 @@ global df_files_use = df_files |>
    @take(max_spectra_to_use) |>
    DataFrame
 
+df_files_use = df_files_use |>
+   @orderby(_.bjd) |>
+   @take(max_spectra_to_use) |>
+   DataFrame
+   
 println("# Found ", size(df_files_use,1), " files of ",  size(df_files,1), " to process.")

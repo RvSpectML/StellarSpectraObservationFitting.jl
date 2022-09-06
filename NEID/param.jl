@@ -82,15 +82,21 @@ else
 	global df_files_use = df_files |>
 		@filter( _.target == fits_target_str ) |>
 		DataFrame
-		
-   df_files_use = df_files_use |>
-	   @filter( _.driftfun == "dailymodel0" ) |>
-	   DataFrame
 
-   df_files_use = df_files_use |>
-	   @orderby(_.bjd) |>
-	   @take(max_spectra_to_use) |>
-	   DataFrame
+	bad_drift = df_files_use.driftfun .== "dailymodel0"
+	for i in 1:length(bad_drift)
+		if !bad_drift[i]
+			println("ignoring $(df_files_use.Filename[i]) because of bad drift model")
+		end
+	end
+	df_files_use = df_files_use |>
+		@filter( _.driftfun == "dailymodel0" ) |>
+		DataFrame
+
+	df_files_use = df_files_use |>
+		@orderby(_.bjd) |>
+		@take(max_spectra_to_use) |>
+		DataFrame
 end
 
 println("# Found ", size(df_files_use,1), " files of ",  size(df_files,1), " to process.")
