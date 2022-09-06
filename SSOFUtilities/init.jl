@@ -99,7 +99,7 @@ function reformat_spectra(
 		display(plt)
 		println("How many points have bad drifts and should be removed?")
 		println("Points sorted by anomalousness")
-		println(worst_points, "\n\n")
+		println(worst_points, "\n")
 		answer = readline()
 		n_points_remove = parse(Int, answer)
 		if n_points_remove > 0
@@ -133,7 +133,7 @@ function reformat_spectra(
 		display(plt)
 		println("How many low snr points should be removed?")
 		println("Points sorted by snr")
-		println(worst_points, "\n\n")
+		println(worst_points, "\n")
 		answer = readline()
 		n_points_remove = parse(Int, answer)
 		if n_points_remove > 0

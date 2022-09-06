@@ -271,12 +271,37 @@ function mask_bad_pixel!(y::AbstractMatrix, σ²::AbstractMatrix; kwargs...)
 end
 mask_bad_pixel!(d::Data; kwargs...) = mask_bad_pixel!(d.flux, d.var; kwargs...)
 
+function mask_isolated_pixels!(σ²::AbstractMatrix; neighbors_required::Int=29)
+	lo = 1
+	hi = 1
+	m = vec(all(isinf.(σ²); dims=2))
+	l = length(m)
+	while lo <= l
+		if m[lo]
+			lo += 1
+		else
+			hi = lo + 1
+			while hi <= l && !m[hi]
+				hi += 1
+			end
+			hi -= 1
+			if hi-lo < neighbors_required
+				σ²[lo:hi, :] .= Inf
+				println("masked isolated pixels $lo:$hi")
+			end
+			lo = hi + 1
+		end
+	end
+end
+mask_isolated_pixels!(d::Data; kwargs...) = mask_isolated_pixels!(d.var; kwargs...)
+
 function process!(d; λ_thres::Real=4000., kwargs...)
 	flat_normalize!(d)
 	mask_low_pixels_all_times!(d; padding=0)
 	mask_high_pixels!(d; padding=0)
 	mask_bad_pixel!(d)  # thres from 4-11 seems good
 	mask_bad_edges!(d; min_snr=8)
+	mask_isolated_pixels!(d)
 	# λ_thres = 4000 # is there likely to even be a continuum (neid index order 23+)
 	# λ_thres = 6200 # where neid blaze correction starts to break down (neid index order 77+)
 	# red_enough = minimum(d.log_λ_obs) > log(6200)
