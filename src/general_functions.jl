@@ -108,7 +108,7 @@ function banded_inds(row::Int, span::Int, row_len::Int)
 	return low, high
 end
 
-function vander(x::AbstractVector, n::Int)
+function _vander(x::AbstractVector, n::Int)
     m = ones(length(x), n + 1)
     for i in 1:n
         m[:, i + 1] .= m[:, i] .* x
@@ -154,12 +154,12 @@ fwhm_2_σ(fwhm::Real) = _fwhm_2_σ_factor * fwhm
 ordinary_lst_sq(
     data::AbstractVector,
     order::Int;
-	x::AbstractVector=1:length(data)) = ordinary_lst_sq(vander(x, order), data)
+	x::AbstractVector=1:length(data)) = ordinary_lst_sq(_vander(x, order), data)
 general_lst_sq(
     data::AbstractVector,
 	Σ,
     order::Int;
-	x::AbstractVector=1:length(data)) = general_lst_sq(vander(x, order), data, Σ)
+	x::AbstractVector=1:length(data)) = general_lst_sq(_vander(x, order), data, Σ)
 
 lst_sq_poly_f(w) = x -> LinearAlgebra.BLAS.dot([x ^ i for i in 0:(length(w)-1)], w)
 # fastest of the following

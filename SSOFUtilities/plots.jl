@@ -204,7 +204,7 @@ function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool
 		plt = plot_spectrum(; legend = :bottomright, layout = grid(2, 1, heights=[0.85, 0.15]), kwargs...)
 
 	tel_model = time_average(mws.om.tel.lm())
-    plot!(plt[1], mws.om.tel.λ, tel_model, label="Mean Telluric Model")
+    plot_telluric_with_lsf!(plt[1], mws.om, vec(tel_model); d=mws.d, label="Mean Telluric Model", color=plt_colors[1])
     shift = 1.1 - minimum(tel_model)
 
 	star_model = time_average(mws.om.star.lm())
@@ -212,7 +212,7 @@ function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool
 	# 	star_model = time_average(mws.om.star()) :
 	# 	star_model = time_average(mws.om.star() + mws.om.rv())
 
-    plot!(plt[1], mws.om.star.λ, star_model .- shift, label="Mean Stellar Model")
+	plot_stellar_with_lsf!(plt[1], mws.om, vec(star_model .- shift); d=mws.d, label="Mean Stellar Model", color=plt_colors[2])
 
     # shift += 1.1 - minimum(star_model)
     # plot!(plt[1], obs_λ, time_average(o.total) .- shift, label="Mean Full Model", color=base_color)

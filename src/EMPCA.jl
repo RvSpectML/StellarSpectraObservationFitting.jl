@@ -17,10 +17,12 @@ function EMPCA!(M::AbstractMatrix, scores::AbstractMatrix, μ::AbstractVector, X
 end
 
 function _empca!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(M, 2), vec_by_vec::Bool=true, kwargs...)
-	@assert inds[1] > 0
-	vec_by_vec ?
-		_empca_vec_by_vec!(view(M, :, inds), view(scores, inds, :), Xtmp, weights; nvec=length(inds), kwargs...) :
-		_empca_all_at_once!(view(M, :, inds), view(scores, inds, :), Xtmp, weights; nvec=length(inds), kwargs...)
+	if length(inds) > 0
+		@assert inds[1] > 0
+		vec_by_vec ?
+			_empca_vec_by_vec!(view(M, :, inds), view(scores, inds, :), Xtmp, weights; nvec=length(inds), kwargs...) :
+			_empca_all_at_once!(view(M, :, inds), view(scores, inds, :), Xtmp, weights; nvec=length(inds), kwargs...)
+	end
 end
 
 function _solve_coeffs!(eigvec::AbstractVector, coeff::AbstractVector, data::AbstractMatrix, weights::AbstractMatrix)

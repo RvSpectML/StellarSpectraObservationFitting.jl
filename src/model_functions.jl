@@ -370,9 +370,16 @@ function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=
 	log_λ, λ = create_λ_template(log_λ_obs; kwargs...)
 	len = length(log_λ)
 	if include_mean
-		lm = FullLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs), ones(len), log_lm)
+		if n_comp > 0
+			lm = FullLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs), ones(len), log_lm)
+		else
+			lm = TemplateModel(ones(len), n_obs)
+		end
 	else
-		lm = BaseLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs), log_lm)
+		if n_comp > 0
+			lm = BaseLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs), log_lm)
+		end
+		@error "you need a mean if you don't want any components"
 	end
 	if type == :star
 		A_sde, Σ_sde = SOAP_gp_sde_prediction_matrices(step(log_λ))
@@ -752,8 +759,8 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 	seeded = !isnothing(seed)
 
 	n_obs = size(d.flux, 2)
-	n_comp_star = size(om.star.lm.M, 2)
-	n_comp_tel = size(om.tel.lm.M, 2)
+	is_time_variable(om.star.lm) ? n_comp_star = size(om.star.lm.M, 2) : n_comp_star = 0
+	is_time_variable(om.tel.lm) ? n_comp_tel = size(om.tel.lm.M, 2) : n_comp_tel = 0
 
 	star_log_λ_tel = _shift_log_λ_model(d.log_λ_obs, d.log_λ_star, om.star.log_λ)
 	tel_log_λ_star = _shift_log_λ_model(d.log_λ_star, d.log_λ_obs, om.tel.log_λ)
@@ -762,14 +769,16 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 	flux_tel = ones(length(om.tel.log_λ), n_obs)
 	vars_tel = SOAP_gp_var .* ones(length(om.tel.log_λ), n_obs)
 	lm_tel = copy(om.tel.lm)
-	lm_star = FullLinearModel(zeros(size(om.star.lm.M, 1), n_comp_star + 1), zeros(n_comp_star + 1, size(om.star.lm.s, 2)), zeros(size(om.star.lm.M, 1)), om.star.lm.log)
+	lm_star = FullLinearModel(zeros(length(om.star.lm.μ), n_comp_star + 1), zeros(n_comp_star + 1, n_obs), zeros(length(om.star.lm.μ)), log_lm(om.star.lm))
 
 	function update_tel(lm_tel::LinearModel, use_mean::Bool)
 		_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
 		lm_tel.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
 		mask_low_pixels!(flux_tel, vars_tel)
 		mask_high_pixels!(flux_tel, vars_tel)
-		EMPCA!(lm_tel.M, lm_tel.s, lm_tel.μ, flux_tel, 1 ./ vars_tel; log_lm=log_lm(lm_tel))
+		if is_time_variable(om.tel)
+			EMPCA!(lm_tel.M, lm_tel.s, lm_tel.μ, flux_tel, 1 ./ vars_tel; log_lm=log_lm(lm_tel))
+		end
 	end
 
 	function update_star(lm_star::LinearModel, use_mean::Bool)
@@ -987,13 +996,13 @@ function flip_basis_vectors!(lms::Vector{<:LinearModel})
 end
 
 
-fill_TelModel!(om::OrderModel, lm::FullLinearModel) =
+fill_TelModel!(om::OrderModel, lm::LinearModel) =
 	copy_to_LinearModel!(om.tel.lm, lm)
-fill_TelModel!(om::OrderModel, lm::FullLinearModel, inds) =
+fill_TelModel!(om::OrderModel, lm::LinearModel, inds) =
 	copy_to_LinearModel!(om.tel.lm, lm, inds)
 
 function fill_StarModel!(om::OrderModel, lm::FullLinearModel; inds=2:size(lm.M, 2))
-	@assert inds[1] > 1
+	if length(inds) > 0; @assert inds[1] > 1 end
 	copy_to_LinearModel!(om.star.lm, lm, inds)
 	if typeof(om) <: OrderModelDPCA
 		om.rv.lm.M .= view(lm.M, :, 1)

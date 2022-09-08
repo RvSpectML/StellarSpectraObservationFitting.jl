@@ -26,7 +26,7 @@ function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVecto
     @assert length(x) == length(y) == length(σ²)
     @assert length(nsigma) == 2
 
-    A = vander(x .- mean(x), order)
+    A = _vander(x .- mean(x), order)
     m = fill(true, length(x))
 	# σ² = copy(σ²)
 	# σ²_thres = quantile(σ²[.!isinf.(σ²)], _high_quantile_default)/10
