@@ -771,9 +771,74 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 	lm_tel = copy(om.tel.lm)
 	lm_star = FullLinearModel(zeros(length(om.star.lm.μ), n_comp_star + 1), zeros(n_comp_star + 1, n_obs), zeros(length(om.star.lm.μ)), log_lm(om.star.lm))
 
-	function update_tel(lm_tel::LinearModel, use_mean::Bool)
+
+	function reciprocal_continuum_mask(continuum::AbstractVector, other_interpolated_continuum::AbstractVector; probe_depth::Real=0.02, return_cc::Bool=false)
+		# probe_depth=0.0
+		cc = (1 .- continuum) .* (1 .- other_interpolated_continuum)
+		ccm = find_modes(-cc)
+
+		ccm = [i for i in ccm if ((cc[i] < -(probe_depth^2)) && (0.5 < abs(continuum[i] / other_interpolated_continuum[i]) < 2))]
+		mask = zeros(Bool, length(cc))
+		l = length(cc)
+		for m in ccm
+			i = m
+			while i <= l && cc[i] < 0
+				mask[i] = true
+				i += 1
+			end
+			i = m-1
+			while i >= 1 && cc[i] < 0
+				mask[i] = true
+				i -= 1
+			end
+		end
+		if return_cc
+			return mask, cc
+		end
+		return mask
+	end
+	reciprocal_continuum_mask(continuum::AbstractVector, other_interpolated_continuum::AbstractMatrix; kwargs...) =
+		reciprocal_continuum_mask(continuum, vec(mean(other_interpolated_continuum; dims=2)); kwargs...)
+
+	function remove_reciprocal_continuum!(lm_star::LinearModel, lm_tel::LinearModel, flux_star_holder::AbstractMatrix, vars_star_holder::AbstractMatrix, flux_tel_holder::AbstractMatrix, vars_tel_holder::AbstractMatrix; kwargs...)
+
+		_, c_t, _ = calc_continuum(om.tel.λ, lm_tel.μ, ones(length(lm_tel.μ)) ./ 1000;
+			min_R_factor=1, smoothing_half_width=0,
+			stretch_factor=10., merging_threshold = 0.)
+
+		_, c_s, _ = calc_continuum(om.star.λ, lm_star.μ, ones(length(lm_star.μ)) ./ 1000;
+			min_R_factor=1,
+			stretch_factor=10., merging_threshold = 0.)
+
+		flux_star_holder .= c_s
+		vars_star_holder .= SOAP_gp_var
+		_spectra_interp_gp!(flux_tel_holder, vars_tel_holder, om.tel.log_λ, flux_star_holder, vars_star_holder, star_log_λ_tel; gp_mean=1.)
+		m, cc = reciprocal_continuum_mask(c_t, flux_tel_holder; return_cc=true, kwargs...)
+		lm_tel.μ[m] .*= vec(mean(flux_tel_holder[m, :]; dims=2))
+		did_anything = any(m)
+
+		flux_tel .= c_t
+		vars_tel .= SOAP_gp_var
+		_spectra_interp_gp!(flux_star_holder, vars_star_holder, om.star.log_λ, flux_tel_holder, vars_tel_holder, tel_log_λ_star; gp_mean=1.)
+		m, cc = reciprocal_continuum_mask(c_s, flux_star_holder; return_cc=true, kwargs...)
+		lm_star.μ[m] ./= c_s[m]
+		return did_anything || any(m)
+
+	end
+
+	function update_tel!(lm_star::LinearModel, lm_tel::LinearModel, use_mean::Bool; remove_reciprocal_continuum::Bool=false)
 		_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
 		lm_tel.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
+		if remove_reciprocal_continuum
+			did_anything = remove_reciprocal_continuum!(lm_star, lm_tel, flux_star, vars_star_copy, flux_tel, vars_tel_copy)
+			vars_star_copy .= vars_star
+			vars_tel_copy .= vars_tel
+			flux_star .= lm_star.μ
+			if did_anything
+				_spectra_interp_gp_div_gp!(flux_tel, vars_tel, om.tel.log_λ, d.flux, d.var, d.log_λ_obs, flux_star, vars_star, star_log_λ_tel)
+				lm_tel.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
+			end
+		end
 		mask_low_pixels!(flux_tel, vars_tel)
 		mask_high_pixels!(flux_tel, vars_tel)
 		if is_time_variable(om.tel)
@@ -781,9 +846,19 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 		end
 	end
 
-	function update_star(lm_star::LinearModel, use_mean::Bool)
+	function update_star!(lm_star::LinearModel, lm_tel::LinearModel, use_mean::Bool; remove_reciprocal_continuum::Bool=false)
 		_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
 		lm_star.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
+		if remove_reciprocal_continuum
+			did_anything = remove_reciprocal_continuum!(lm_star, lm_tel, flux_star, vars_star_copy, flux_tel, vars_tel_copy)
+			vars_star_copy .= vars_star
+			vars_tel_copy .= vars_tel
+			if did_anything
+				flux_tel .= lm_tel.μ
+				_spectra_interp_gp_div_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var, d.log_λ_star, flux_tel, vars_tel, tel_log_λ_star)
+				lm_star.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
+			end
+		end
 		mask_low_pixels!(flux_star, vars_star)
 		mask_high_pixels!(flux_star, vars_star)
 		DEMPCA!(lm_star.M, lm_star.s, lm_star.μ, flux_star, 1 ./ vars_star, calc_doppler_component_RVSKL(om.star.λ, lm_star.μ); log_lm=log_lm(lm_star))
@@ -854,6 +929,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 		# stellar flux assuming no tellurics
 		_spectra_interp_gp!(flux_star, vars_star, om.star.log_λ, d.flux, d.var .+ SOAP_gp_var, d.log_λ_star; gp_mean=1.)
 	end
+	vars_star_copy = copy(vars_star)
 	# stellar template assuming no tellurics
 	lm_star.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=seeded)
 
@@ -865,6 +941,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 		lm_tel.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=seeded)
 		tel_template_χ² = sum(_χ²_loss(tel_model(om; lm=lm_tel), d))
 	end
+	vars_tel_copy = copy(vars_tel)
 
 	stellar_dominated = seeded || tel_template_χ² > star_template_χ²
 	# use the better model as the initial basis
@@ -872,18 +949,19 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 		println("using stellar model as initial template")
 		# telluric model with stellar template
 		flux_star .= lm_star.μ
-		update_tel(lm_tel, seeded||use_mean)
+		# update_tel!(lm_star, lm_tel, seeded||use_mean; remove_reciprocal_continuum=true)
+		update_tel!(lm_star, lm_tel, seeded||use_mean; remove_reciprocal_continuum=false)
 		# updating stellar model with modified telluric template
 		flux_tel .= lm_tel.μ
-		update_star(lm_star, seeded||use_mean)
+		update_star!(lm_star, lm_tel, seeded||use_mean)
 	else
 		println("using telluric model as initial template")
 		# stellar model with telluric template
 		flux_tel .= lm_tel.μ
-		update_star(lm_star, seeded||use_mean)
+		update_star!(lm_star, lm_tel, seeded||use_mean)
 		# updating telluric model with modified stellar template
 		flux_star .= lm_star.μ
-		update_tel(lm_tel, seeded||use_mean)
+		update_tel!(lm_star, lm_tel, seeded||use_mean)
 	end
 
 	# stellar models with n basis telluric model
@@ -902,7 +980,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 		else
 			for i in 1:n_comp_tel
 				flux_tel .= _eval_lm(view(lm_tel.M, :, 1:i), view(lm_tel.s, 1:i, :), lm_tel.μ; log_lm=log_lm(lm_tel))
-				update_star(lm_star[i+1], true)
+				update_star!(lm_star[i+1], lm_tel, true)
 			end
 		end
 	else
@@ -933,7 +1011,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 				else
 					flux_star .= _eval_lm(view(lm_star[1].M, :, 1:(i+1)), view(lm_star[1].s, 1:(i+1), :), lm_star[1].μ; log_lm=log_lm(lm_star[1]))
 				end
-				update_tel(lm_tel[i+1], true)
+				update_tel!(lm_star[1], lm_tel[i+1], true)
 			end
 		end
 	else

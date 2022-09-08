@@ -12,5 +12,6 @@ include("model_selection_functions.jl")
 include("mask_functions.jl")
 include("Nabla_extension.jl")
 include("prior_gp_functions.jl")
+include("rassine.jl")
 
 end # module
