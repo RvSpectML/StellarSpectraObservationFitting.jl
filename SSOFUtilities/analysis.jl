@@ -335,7 +335,7 @@ function estimate_σ_bootstrap_reducer(shaper::AbstractArray, holder::AbstractAr
 	return result
 end
 
-function estimate_σ_bootstrap_helper!(rv_holder::AbstractMatrix, tel_holder, star_holder, i::Int, mws::SSOF.ModelWorkspace, data_noise::AbstractMatrix, n::Int)
+function estimate_σ_bootstrap_helper!(rv_holder::AbstractMatrix, tel_holder, star_holder, i::Int, mws::SSOF.ModelWorkspace, data_noise::AbstractMatrix, n::Int; print_stuff::Bool=true)
 	time_var_tel = SSOF.is_time_variable(mws.om.tel)
 	time_var_star = SSOF.is_time_variable(mws.om.star)
 	_mws = typeof(mws)(copy(mws.om), copy(mws.d))
@@ -348,10 +348,10 @@ function estimate_σ_bootstrap_helper!(rv_holder::AbstractMatrix, tel_holder, st
 	if time_var_star
 		star_holder[i, :, :] .= _mws.om.star.lm.s
 	end
-	if i%10==0; println("done with $i/$n bootstraps") end
+	if (print_stuff && i%10==0); println("done with $i/$n bootstraps") end
 end
 
-function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", n::Int=50, return_holders::Bool=false, recalc_mean::Bool=false, multithread::Bool=nthreads() > 3)
+function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", n::Int=50, return_holders::Bool=false, recalc_mean::Bool=false, multithread::Bool=nthreads() > 3, print_stuff::Bool=true)
 	save = save_fn!=""
 	if recalc || !mws.om.metadata[:todo][:err_estimated] # 25 mins
 	    mws.d.var[mws.d.var.==Inf] .= 0
@@ -376,11 +376,11 @@ function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, sav
 			# @batch per=core for i in 1:n
 			# using ThreadsX  # tiny bit better performance
 			ThreadsX.foreach(1:n) do i
-				estimate_σ_bootstrap_helper!(rv_holder, tel_holder, star_holder, i, mws, data_noise, n)
+				estimate_σ_bootstrap_helper!(rv_holder, tel_holder, star_holder, i, mws, data_noise, n; print_stuff=false)
 			end
 		else
 			for i in 1:n
-				estimate_σ_bootstrap_helper!(rv_holder, tel_holder, star_holder, i, mws, data_noise, n)
+				estimate_σ_bootstrap_helper!(rv_holder, tel_holder, star_holder, i, mws, data_noise, n; print_stuff=print_stuff)
 			end
 	    end
 		recalc_mean ? rvs = vec(mean(rv_holder; dims=1)) : rvs = SSOF.rvs(mws.om)
