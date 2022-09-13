@@ -26,7 +26,8 @@ function reformat_spectra(
 		df_files::DataFrame,
 		save_path_base::String,
 		RVSMLInstrument::Module,
-		orders_to_read::UnitRange;
+		orders_to_read::UnitRange,
+		star::String;
 		lsf_f::Union{Function,Nothing}=nothing,
 		interactive::Bool=false)
 
@@ -181,6 +182,7 @@ function reformat_spectra(
 		else
 			data = SSOF.GenericData(flux_obs, var_obs, log_λ_obs, log_λ_star)
 		end
+		if is_NEID; neid_order_masks!(data, order, star) end
 		# data_backup = copy(data)
 
 		SSOF.process!(data; order=2)

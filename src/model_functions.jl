@@ -754,7 +754,7 @@ end
 # end
 
 function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Number=1.25,
-	seed::Union{OrderModel, Nothing}=nothing, use_mean::Bool=true, multithread::Bool=nthreads() > 3)
+	seed::Union{OrderModel, Nothing}=nothing, use_mean::Bool=true, multithread::Bool=nthreads() > 3, remove_reciprocal_continuum::Bool=false, pairwise::Bool=true)
 
 	seeded = !isnothing(seed)
 
@@ -800,7 +800,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 	reciprocal_continuum_mask(continuum::AbstractVector, other_interpolated_continuum::AbstractMatrix; kwargs...) =
 		reciprocal_continuum_mask(continuum, vec(mean(other_interpolated_continuum; dims=2)); kwargs...)
 
-	function remove_reciprocal_continuum!(lm_star::LinearModel, lm_tel::LinearModel, flux_star_holder::AbstractMatrix, vars_star_holder::AbstractMatrix, flux_tel_holder::AbstractMatrix, vars_tel_holder::AbstractMatrix; kwargs...)
+	function remove_reciprocal_continuum!(lm_star::LinearModel, lm_tel::LinearModel, flux_star_holder::AbstractMatrix, vars_star_holder::AbstractMatrix, flux_tel_holder::AbstractMatrix, vars_tel_holder::AbstractMatrix; use_stellar_continuum::Bool=true, kwargs...)
 
 		_, c_t, _ = calc_continuum(om.tel.λ, lm_tel.μ, ones(length(lm_tel.μ)) ./ 1000;
 			min_R_factor=1, smoothing_half_width=0,
@@ -814,14 +814,18 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 		vars_star_holder .= SOAP_gp_var
 		_spectra_interp_gp!(flux_tel_holder, vars_tel_holder, om.tel.log_λ, flux_star_holder, vars_star_holder, star_log_λ_tel; gp_mean=1.)
 		m, cc = reciprocal_continuum_mask(c_t, flux_tel_holder; return_cc=true, kwargs...)
-		lm_tel.μ[m] .*= vec(mean(flux_tel_holder[m, :]; dims=2))
+		use_stellar_continuum ?
+			lm_tel.μ[m] .*= vec(mean(flux_tel_holder[m, :]; dims=2)) :
+			lm_tel.μ[m] ./= c_t[m]
 		did_anything = any(m)
 
 		flux_tel .= c_t
 		vars_tel .= SOAP_gp_var
 		_spectra_interp_gp!(flux_star_holder, vars_star_holder, om.star.log_λ, flux_tel_holder, vars_tel_holder, tel_log_λ_star; gp_mean=1.)
 		m, cc = reciprocal_continuum_mask(c_s, flux_star_holder; return_cc=true, kwargs...)
-		lm_star.μ[m] ./= c_s[m]
+		use_stellar_continuum ?
+			lm_star.μ[m] ./= c_s[m] :
+			lm_star.μ[m] .*= vec(mean(flux_star_holder[m, :]; dims=2))
 		return did_anything || any(m)
 
 	end
@@ -949,8 +953,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 		println("using stellar model as initial template")
 		# telluric model with stellar template
 		flux_star .= lm_star.μ
-		# update_tel!(lm_star, lm_tel, seeded||use_mean; remove_reciprocal_continuum=true)
-		update_tel!(lm_star, lm_tel, seeded||use_mean; remove_reciprocal_continuum=false)
+		update_tel!(lm_star, lm_tel, seeded||use_mean; remove_reciprocal_continuum=remove_reciprocal_continuum)
 		# updating stellar model with modified telluric template
 		flux_tel .= lm_tel.μ
 		update_star!(lm_star, lm_tel, seeded||use_mean)
@@ -966,22 +969,27 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 
 	# stellar models with n basis telluric model
 	if is_time_variable(om.tel)
-		n_comp_tel = size(om.tel.lm.M, 2)
-		lm_star = [copy(lm_star) for i in 1:(n_comp_tel+1)]
-		if multithread
-			# @threads for i in 1:n_comp_tel
-			ThreadsX.foreach(1:n_comp_tel) do i
-				_flux_star, _vars_star = _spectra_interp_gp_div_gp(om.star.log_λ, d.flux, d.var, d.log_λ_star, _eval_lm(view(lm_tel.M, :, 1:i), view(lm_tel.s, 1:i, :), lm_tel.μ; log_lm=log_lm(lm_tel)), vars_tel, tel_log_λ_star)
-				lm_star[i+1].μ[:] = make_template(_flux_star, _vars_star; min=μ_min, max=μ_max, use_mean=true)
-				mask_low_pixels!(_flux_star, _vars_star)
-				mask_high_pixels!(_flux_star, _vars_star)
-				DEMPCA!(lm_star[i+1].M, lm_star[i+1].s, lm_star[i+1].μ, _flux_star, 1 ./ _vars_star, calc_doppler_component_RVSKL(om.star.λ, lm_star[i+1].μ); log_lm=log_lm(lm_star[i+1]))
+		if pairwise
+			lm_star = [copy(lm_star) for i in 1:(n_comp_tel+1)]
+			if multithread
+				# @threads for i in 1:n_comp_tel
+				ThreadsX.foreach(1:n_comp_tel) do i
+					_flux_star, _vars_star = _spectra_interp_gp_div_gp(om.star.log_λ, d.flux, d.var, d.log_λ_star, _eval_lm(view(lm_tel.M, :, 1:i), view(lm_tel.s, 1:i, :), lm_tel.μ; log_lm=log_lm(lm_tel)), vars_tel, tel_log_λ_star)
+					lm_star[i+1].μ[:] = make_template(_flux_star, _vars_star; min=μ_min, max=μ_max, use_mean=true)
+					mask_low_pixels!(_flux_star, _vars_star)
+					mask_high_pixels!(_flux_star, _vars_star)
+					DEMPCA!(lm_star[i+1].M, lm_star[i+1].s, lm_star[i+1].μ, _flux_star, 1 ./ _vars_star, calc_doppler_component_RVSKL(om.star.λ, lm_star[i+1].μ); log_lm=log_lm(lm_star[i+1]))
+				end
+			else
+				for i in 1:n_comp_tel
+					flux_tel .= _eval_lm(view(lm_tel.M, :, 1:i), view(lm_tel.s, 1:i, :), lm_tel.μ; log_lm=log_lm(lm_tel))
+					update_star!(lm_star[i+1], lm_tel, true)
+				end
 			end
 		else
-			for i in 1:n_comp_tel
-				flux_tel .= _eval_lm(view(lm_tel.M, :, 1:i), view(lm_tel.s, 1:i, :), lm_tel.μ; log_lm=log_lm(lm_tel))
-				update_star!(lm_star[i+1], lm_tel, true)
-			end
+			lm_star = [copy(lm_star) for i in 1:2]
+			flux_tel .= _eval_lm(view(lm_tel.M, :, :), view(lm_tel.s, :, :), lm_tel.μ; log_lm=log_lm(lm_tel))
+			update_star!(lm_star[2], lm_tel, true)
 		end
 	else
 		lm_star = [lm_star]
@@ -989,30 +997,40 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 
 	# telluric models with n basis stellar model
 	if is_time_variable(om.tel) #&& !seeded
-		lm_tel = [copy(lm_tel) for i in 1:(n_comp_star+1)]
-		if multithread
-			# @threads for i in 1:n_comp_star
-			ThreadsX.foreach(1:n_comp_star) do i
-				if log_lm(lm_star[1])
-					_flux_star = _eval_lm(view(lm_star[1].M, :, 2:(i+1)), view(lm_star[1].s, 2:(i+1), :), _eval_lm(view(lm_star[1].M, :, 1:1), view(lm_star[1].s, 1:1, :), lm_star[1].μ); log_lm=log_lm(lm_star[1]))
-				else
-					_flux_star = _eval_lm(view(lm_star[1].M, :, 1:(i+1)), view(lm_star[1].s, 1:(i+1), :), lm_star[1].μ; log_lm=log_lm(lm_star[1]))
+		if pairwise
+			lm_tel = [copy(lm_tel) for i in 1:(n_comp_star+1)]
+			if multithread
+				# @threads for i in 1:n_comp_star
+				ThreadsX.foreach(1:n_comp_star) do i
+					if log_lm(lm_star[1])
+						_flux_star = _eval_lm(view(lm_star[1].M, :, 2:(i+1)), view(lm_star[1].s, 2:(i+1), :), _eval_lm(view(lm_star[1].M, :, 1:1), view(lm_star[1].s, 1:1, :), lm_star[1].μ); log_lm=log_lm(lm_star[1]))
+					else
+						_flux_star = _eval_lm(view(lm_star[1].M, :, 1:(i+1)), view(lm_star[1].s, 1:(i+1), :), lm_star[1].μ; log_lm=log_lm(lm_star[1]))
+					end
+					_flux_tel, _vars_tel = _spectra_interp_gp_div_gp(om.tel.log_λ, d.flux, d.var, d.log_λ_obs, _flux_star, vars_star, star_log_λ_tel)
+					lm_tel[i+1].μ[:] = make_template(_flux_tel, _vars_tel; min=μ_min, max=μ_max, use_mean=true)
+					mask_low_pixels!(_flux_tel, _vars_tel)
+					mask_high_pixels!(_flux_tel, _vars_tel)
+					EMPCA!(lm_tel[i+1].M, lm_tel[i+1].s, lm_tel[i+1].μ, _flux_tel, 1 ./ _vars_tel; log_lm=log_lm(lm_tel[i+1]))
 				end
-				_flux_tel, _vars_tel = _spectra_interp_gp_div_gp(om.tel.log_λ, d.flux, d.var, d.log_λ_obs, _flux_star, vars_star, star_log_λ_tel)
-				lm_tel[i+1].μ[:] = make_template(_flux_tel, _vars_tel; min=μ_min, max=μ_max, use_mean=true)
-				mask_low_pixels!(_flux_tel, _vars_tel)
-				mask_high_pixels!(_flux_tel, _vars_tel)
-				EMPCA!(lm_tel[i+1].M, lm_tel[i+1].s, lm_tel[i+1].μ, _flux_tel, 1 ./ _vars_tel; log_lm=log_lm(lm_tel[i+1]))
+			else
+				for i in 1:n_comp_star
+					if log_lm(lm_star[1])
+						flux_star .= _eval_lm(view(lm_star[1].M, :, 2:(i+1)), view(lm_star[1].s, 2:(i+1), :), _eval_lm(view(lm_star[1].M, :, 1:1), view(lm_star[1].s, 1:1, :), lm_star[1].μ); log_lm=log_lm(lm_star[1]))
+					else
+						flux_star .= _eval_lm(view(lm_star[1].M, :, 1:(i+1)), view(lm_star[1].s, 1:(i+1), :), lm_star[1].μ; log_lm=log_lm(lm_star[1]))
+					end
+					update_tel!(lm_star[1], lm_tel[i+1], true)
+				end
 			end
 		else
-			for i in 1:n_comp_star
-				if log_lm(lm_star[1])
-					flux_star .= _eval_lm(view(lm_star[1].M, :, 2:(i+1)), view(lm_star[1].s, 2:(i+1), :), _eval_lm(view(lm_star[1].M, :, 1:1), view(lm_star[1].s, 1:1, :), lm_star[1].μ); log_lm=log_lm(lm_star[1]))
-				else
-					flux_star .= _eval_lm(view(lm_star[1].M, :, 1:(i+1)), view(lm_star[1].s, 1:(i+1), :), lm_star[1].μ; log_lm=log_lm(lm_star[1]))
-				end
-				update_tel!(lm_star[1], lm_tel[i+1], true)
+			lm_tel = [copy(lm_tel) for i in 1:2]
+			if log_lm(lm_star[1])
+				flux_star .= _eval_lm(view(lm_star[1].M, :, 2:(n_comp_star+1+1)), view(lm_star[1].s, 2:(n_comp_star+1+1), :), _eval_lm(view(lm_star[1].M, :, 1:1), view(lm_star[1].s, 1:1, :), lm_star[1].μ); log_lm=log_lm(lm_star[1]))
+			else
+				flux_star .= _eval_lm(view(lm_star[1].M, :, 1:(n_comp_star+1)), view(lm_star[1].s, 1:(n_comp_star+1), :), lm_star[1].μ; log_lm=log_lm(lm_star[1]))
 			end
+			update_tel!(lm_star[1], lm_tel[2], true)
 		end
 	else
 		lm_tel = [lm_tel]

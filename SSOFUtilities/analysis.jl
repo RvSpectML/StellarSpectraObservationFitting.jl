@@ -13,7 +13,8 @@ function create_model(
 	desired_order::Int,
 	instrument::String,
 	star::String;
-	max_components::Int=5,
+	n_comp_tel::Int=5,
+	n_comp_star::Int=5,
 	use_reg::Bool=true,
 	save_fn::String="",
 	recalc::Bool=false,
@@ -35,7 +36,7 @@ function create_model(
 		println("using saved model at $save_fn")
 	    @load save_fn model
 	else
-	    model = SSOF.OrderModel(data, instrument, desired_order, star; n_comp_tel=max_components, n_comp_star=max_components, kwargs...)
+	    model = SSOF.OrderModel(data, instrument, desired_order, star; n_comp_tel=n_comp_tel, n_comp_star=n_comp_star, kwargs...)
 		if !use_reg
 			SSOF.rm_regularization!(model)
 			model.metadata[:todo][:reg_improved] = true
@@ -187,11 +188,11 @@ function _finish_downsizing(mws::SSOF.ModelWorkspace, model::SSOF.OrderModel; no
 	SSOF.finalize_scores!(mws_smol; f_tol=SSOF._f_reltol_def_s, g_tol=SSOF._g_L∞tol_def_s)
 	return mws_smol
 end
-function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}, better_model::Int, lm_tel::Vector{<:SSOF.LinearModel}, lm_star::Vector{<:SSOF.LinearModel}; kwargs...)
+function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}, better_model::Int, lm_tel::Vector{<:SSOF.LinearModel}, lm_star::Vector{<:SSOF.LinearModel}; lm_tel_ind::Int=n_comps[2]+1, lm_star_ind::Int=n_comps[1]+1, kwargs...)
 	model = SSOF.downsize(mws.om, max(0, n_comps[1]), n_comps[2])
 	model.metadata[:todo][:downsized] = true
 	if all(n_comps .> 0)
-		SSOF._fill_model!(model, n_comps, better_model, lm_tel, lm_star)
+		SSOF._fill_model!(model, n_comps, better_model, lm_tel, lm_star; lm_tel_ind=lm_tel_ind, lm_star_ind=lm_star_ind)
 		better_model==1 ?
 			println("downsizing: used the $(n_comps[1]) telluric basis -> $(n_comps[2]) stellar basis initialization") :
 			println("downsizing: used the $(n_comps[2]) stellar basis -> $(n_comps[1]) telluric basis initialization")

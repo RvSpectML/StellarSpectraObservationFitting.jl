@@ -77,22 +77,28 @@ function test_ℓ_for_n_comps(n_comps::Vector, mws_inp::ModelWorkspace, times::A
         return ls[better_model], ns[better_model], rv_stds[better_model], in_rv_stds[better_model], better_model
     end
 end
-function _fill_model!(model::OrderModel, n_comps::Vector{<:Int}, better_model::Int, lm_tel::Vector{<:LinearModel}, lm_star::Vector{<:LinearModel})
+function _fill_model!(model::OrderModel, n_comps::Vector{<:Int}, better_model::Int, lm_tels::Vector{<:LinearModel}, lm_stars::Vector{<:LinearModel}; lm_tel_ind::Int=n_comps[2]+1, lm_star_ind::Int=n_comps[1]+1)
 	# if all(n_comps .> 0)
 	@assert better_model in [1,2]
-	better_model == 1 ?
-		_fill_model_tel_first!(model, n_comps, lm_tel, lm_star) :
-		_fill_model_star_first!(model, n_comps, lm_tel, lm_star)
+	if better_model == 1
+		lm_tel = lm_tels[1]
+		lm_star = lm_stars[lm_star_ind]
+	else
+		lm_tel = lm_tels[lm_tel_ind]
+		lm_star = lm_stars[1]
+	end
+	fill_TelModel!(model, lm_tel, 1:n_comps[1])
+	fill_StarModel!(model, lm_star; inds=(1:n_comps[2]) .+ 1)
 	# end
 end
-function _fill_model_tel_first!(model::OrderModel, n_comps::Vector{<:Int}, lm_tel::Vector{<:LinearModel}, lm_star::Vector{<:LinearModel})
-	fill_TelModel!(model, lm_tel[1], 1:n_comps[1])
-	fill_StarModel!(model, lm_star[n_comps[1]+1]; inds=(1:n_comps[2]) .+ 1)
-end
-function _fill_model_star_first!(model::OrderModel, n_comps::Vector{<:Int}, lm_tel::Vector{<:LinearModel}, lm_star::Vector{<:LinearModel})
-	fill_StarModel!(model, lm_star[1]; inds=(1:n_comps[2]) .+ 1)
-	fill_TelModel!(model, lm_tel[n_comps[2]+1], 1:n_comps[1])
-end
+# function _fill_model_tel_first!(model::OrderModel, n_comps::Vector{<:Int}, lm_tel::LinearModel, lm_star::LinearModel)
+# 	fill_TelModel!(model, lm_tel, 1:n_comps[1])
+# 	fill_StarModel!(model, lm_star; inds=(1:n_comps[2]) .+ 1)
+# end
+# function _fill_model_star_first!(model::OrderModel, n_comps::Vector{<:Int}, lm_tel::LinearModel, lm_star::LinearModel)
+# 	fill_StarModel!(model, lm_star; inds=(1:n_comps[2]) .+ 1)
+# 	fill_TelModel!(model, lm_tel, 1:n_comps[1])
+# end
 
 function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector, var::AbstractMatrix; return_inters::Bool=false, use_aic::Bool=true)
 

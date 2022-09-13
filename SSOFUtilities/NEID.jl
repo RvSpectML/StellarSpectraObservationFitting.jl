@@ -122,3 +122,29 @@ function neid_plots(mws::SSOF.ModelWorkspace,
 	    png(plt, base_path * "model_rvs_order.png")
 	end
 end
+
+
+# used to easily identify how far to mask https://apps.automeris.io/wpd/
+function neid_order_masks!(data::SSOF.Data, order::Int, star::String)
+	if star=="26965"
+		if order==31
+		    SSOF.mask_stellar_features!(data, log(4326.7), 100)
+		elseif order==38
+		    SSOF.mask_stellar_features!(data, log(4549.5), 100)
+		elseif order==41
+		    SSOF.mask_stellar_features!(data, log(4651.9), 100)
+		elseif order==47
+		    SSOF.mask_stellar_features!(data, log(4871.6), 100)
+		elseif order==48
+		    SSOF.mask_stellar_features!(data, log(4909.8), 100)
+		elseif order==60
+		    SSOF.mask_tellurics!(data, 0, log(5326.2))
+		elseif order==61
+			# not sure which it is
+		    SSOF.mask_stellar_features!(data, 0, log(5374))
+			SSOF.mask_tellurics!(data, 0, log(5374.5))
+		elseif order==95
+		    SSOF.mask_stellar_features!(data, log(7832.6), 100)
+		end
+	end
+end
