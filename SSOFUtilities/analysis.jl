@@ -129,8 +129,12 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 		save_md = decision_fn!=""
 		save_plots = plots_fn!=""
 
-	    test_n_comp_tel = -1:size(model.tel.lm.M, 2)
-	    test_n_comp_star = 0:size(model.star.lm.M, 2)
+	    SSOF.is_time_variable(model.tel.lm) ?
+			test_n_comp_tel = -1:size(model.tel.lm.M, 2) :
+			test_n_comp_tel = -1:0
+		SSOF.is_time_variable(model.star.lm) ?
+			test_n_comp_star = 0:size(model.star.lm.M, 2) :
+			test_n_comp_star = 0:0
 	    ks = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
 	    comp_ls = zeros(length(test_n_comp_tel), length(test_n_comp_star))
 	    comp_stds = zeros(length(test_n_comp_tel), length(test_n_comp_star))
@@ -183,7 +187,9 @@ function _finish_downsizing(mws::SSOF.ModelWorkspace, model::SSOF.OrderModel; no
 	else
 		mws_smol = typeof(mws)(model, mws.d)
 	end
-	SSOF.update_interpolation_locations!(mws)
+	mws_smol.om.metadata[:todo][:downsized] = true
+	mws_smol.om.metadata[:todo][:initialized] = true
+	SSOF.update_interpolation_locations!(mws_smol)
 	SSOF.train_OrderModel!(mws_smol; kwargs...)  # 120s
 	SSOF.finalize_scores!(mws_smol; f_tol=SSOF._f_reltol_def_s, g_tol=SSOF._g_L∞tol_def_s)
 	return mws_smol
@@ -201,8 +207,6 @@ function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}, bette
 end
 function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}; kwargs...)
 	model = SSOF.downsize(mws.om, max(0, n_comps[1]), n_comps[2])
-	model.metadata[:todo][:downsized] = true
-	model.metadata[:todo][:initialized] = true
 	return _finish_downsizing(mws, model; no_tels=n_comps[1]<0, kwargs...)
 end
 
