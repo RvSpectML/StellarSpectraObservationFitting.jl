@@ -106,7 +106,7 @@ n_comp_by_eye!(df, 92; n_tel=2, n_star=0)  # wide continuum basis vectors
 n_comp_by_eye!(df, 97; n_star=0)  # continuum basis vectors
 n_comp_by_eye!(df, 98; n_tel=3, n_star=0, has_reciprocal_continuum=true)  # continuum basis vectors, aic and rv suggest more tel bases
 # n_comp_by_eye!(df, 99; n_star=1)  # 5 stellar bases, it got confused, but with NaINIR?
-n_comp_by_eye!(df, 99; n_tel=1, n_star=0)  # 5 stellar bases, it got confused, but with NaINIR?
+n_comp_by_eye!(df, 99; n_tel=1, n_star=0)  # dont even bother trying to get NaINIR
 n_comp_by_eye!(df, 100; n_star=0)  # rvs correlate with score 1
 n_comp_by_eye!(df, 101; n_star=0, has_reciprocal_continuum=true)  # rvs correlate with score 1? aic says could add 1-2 more tel bases, bic says to only use 1
 n_comp_by_eye!(df, 103; n_star=1)  # only use 1 basis for CaIRT3
