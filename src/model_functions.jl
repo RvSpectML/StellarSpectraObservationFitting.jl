@@ -1026,7 +1026,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 		else
 			lm_tel = [copy(lm_tel) for i in 1:2]
 			if log_lm(lm_star[1])
-				flux_star .= _eval_lm(view(lm_star[1].M, :, 2:(n_comp_star+1+1)), view(lm_star[1].s, 2:(n_comp_star+1+1), :), _eval_lm(view(lm_star[1].M, :, 1:1), view(lm_star[1].s, 1:1, :), lm_star[1].μ); log_lm=log_lm(lm_star[1]))
+				flux_star .= _eval_lm(view(lm_star[1].M, :, 2:(n_comp_star+1)), view(lm_star[1].s, 2:(n_comp_star+1), :), _eval_lm(view(lm_star[1].M, :, 1:1), view(lm_star[1].s, 1:1, :), lm_star[1].μ); log_lm=log_lm(lm_star[1]))
 			else
 				flux_star .= _eval_lm(view(lm_star[1].M, :, 1:(n_comp_star+1)), view(lm_star[1].s, 1:(n_comp_star+1), :), lm_star[1].μ; log_lm=log_lm(lm_star[1]))
 			end
