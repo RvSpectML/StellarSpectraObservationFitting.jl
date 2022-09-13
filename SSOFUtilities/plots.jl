@@ -83,6 +83,12 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 	shift_M = 0.2
 	incl_χ² = incl_χ² && !isnothing(d) && !isnothing(o)
 	if incl_χ²; χ²_base = SSOF._loss(o, om, d) end
+
+	function scaler_string(scaler::Real)
+		if isapprox(1, scaler); return "" end
+		return " " * string(round(scaler;digits=2)) * "x scaled"
+	end
+
 	if plot_telluric
 		inds = 1:size(om.tel.lm.M, 2)
 
@@ -90,7 +96,9 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 		plot_stellar_with_lsf!(plt[1, 1], om, om.star.lm.μ; d=d, color=base_color, alpha=0.3, label="μₛₜₐᵣ", title="Telluric Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
 		plot_telluric_with_lsf!(plt[1, 1], om, om.tel.lm.μ; d=d, color=plt_colors[1], label="μₜₑₗ")
 
-		max_s_std = maximum([std(om.tel.lm.s[i, :] .* norm(om.tel.lm.M[:, i])) for i in inds])
+		norm_Ms = [norm(view(om.tel.lm.M, :, i)) for i in inds]
+		s_std = [std(view(om.tel.lm.s, inds[j], :) .* norm_Ms[j]) for j in 1:length(inds)]
+		max_s_std = maximum(s_std)
 		shift_s = ceil(10 * max_s_std) / 2
 		_scatter!(plt[2, 1], times_nu, ((max_s_std / std(airmasses)) .* (airmasses .- mean(airmasses))) .+ shift_s; label="Airmasses (scaled)", color=base_color)
 		hline!(plt[2, 1], [shift_s]; label="", color=base_color, lw=3, alpha=0.4)
@@ -98,24 +106,25 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 		# half_shift_s = ceil(shift_s) / 2
 		if incl_χ²; holder = copy(om.tel.lm.s) end
 	    # for i in reverse(inds)
-		for i in inds
+		for j in 1:length(inds)
+			i = inds[j]
 	        c_ind = c_ind_f(i - inds[1])
-			norm_M = norm(view(om.tel.lm.M, :, i))
+			norm_M = norm_Ms[j]
 
 			# basis plot
 			plot_telluric_with_lsf!(plt[1, 1], om, (view(om.tel.lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); d=d, label="Basis $i", color=plt_colors[c_ind])
 
+			scaler = max_s_std / std(view(om.tel.lm.s, i, :) .* norm_M)
+			_label = "Weights $i" * scaler_string(scaler)
 			# weights plot
 			if incl_χ²
 				om.tel.lm.s[i, :] .= 0
 				Δχ² = 1 - (χ²_base / SSOF._loss(o, om, d; tel=vec(om.tel.lm)))
 				om.tel.lm.s[i, :] .= view(holder, i, :)
-				_label="Weights $i (Δχ² = $(round(Δχ²; digits=3)))"
-			else
-				_label = "Weights $i"
+				_label *= " (Δχ² = $(round(Δχ²; digits=3)))"
 			end
 			isnothing(tel_errors) ? tel_σ = nothing : tel_σ = view(tel_errors, i, :)
-			scatter!(plt[2, 1], times_nu, (view(om.tel.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1)); yerror=tel_σ, label=_label, color=plt_colors[c_ind], title="Telluric Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, markerstrokewidth=Int(!isnothing(tel_errors))/2, kwargs...)
+			scatter!(plt[2, 1], times_nu, (view(om.tel.lm.s, i, :) .* (norm_M * scaler)) .- (shift_s * (i - 1)); yerror=tel_σ, label=_label, color=plt_colors[c_ind], title="Telluric Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, markerstrokewidth=Int(!isnothing(tel_errors))/2, kwargs...)
 			hline!(plt[2, 1], [-(shift_s * (i - 1))]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
 	    end
 	end
@@ -127,7 +136,9 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 		plot_telluric_with_lsf!(plt[1, n_plots], om, om.tel.lm.μ; d=d, color=base_color, alpha=0.3, label="μₜₑₗ", title="Stellar Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
 		plot_stellar_with_lsf!(plt[1, n_plots], om, om.star.lm.μ; d=d, color=plt_colors[1], label="μₛₜₐᵣ")
 
-		max_s_std = maximum([std(om.star.lm.s[inds[i], :] .* norm(om.star.lm.M[:, inds[i]])) for i in inds])
+		norm_Ms = [norm(view(om.star.lm.M, :, i)) for i in inds]
+		s_std = [std(view(om.star.lm.s, inds[j], :) .* norm_Ms[j]) for j in 1:length(inds)]
+		max_s_std = maximum(s_std)
 		shift_s = ceil(10 * max_s_std) / 2
 		_keys = sort([key for key in keys(df_act)])[1:2:end]
 		for i in reverse(1:length(_keys))
@@ -141,24 +152,25 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 
 		if incl_χ²; holder = copy(om.star.lm.s) end
 		# for i in reverse(inds)
-		for i in inds
+		for j in 1:length(inds)
+			i = inds[j]
 			c_ind = c_ind_f(i + c_offset)
-			norm_M = norm(view(om.star.lm.M, :, i))
+			norm_M = norm_Ms[j]
 
 			# basis plot
 			plot_stellar_with_lsf!(plt[1, n_plots], om, (view(om.star.lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); d=d, label="Basis $i", color=plt_colors[c_ind])
 
+			scaler = max_s_std / std(view(om.star.lm.s, i, :) .* norm_M)
+			_label = "Weights $i" * scaler_string(scaler)
 			# weights plot
 			if incl_χ²
 				om.star.lm.s[i, :] .= 0
 				Δχ² = 1 - (χ²_base / SSOF._loss(o, om, d; star=vec(om.star.lm)))
 				om.star.lm.s[i, :] .= view(holder, i, :)
-				_label = "Weights $i (Δχ² = $(round(Δχ²; digits=3)))"
-			else
-				_label = "Weights $i"
+				_label *= " (Δχ² = $(round(Δχ²; digits=3)))"
 			end
 			isnothing(star_errors) ? star_σ = nothing : star_σ = view(star_errors, i, :)
-			scatter!(plt[2, n_plots], times_nu, (view(om.star.lm.s, i, :) .* norm_M) .- (shift_s * (i - 1)); yerror=star_σ, label=_label, color=plt_colors[c_ind], title="Stellar Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, markerstrokewidth=Int(!isnothing(star_errors))/2, kwargs...)
+			scatter!(plt[2, n_plots], times_nu, (view(om.star.lm.s, i, :) .* (norm_M * scaler)) .- (shift_s * (i - 1)); yerror=star_σ, label=_label, color=plt_colors[c_ind], title="Stellar Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, markerstrokewidth=Int(!isnothing(star_errors))/2, kwargs...)
 			hline!(plt[2, n_plots], [-shift_s * (i - 1)]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
 		end
 	end
