@@ -66,11 +66,11 @@ function test_ℓ_for_n_comps(n_comps::Vector, mws_inp::ModelWorkspace, times::A
         in_rv_stds = zeros(2)
 
         # test telluric components first
-		_fill_model_tel_first!(_om, n_comps, lm_tel, lm_star)
+		_fill_model!(_om, n_comps, 1, lm_tel, lm_star)
         ls[1], ns[1], rv_stds[1], in_rv_stds[1] = _test_om(mws_inp, _om, times; kwargs...)
 
         # test star components next
-		_fill_model_star_first!(_om, n_comps, lm_tel, lm_star)
+		_fill_model!(_om, n_comps, 2, lm_tel, lm_star)
         ls[2], ns[2], rv_stds[2], in_rv_stds[2] = _test_om(mws_inp, _om, times; kwargs...)
 
         better_model = argmin(ls)
@@ -91,14 +91,6 @@ function _fill_model!(model::OrderModel, n_comps::Vector{<:Int}, better_model::I
 	fill_StarModel!(model, lm_star; inds=(1:n_comps[2]) .+ 1)
 	# end
 end
-# function _fill_model_tel_first!(model::OrderModel, n_comps::Vector{<:Int}, lm_tel::LinearModel, lm_star::LinearModel)
-# 	fill_TelModel!(model, lm_tel, 1:n_comps[1])
-# 	fill_StarModel!(model, lm_star; inds=(1:n_comps[2]) .+ 1)
-# end
-# function _fill_model_star_first!(model::OrderModel, n_comps::Vector{<:Int}, lm_tel::LinearModel, lm_star::LinearModel)
-# 	fill_StarModel!(model, lm_star; inds=(1:n_comps[2]) .+ 1)
-# 	fill_TelModel!(model, lm_tel, 1:n_comps[1])
-# end
 
 function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector, var::AbstractMatrix; return_inters::Bool=false, use_aic::Bool=true)
 
