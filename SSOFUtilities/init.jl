@@ -147,7 +147,7 @@ function reformat_spectra(
 	else
 		for i in 1:n_obs
 			if !snr_mask[i]
-				println("$(df_files.Filename[i]) has a low snr continuum normalization, consider removing it from your analysis")
+				println("$(df_files.Filename[i]) has a low snr, consider removing it from your analysis")
 			end
 		end
 	end
