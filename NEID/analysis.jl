@@ -35,6 +35,9 @@ if use_custom_n_comp
 	i_df = desired_order - 3
 	@assert df_n_comp[i_df, :order] == desired_order
 	use_custom_n_comp = df_n_comp[i_df, :redo]
+end
+
+if use_custom_n_comp
 	recalc = recalc || use_custom_n_comp
 	n_comp_tel = df_n_comp[i_df, :n_tel_by_eye]
 	n_comp_star = df_n_comp[i_df, :n_star_by_eye]
@@ -55,6 +58,7 @@ data_path = base_path * "data.jld2"
 log_lm ? base_path *= "log_" : base_path *= "lin_"
 dpca ? base_path *= "dcp_" : base_path *= "vil_"
 use_lsf ? base_path *= "lsf/" : base_path *= "nol/"
+use_custom_n_comp ? base_path *= "by_eye/" : base_path *= "aic/"
 mkpath(base_path)
 save_path = base_path * "results.jld2"
 init_path = base_path * "results_init.jld2"
