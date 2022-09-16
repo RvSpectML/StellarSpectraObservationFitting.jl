@@ -5,6 +5,7 @@ using Statistics
 import StatsBase
 using Base.Threads
 using ThreadsX
+# using AdvancedHMC
 
 valid_optimizers = ["adam", "l-bfgs", "frozen-tel"]
 
@@ -423,3 +424,137 @@ function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, sav
 		return rvs, rvs_σ, tel_s, tel_s_σ, star_s, star_s_σ
 	end
 end
+
+
+# # the code is slow and doesn't seem to work
+# function estimate_σ_mcmc(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", n::Int=52, return_holders::Bool=false, recalc_mean::Bool=false, multithread::Bool=nthreads() > 3, print_stuff::Bool=true)
+# 	save = save_fn!=""
+# 	if recalc || !mws.om.metadata[:todo][:err_estimated] # 25 mins
+#
+# 		@assert typeof(mws.om) <: SSOF.TotalWorkspace  # TODO add OptimWorkspace verison
+# 		# initial_θ, obj, unflatten = SSOF.opt_funcs(mws.total.l, mws.total.θ)
+# 		mws_s = typeof(mws)(mws.om, mws.d; only_s=true)
+# 		initial_θ, obj, unflatten, g_nabla, g_val_nabla = SSOF.opt_funcs(mws_s.total.l, mws_s.total.θ)
+# 		D = length(initial_θ)
+#
+# 		ℓπ(θ) = -obj.f(θ)
+# 		function dℓπ(θ)
+# 			nl, ng_unfl = g_val_nabla(unflatten(θ))
+# 			ng, _ = SSOF.flatten(only(ng_unfl))
+# 			return -nl.val, -ng
+# 		end
+#
+# 		n_adapts = Int(round(n / 5))
+#
+# 		# Define a Hamiltonian system
+# 		metric = DiagEuclideanMetric(D)
+# 		hamiltonian = Hamiltonian(metric, ℓπ, dℓπ)
+#
+# 		# Define a leapfrog solver, with initial step size chosen heuristically
+# 		initial_ϵ = find_good_stepsize(hamiltonian, initial_θ)
+# 		integrator = Leapfrog(initial_ϵ)
+#
+# 		# Define an HMC sampler, with the following components
+# 		#   - multinomial sampling scheme,
+# 		#   - generalised No-U-Turn criteria, and
+# 		#   - windowed adaption for step-size and diagonal mass matrix
+# 		proposal = NUTS{MultinomialTS, GeneralisedNoUTurn}(integrator)
+# 		adaptor = StanHMCAdaptor(MassMatrixAdaptor(metric), StepSizeAdaptor(0.8, integrator))
+# 		if multithread
+# 			# Number of chains to sample
+# 			nchains = nthreads()
+# 			chains = Vector{Any}(undef, nchains)
+# 			n_per_chain = Int(round(n/nchains))
+# 			# Threads.@threads for i in 1:nchains
+# 			ThreadsX.foreach(1:nchains) do i
+# 				_samples, _ = sample(hamiltonian, proposal, initial_θ, n_per_chain, adaptor, n_adapts; verbose=false)
+# 				chains[i] = _samples
+# 			end
+# 			# samples = reduce(hcat,Iterators.flatten(chains))
+# 			samples = Iterators.flatten(chains)
+# 		else
+# 			# Run the sampler, where
+# 			#   - `samples` will store the samples
+# 			#   - `stats` will store diagnostic statistics for each sample
+# 			samples, _ = sample(hamiltonian, proposal, initial_θ, n, adaptor, n_adapts; progress=true)
+# 			# samples = reduce(hcat,samples)
+# 		end
+# 		samples = reduce(hcat, samples)
+# 		samples = [unflatten(view(samples, :, i)) for i in 1:size(samples, 2)]
+# 		typeof(mws.om) <: SSOF.OrderModelWobble ?
+# 			rv_holder = Array{Float64}(undef, n, length(mws.om.rv)) :
+# 			rv_holder = Array{Float64}(undef, n, length(mws.om.rv.lm.s))
+#
+# 		time_var_tel = SSOF.is_time_variable(mws.om.tel)
+# 		time_var_star = SSOF.is_time_variable(mws.om.star)
+# 		time_var_tel ?
+# 			tel_holder = Array{Float64}(undef, n, size(mws.om.tel.lm.s, 1), size(mws.om.tel.lm.s, 2)) :
+# 			tel_holder = nothing
+# 		time_var_star ?
+# 			star_holder = Array{Float64}(undef, n, size(mws.om.star.lm.s, 1), size(mws.om.star.lm.s, 2)) :
+# 			star_holder = nothing
+#
+# 		for i in 1:length(samples)
+# 			rv_holder[i, :] .= samples[i][end]
+# 		end
+# 		if time_var_tel
+# 			tel_holder[i, :, :] .= samples[i][1]
+# 		end
+# 		if time_var_star
+# 			star_holder[i, :, :] .= samples[i][time_var_tel+1]
+# 		end
+#
+# 		recalc_mean ? rvs = vec(mean(rv_holder; dims=1)) : rvs = SSOF.rvs(mws.om)
+# 	    rvs_σ = vec(std(rv_holder; dims=1))
+#
+# 		if time_var_tel
+# 			recalc_mean ?
+# 				tel_s = estimate_σ_bootstrap_reducer(mws.om.tel.lm.s, tel_holder, mean) :
+# 				tel_s = mws.om.tel.lm.s
+# 			tel_s_σ = estimate_σ_bootstrap_reducer(mws.om.tel.lm.s, tel_holder, std)
+# 		else
+# 			tel_s = nothing
+# 			tel_s_σ = nothing
+# 		end
+# 		if time_var_star
+# 			recalc_mean ?
+# 				star_s = estimate_σ_bootstrap_reducer(mws.om.star.lm.s, star_holder, mean) :
+# 				star_s = mws.om.star.lm.s
+# 			star_s_σ = estimate_σ_bootstrap_reducer(mws.om.star.lm.s, star_holder, std)
+# 		else
+# 			star_s = nothing
+# 			star_s_σ = nothing
+# 		end
+# 		mws.om.metadata[:todo][:err_estimated] = true
+# 	    if save; @save save_fn rvs rvs_σ tel_s tel_s_σ star_s star_s_σ end
+# 		if return_holders
+# 			return rvs, rvs_σ, tel_s, tel_s_σ, star_s, star_s_σ, rv_holder, tel_holder, star_holder
+# 		else
+# 			return rvs, rvs_σ, tel_s, tel_s_σ, star_s, star_s_σ
+# 		end
+# 	else
+# 		@assert isfile(save_fn)
+# 		println("loading rvs")
+# 		if save; @load save_fn rvs rvs_σ tel_s tel_s_σ star_s star_s_σ end
+# 		return rvs, rvs_σ, tel_s, tel_s_σ, star_s, star_s_σ
+# 	end
+# end
+
+# # the example code is slow as heck so not going to try to implement
+# function estimate_σ_vi(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", n::Int=52, return_holders::Bool=false, recalc_mean::Bool=false, multithread::Bool=nthreads() > 3, print_stuff::Bool=true)
+# 	Pkg.add("DistributionsAD")
+# 	Pkg.add("AdvancedVI")
+# 	using DistributionsAD, AdvancedVI
+# 	using Distributions
+#
+# 	d = 2; n = 100;
+#
+# 	observations = randn((d, n)); # 100 observations from 2D 𝒩(0, 1)
+#
+# 	prior(μ) = logpdf(MvNormal(ones(d)), μ)
+# 	likelihood(x, μ) = sum(logpdf(MvNormal(μ, ones(d)), x))
+# 	logπ(μ) = likelihood(observations, μ) + prior(μ)
+# 	getq(θ) = TuringDiagMvNormal(θ[1:d], exp.(θ[d + 1:4]))
+# 	advi = ADVI(10, 10_000)
+# 	q = vi(logπ, advi, getq, randn(4))
+# end

@@ -481,7 +481,7 @@ function opt_funcs(loss::Function, pars::AbstractVecOrMat)
 		G[:], _ = flatten(g)
         return l.val
     end
-    return flat_initial_params, OnceDifferentiable(f, g!, fg_obj!, flat_initial_params), unflatten
+    return flat_initial_params, OnceDifferentiable(f, g!, fg_obj!, flat_initial_params), unflatten, g_nabla, g_val_nabla
 end
 
 struct OptimSubWorkspace
@@ -492,7 +492,7 @@ struct OptimSubWorkspace
     unflatten::Union{Function,DataType}
 end
 function OptimSubWorkspace(θ::AbstractVecOrMat, loss::Function; use_cg::Bool=true)
-	p0, obj, unflatten = opt_funcs(loss, θ)
+	p0, obj, unflatten, _, _ = opt_funcs(loss, θ)
 	# opt = LBFGS(alphaguess = LineSearches.InitialHagerZhang(α0=NaN))
 	# use_cg ? opt = ConjugateGradient() : opt = LBFGS()
 	opt = LBFGS()
