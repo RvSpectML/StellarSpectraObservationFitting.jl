@@ -58,7 +58,6 @@ data_path = base_path * "data.jld2"
 log_lm ? base_path *= "log_" : base_path *= "lin_"
 dpca ? base_path *= "dcp_" : base_path *= "vil_"
 use_lsf ? base_path *= "lsf/" : base_path *= "nol/"
-use_custom_n_comp ? base_path *= "by_eye/" : base_path *= "aic/"
 mkpath(base_path)
 save_path = base_path * "results.jld2"
 init_path = base_path * "results_init.jld2"
@@ -79,8 +78,14 @@ mws = SSOFU.create_workspace(model, data, opt)
 # mws = SSOFU._downsize_model(mws, [2,0], 1, lm_tel, lm_star; print_stuff=true, ignore_regularization=true)
 if use_custom_n_comp
 	println("using by-eye number of basis vectors")
+	base_path *= "by_eye/"
+	save_path = base_path * "results.jld2"
+	mkpath(base_path)
 	mws = SSOFU._downsize_model(mws, [n_comp_tel, n_comp_star], better_model, lm_tel, lm_star; print_stuff=true, ignore_regularization=true, lm_tel_ind=2, lm_star_ind=2)
 else
+	solar ? base_path *= "bic/" : base_path *= "aic/"
+	save_path = base_path * "results.jld2"
+	mkpath(base_path)
 	mws = SSOFU.downsize_model(mws, times_nu, lm_tel, lm_star; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path, use_aic=!solar)
 end
 mkpath(base_path*"noreg/")
