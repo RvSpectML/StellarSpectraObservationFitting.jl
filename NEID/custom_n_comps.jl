@@ -61,7 +61,7 @@ Pkg.activate("NEID")
 
 using DataFrames, CSV
 
-stars = ["10700", "26965", "22049", "3651", "2021/12/19", "2021/12/20", "2021/12/23"]
+stars = ["10700", "26965", "22049", "3651", "95735", "2021/12/19", "2021/12/20", "2021/12/23"]
 star_choice = SSOF.parse_args(1, Int, 2)
 star = stars[star_choice]
 include("data_locs.jl")  # defines neid_data_path and neid_save_path

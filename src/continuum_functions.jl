@@ -295,12 +295,12 @@ function mask_isolated_pixels!(σ²::AbstractMatrix; neighbors_required::Int=29)
 end
 mask_isolated_pixels!(d::Data; kwargs...) = mask_isolated_pixels!(d.var; kwargs...)
 
-function process!(d; λ_thres::Real=4000., kwargs...)
+function process!(d; λ_thres::Real=4000., min_snr::Real=8, kwargs...)
 	flat_normalize!(d)
 	mask_low_pixels_all_times!(d; padding=0)
 	mask_high_pixels!(d; padding=0)
 	mask_bad_pixel!(d)  # thres from 4-11 seems good
-	mask_bad_edges!(d; min_snr=8)
+	mask_bad_edges!(d; min_snr=min_snr)
 	mask_isolated_pixels!(d)
 	# λ_thres = 4000 # is there likely to even be a continuum (neid index order 23+)
 	# λ_thres = 6200 # where neid blaze correction starts to break down (neid index order 77+)

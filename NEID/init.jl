@@ -11,8 +11,8 @@ SSOF_path = dirname(dirname(pathof(SSOF)))
 include(SSOF_path * "/SSOFUtilities/SSOFUtilities.jl")
 SSOFU = SSOFUtilities
 
-stars = ["10700", "26965", "22049", "3651", "2021/12/19", "2021/12/20", "2021/12/23"]
-star_choice = SSOF.parse_args(1, Int, 2)
+stars = ["10700", "26965", "22049", "3651", "95735", "2021/12/19", "2021/12/20", "2021/12/23"]
+star_choice = SSOF.parse_args(1, Int, 5)
 star = stars[star_choice]
 solar = star_choice > 5
 if length(ARGS) != 0; ENV["GKSwstype"] = "100" end
@@ -35,5 +35,6 @@ SSOFU.reformat_spectra(
 	min_order(NEID2D()):118,
 	star;
 	lsf_f = NEIDLSF.neid_lsf,
-	interactive=length(ARGS)==0)
+	interactive=length(ARGS)==0,
+	min_snr=5)
 SSOFU.neid_extras(df_files_use, neid_save_path * target_subdir)

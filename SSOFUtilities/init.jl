@@ -29,7 +29,8 @@ function reformat_spectra(
 		orders_to_read::UnitRange,
 		star::String;
 		lsf_f::Union{Function,Nothing}=nothing,
-		interactive::Bool=false)
+		interactive::Bool=false,
+		kwargs...)
 
 	# deals with some instrument specific features
 	is_EXPRES = RVSMLInstrument == EXPRES
@@ -185,7 +186,7 @@ function reformat_spectra(
 		if is_NEID; neid_order_masks!(data, order, star) end
 		# data_backup = copy(data)
 
-		SSOF.process!(data; order=2)
+		SSOF.process!(data; order=2, kwargs...)
 		@save save_path*"data.jld2" n_obs data times_nu airmasses
 		data_usage_plot(data; save_path=save_path)
 		# plt = _plot(;size=(2 * _plt_size[1],_plt_size[2]), legend=:bottom)

@@ -13,7 +13,7 @@ using DataFrames, CSV
 
 ## Setting up necessary variables
 
-stars = ["10700", "26965", "22049", "3651", "2021/12/19", "2021/12/20", "2021/12/23"]
+stars = ["10700", "26965", "22049", "3651", "95735", "2021/12/19", "2021/12/20", "2021/12/23"]
 star_choice = SSOF.parse_args(1, Int, 2)
 star = stars[star_choice]
 solar = star_choice > 5
