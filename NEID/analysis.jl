@@ -66,9 +66,17 @@ pipeline_path = neid_save_path * star * "/neid_pipeline.jld2"
 if solar
     @load neid_save_path * "10700/$(desired_order)/results.jld2" model
 	seed = model
-    model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, seed=seed, dpca=dpca, n_comp_tel=n_comp_tel, n_comp_star=n_comp_star)
+    model, data, times_nu, airmasses = SSOFU.create_model(data_path,
+		desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path,
+		recalc=recalc, seed=seed, dpca=dpca, log_lm=log_lm, n_comp_tel=n_comp_tel,
+		n_comp_star=n_comp_star, log_λ_gp_star=1/SSOF.SOAP_gp_params.λ,
+		log_λ_gp_tel=1/SSOFU.neid_neid_temporal_gp_lsf_λ(desired_order))
 else
-    model, data, times_nu, airmasses = SSOFU.create_model(data_path, desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path, recalc=recalc, dpca=dpca, log_lm=log_lm, n_comp_tel=n_comp_tel, n_comp_star=n_comp_star)
+    model, data, times_nu, airmasses = SSOFU.create_model(data_path,
+		desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path,
+		recalc=recalc, dpca=dpca, log_lm=log_lm, n_comp_tel=n_comp_tel,
+		n_comp_star=n_comp_star, log_λ_gp_star=1/SSOF.SOAP_gp_params.λ,
+		log_λ_gp_tel=1/SSOFU.neid_neid_temporal_gp_lsf_λ(desired_order))
 end
 times_nu .-= 2400000.5
 lm_tel, lm_star, stellar_dominated = SSOFU.initialize_model!(model, data; init_fn=init_path, recalc=recalc, remove_reciprocal_continuum=remove_reciprocal_continuum, pairwise=pairwise)

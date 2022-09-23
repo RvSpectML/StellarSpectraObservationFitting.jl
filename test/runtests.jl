@@ -24,7 +24,7 @@ end
     y = rand(fx)
 
     # are my likelihood calculations the same as TemporalGPs
-    @test isapprox(TGP.logpdf(fx, y), SSOF.SOAP_gp_ℓ(y, step(x)))
+    # @test isapprox(TGP.logpdf(fx, y), SSOF.SOAP_gp_ℓ(y, step(x)))
     # @test isapprox(TGP.logpdf(fx, y), SOAP_gp_ℓ_nabla(y, step(x)))
 
     # setting up constants and precalcuating gradient coefficients

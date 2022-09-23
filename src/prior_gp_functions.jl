@@ -35,13 +35,15 @@ _σ²_meas_def = 1e-12
 # They are constant if we have constant timestep
 # σ²_meas and H_k only inlcuded as kwargs to prevent errors with passing kwargs...
 # in SOAP_gp_ℓ(y, Δx::Real; kwargs...)
-function SOAP_gp_sde_prediction_matrices(Δx; Δx_scaler::Real=SOAP_gp_params.λ, P∞::AbstractMatrix=P∞, F::AbstractMatrix=F, σ²_meas::Real=_σ²_meas_def, H_k::AbstractMatrix=H_k)
+function gp_sde_prediction_matrices(Δx, Δx_scaler::Real; P∞::AbstractMatrix=P∞, F::AbstractMatrix=F, σ²_meas::Real=_σ²_meas_def, H_k::AbstractMatrix=H_k)
     A_k = SMatrix{3,3}(exp(F * Δx * Δx_scaler))  # State transition matrix eq 6.23 in [2]?
     Σ_k = SMatrix{3,3}(Symmetric(P∞) - A_k * Symmetric(P∞) * A_k')  # eq. 6.71 in [2], the process noise
     return A_k, Σ_k
 end
+SOAP_gp_sde_prediction_matrices(Δx; Δx_scaler::Real=SOAP_gp_params.λ, kwargs...) =
+    gp_sde_prediction_matrices(Δx, Δx_scaler; kwargs...)
 LSF_gp_sde_prediction_matrices(Δx; Δx_scaler::Real=LSF_gp_params.λ, kwargs...) =
-    SOAP_gp_sde_prediction_matrices(Δx; Δx_scaler=Δx_scaler, kwargs...)
+    gp_sde_prediction_matrices(Δx, Δx_scaler; kwargs...)
 
 function predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
     m_kbar .= A_k * m_k  # state prediction
@@ -64,14 +66,14 @@ function init_states(n_state)
     return m_k, P_k, m_kbar, P_kbar, K_k
 end
 
-function SOAP_gp_ℓ(y, Δx::Real; kwargs...)
-    A_k, Σ_k = SOAP_gp_sde_prediction_matrices(Δx; kwargs...)
-    return gp_ℓ(y, A_k, Σ_k; kwargs...)
-end
-function LSF_gp_ℓ(y, Δx::Real; kwargs...)
-    A_k, Σ_k = LSF_gp_sde_prediction_matrices(Δx; kwargs...)
-    return gp_ℓ(y, A_k, Σ_k; kwargs...)
-end
+# function SOAP_gp_ℓ(y, Δx::Real; kwargs...)
+#     A_k, Σ_k = SOAP_gp_sde_prediction_matrices(Δx; kwargs...)
+#     return gp_ℓ(y, A_k, Σ_k; kwargs...)
+# end
+# function LSF_gp_ℓ(y, Δx::Real; kwargs...)
+#     A_k, Σ_k = LSF_gp_sde_prediction_matrices(Δx; kwargs...)
+#     return gp_ℓ(y, A_k, Σ_k; kwargs...)
+# end
 
 # Based on Kalman filter update (alg 10.18 in ASDE) for constant Ak and Qk
 # changing y only changes m_kbar, v_k, and m_k. Could be faster if
@@ -96,14 +98,14 @@ function gp_ℓ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_meas::Real=_�
 end
 
 
-function SOAP_gp_ℓ_nabla(y, Δx::Real; kwargs...)
-    A_k, Σ_k = SOAP_gp_sde_prediction_matrices(Δx; kwargs...)
-    return gp_ℓ_nabla(y, A_k, Σ_k; kwargs...)
-end
-function LSF_gp_ℓ_nabla(y, Δx::Real; kwargs...)
-    A_k, Σ_k = LSF_gp_sde_prediction_matrices(Δx; kwargs...)
-    return gp_ℓ_nabla(y, A_k, Σ_k; kwargs...)
-end
+# function SOAP_gp_ℓ_nabla(y, Δx::Real; kwargs...)
+#     A_k, Σ_k = SOAP_gp_sde_prediction_matrices(Δx; kwargs...)
+#     return gp_ℓ_nabla(y, A_k, Σ_k; kwargs...)
+# end
+# function LSF_gp_ℓ_nabla(y, Δx::Real; kwargs...)
+#     A_k, Σ_k = LSF_gp_sde_prediction_matrices(Δx; kwargs...)
+#     return gp_ℓ_nabla(y, A_k, Σ_k; kwargs...)
+# end
 
 
 # removing things that Nabla doesn't like from SOAP_gp_ℓ

@@ -363,8 +363,7 @@ struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:A
 	Σ_sde::StaticMatrix
 	Δℓ_coeff::AA
 end
-const _acceptable_types = [:star, :tel]
-function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=true, type=:star, log_lm::Bool=_log_lm_default, kwargs...)
+function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int, log_λ_gp::Real; include_mean::Bool=true, log_lm::Bool=_log_lm_default, kwargs...)
 	@assert type in _acceptable_types
 	n_obs = size(log_λ_obs, 2)
 	log_λ, λ = create_λ_template(log_λ_obs; kwargs...)
@@ -381,13 +380,9 @@ function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int; include_mean::Bool=
 		end
 		@error "you need a mean if you don't want any components"
 	end
-	if type == :star
-		A_sde, Σ_sde = SOAP_gp_sde_prediction_matrices(step(log_λ))
-		sparsity = Int(round(0.5 / (step(log_λ) * SOAP_gp_params.λ)))
-	elseif type == :tel
-		A_sde, Σ_sde = LSF_gp_sde_prediction_matrices(step(log_λ))
-		sparsity = Int(round(0.5 / (step(log_λ) * LSF_gp_params.λ)))
-	end
+	temporal_gps_λ = 1 / log_λ_gp
+	A_sde, Σ_sde = gp_sde_prediction_matrices(step(log_λ), temporal_gps_λ)
+	sparsity = Int(round(0.5 / (step(log_λ) * temporal_gps_λ)))
 	Δℓ_coeff = gp_Δℓ_coefficients(length(log_λ), A_sde, Σ_sde; sparsity=sparsity)
 	return Submodel(log_λ, λ, lm, A_sde, Σ_sde, Δℓ_coeff)
 end
@@ -506,13 +501,15 @@ function OrderModel(
 	n_comp_star::Int=2,
 	oversamp::Bool=true,
 	dpca::Bool=true,
+	log_λ_gp_star::Real=1/SOAP_gp_params.λ,
+	log_λ_gp_tel::Real=1/LSF_gp_params.λ,
 	kwargs...)
 
-	tel = Submodel(d.log_λ_obs, n_comp_tel; type=:tel, kwargs...)
-	star = Submodel(d.log_λ_star, n_comp_star; type=:star, kwargs...)
+	tel = Submodel(d.log_λ_obs, n_comp_tel, log_λ_gp_tel; kwargs...)
+	star = Submodel(d.log_λ_star, n_comp_star, log_λ_gp_star; kwargs...)
 	n_obs = size(d.log_λ_obs, 2)
 	dpca ?
-		rv = Submodel(d.log_λ_star, 1; include_mean=false, kwargs...) :
+		rv = Submodel(d.log_λ_star, 1, log_λ_gp_star; include_mean=false, kwargs...) :
 		rv = zeros(n_obs)
 
 	bary_rvs = D_to_rv.([median(d.log_λ_star[:, i] - d.log_λ_obs[:, i]) for i in 1:n_obs])
@@ -668,13 +665,12 @@ function build_gp(params::NamedTuple)
 	f_naive = AbstractGPs.GP(params.var_kernel * Matern52Kernel() ∘ ScaleTransform(params.λ))
 	return to_sde(f_naive, SArrayStorage(Float64))
 end
-
-SOAP_gp_params = (var_kernel = 0.2188511770097717, λ = 26063.07237159581)
+SOAP_gp_params = (var_kernel = 0.19222435463373258, λ = 26801.464367577082)
 SOAP_gp = build_gp(SOAP_gp_params)
 SOAP_gp_var = 1e-6
-LSF_gp_params = (var_kernel = 0.20771264919723142, λ = 114294.15657857814)
+LSF_gp_params = (var_kernel = 0.2, λ = 185325.)
 LSF_gp = build_gp(LSF_gp_params)
-LSF_gp_var = 1e-4
+LSF_gp_var = 1e-6
 
 # ParameterHandling version
 # SOAP_gp_params = (var_kernel = positive(3.3270754364467443), λ = positive(1 / 9.021560480866474e-5))

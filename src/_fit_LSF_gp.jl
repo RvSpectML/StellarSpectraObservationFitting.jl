@@ -1,3 +1,6 @@
+using Pkg
+Pkg.activate(".")
+
 # Finding reasonable LSF_gp param values from fitting to a lsf broadened line
 # Based roughly on the EXPRES LSF at wn = 17000 1/cm (588 nm)
 using AbstractGPs
@@ -6,122 +9,151 @@ using TemporalGPs
 using Optim # Standard optimisation algorithms.
 using ParameterHandling # Helper functionality for dealing with model parameters.
 using Zygote # Algorithmic Differentiation
+import StellarSpectraObservationFitting as SSOF
 
 using Plots
 
 wavenumber_to_Å(wn) = 1e8 ./ wn
 _fwhm_2_σ_factor = 1 / (2 * sqrt(2 * log(2)))
 fwhm_2_σ(fwhm::Real) = _fwhm_2_σ_factor * fwhm
-
-# Ingesting data
-central_wn = 17000
 n = 1000
-λ_lo, λ_hi = log(wavenumber_to_Å(central_wn+1/2)), log(wavenumber_to_Å(central_wn-1/2))
-λs = RegularSpacing(λ_lo, (λ_hi-λ_lo)/n, n)
-wns = wavenumber_to_Å.(exp.(λs))
-expres_LSF_FWHM_wn = 0.14  # 1/cm
-expres_LSF_σ_Å = fwhm_2_σ(0.14)
-quiet = 1 .- exp.(-((wns .- wns[Int(round(n/2))]) ./ expres_LSF_σ_Å) .^ 2)
-
-plot(λs, quiet)
-
-
-# Declare model parameters using `ParameterHandling.jl` types.
-flat_initial_params, unflatten = value_flatten((
-	var_kernel = positive(1.),
-	λ = positive(1e5),
-))
-
-params = unflatten(flat_initial_params)
-
-function build_gp(params)
-    f_naive = GP(params.var_kernel * Matern52Kernel() ∘ ScaleTransform(params.λ))
-    return to_sde(f_naive, SArrayStorage(Float64))
+function matern52_kernel_base(λ::Number, δ::Number)
+    x = sqrt(5) * abs(δ) / λ
+    return (1 + x * (1 + x / 3)) * exp(-x)
+end
+plot_mat_λ!(λ, x) = plot!(x, matern52_kernel_base.((1 / λ), x); label="λ=$λ")
+function fits_lsfs(sim_step, sep_test, quiet::Vector, folder::String, lsf_λs::Vector, i::Int, order::Int)
+	cov_xs = sim_step .* sep_test
+	# covs = [cor(quiet[1:end-sep], quiet[1+sep:end]) for sep in sep_test]
+	# covs = [cov(quiet[1:end-sep], quiet[1+sep:end]) for sep in sep_test]
+	# covs ./= maximum(covs)
+	covs = [quiet[1:end-sep]'*quiet[1+sep:end] for sep in sep_test]  # better covariance function that knows they should be zero mean over long baseline
+	covs ./= maximum(covs)
+	plot(cov_xs, covs; label="lsf line", title="How correlated are nearby wavelengths", ylabel="cov", xlabel="log(λ (Å))")
+	# plot!(cov_xs, covs; label="better cov")
+	plot_mat_λ!(1e5, cov_xs)
+	plot_mat_λ!(2e5, cov_xs)
+	plot_mat_λ!(3e5, cov_xs)
+	# weights = max.(covs, 0)
+	# fo(λ) = sum(weights .* ((covs - matern52_kernel_base.((1 / λ[1]), cov_xs)) .^ 2))
+	fo(λ) = sum((covs - matern52_kernel_base.((1 / λ[1]), cov_xs)) .^ 2)
+	result = optimize(fo, [2e5], LBFGS(); autodiff = :forward)
+	lsf_λs[i] = result.minimizer[1]
+	plot_mat_λ!(round(result.minimizer[1]), cov_xs)
+	png("figs/lsf/$folder/$(order)_lsf_cor")
 end
 
-# Data
-x = λs
-y = quiet .- 1
+## EXPRES
+using CSV, DataFrames
 
-# Changing this changes the results significantly
-# ↑var_noise → ↑λ ↓var_kernel
-# var_noise = 1e-4 seems to lead to most sensible results i.e. draws from the
-# prior of the optimal result look similar to the input spectra
-var_noise = 1e-4
-function objective(params)
-    f = build_gp(params)
-    return -logpdf(f(x, var_noise), y)
+_eo = CSV.read("EXPRES/expres_psf.txt", DataFrame)
+# eo = CSV.read("C:/Users/chris/Downloads/expres_psf.txt", DataFrame)
+filter!(:line => ==("LFC"), _eo)
+sort!(_eo, ["wavenumber [1/cm]"])
+
+# has orders 37:76, (neid's 50-89), 41-76 is the intersection
+lsf_orders = 37:75
+lsf_λs = Array{Float64}(undef, length(lsf_orders))
+for i in 1:length(lsf_orders)
+	order = lsf_orders[i]
+	eo = copy(_eo)
+	filter!(:order => ==(order), eo)
+	middle = Int(round(nrow(eo)/2))
+	central_wn = mean(eo."wavenumber [1/cm]"[middle-10:middle+10])
+	expres_LSF_FWHM_wn = mean(eo."fwhm [1/cm]"[middle-10:middle+10])
+	λ_lo, λ_hi = log(wavenumber_to_Å(central_wn+4expres_LSF_FWHM_wn)), log(wavenumber_to_Å(central_wn-4expres_LSF_FWHM_wn))
+	λs = RegularSpacing(λ_lo, (λ_hi-λ_lo)/n, n)
+	wns = wavenumber_to_Å.(exp.(λs))
+	expres_LSF_σ_wn = fwhm_2_σ(expres_LSF_FWHM_wn)
+	quiet = exp.(-(((wns .- wns[Int(round(n/2))]) ./ expres_LSF_σ_wn) .^ 2)/2)
+	# quiet .-= mean(quiet)
+	# plot!(λs .+ mean_λ, quiet)
+
+	# how many λs.Δt does it take to contain ~2σ?
+	n_seps = ((λ_hi + λ_lo) / 2 - log(wavenumber_to_Å(wavenumber_to_Å(exp((λ_hi + λ_lo) / 2)) + 2expres_LSF_σ_wn))) / λs.Δt
+	sep_test = 0:Int(ceil(n_seps))
+	sim_step = λs.Δt
+	fits_lsfs(sim_step, sep_test, quiet, "expres", lsf_λs, i, order)
 end
+maximum(lsf_λs)
 
-# Check that the objective function works:
-objective(params)
+lsf_λs_smooth = Array{Float64}(undef, length(lsf_orders))
+f1 = SSOF.ordinary_lst_sq_f(lsf_λs, 2)
+lsf_λs_smooth .= f1.(1.:39)
+println(lsf_λs_smooth)
 
-f = objective ∘ unflatten
-function g!(G, θ)
-	G .= only(Zygote.gradient(f, θ))
+plot(lsf_λs)
+plot!(lsf_λs_smooth)
+
+## NEID
+using JLD2
+
+# Ingesting data (using NEID LSF)
+include("../NEID/lsf.jl")  # defines NEIDLSF.NEID_lsf()
+nlsf = NEIDLSF
+npix = 30
+@load "order_pixel_spacing.jld2" spacing lsf_orders
+lsf_λs = Array{Float64}(undef, length(lsf_orders))
+middle = Int(round(size(nlsf.σs,1)/2))
+pix = RegularSpacing(-1. * npix, 2npix/n, n)
+for i in 1:length(lsf_orders)
+# i = 1  # 1:59
+	order = lsf_orders[i] # has orders 54:112, (expres's 41-99), 54-89 is the intersection (index 1 and 36)
+	λs = RegularSpacing(-npix * spacing[i], 2*npix*spacing[i]/n, n)
+	quiet = nlsf.conv_gauss_tophat.(pix, nlsf.σs[middle, order], nlsf.bhws[middle, order])
+	quiet ./= maximum(quiet)
+
+	# how many λs.Δt does it take to contain ~2σ?
+	tot = 0
+	# target = sum(quiet)*0.841
+	# target = sum(quiet)*0.977
+	# target = sum(quiet)* 0.9938
+	target = sum(quiet)* (1-3.167e-5)
+	j = 0
+	while tot < target
+		j += 1
+		tot += quiet[j]
+	end
+	sep_test = 0:(j-500+1)
+	sim_step = λs.Δt
+	fits_lsfs(sim_step, sep_test, quiet, "neid", lsf_λs, i, order)
 end
-# f(flat_initial_params)
-# G = zeros(length(flat_initial_params))
-# g!(G, flat_initial_params)
+maximum(lsf_λs)
+lsf_λs_smooth = Array{Float64}(undef, length(lsf_orders))
+f1 = SSOF.ordinary_lst_sq_f(lsf_λs[1:35], 2)
+lsf_λs_smooth[1:35] .= f1.(1.:35)
+f2 = SSOF.ordinary_lst_sq_f(lsf_λs[35:59], 2;x=35.:59)
+lsf_λs_smooth[36:59] .= f2.(36.:59)
+println(lsf_λs_smooth)
 
-training_results = optimize(f, g!, flat_initial_params,
-	BFGS(alphaguess = Optim.LineSearches.InitialStatic(scaled=true),linesearch = Optim.LineSearches.BackTracking()),
-	Optim.Options(show_trace=true))
+plot(lsf_λs)
+plot!(lsf_λs_smooth)
 
-final_params = unflatten(training_results.minimizer)
-println(final_params)
+## Visual inspection
 
-f = build_gp(final_params)
-fx = f(x, var_noise)
-f_post = posterior(fx, y)
-# Compute the posterior marginals.
-y_post = marginals(f_post(x))
-
-
-pli = 1:length(x)
-ym = mean.(y_post[pli])
-ys = std.(y_post[pli])
+@load "order_pixel_spacing.jld2" spacing lsf_orders
+middle = Int(round(size(nlsf.σs,1)/2))
+pix = RegularSpacing(-1. * npix, 2npix/n, n)
+i = 1
+order = lsf_orders[30] # has orders 54:112, (expres's 41-99), 54-89 is the intersection (index 1 and 36)
+λs = RegularSpacing(-npix * spacing[i], 2*npix*spacing[i]/n, n)
+quiet = nlsf.conv_gauss_tophat.(pix, nlsf.σs[middle, order], nlsf.bhws[middle, order])
+quiet ./= maximum(quiet)
 
 function plt(var_kernel, λ; plot_sample=true)
-	pt = plot(x[pli], y[pli], label="data")
-	plot!(pt, x[pli], ym, alpha=0.8, ribbon=(-ys,ys), label="fit posterior")
-
-	params = (var_kernel = var_kernel,
-		λ = λ,)
-	f = build_gp(params)
-	fx = f(x, var_noise)
-	if plot_sample; plot!(pt, x[pli], rand(fx)[pli], label="sample from input") end
-	f_post2 = posterior(fx, y)
-	y_post2 = marginals(f_post2(x))
-	ym2 = mean.(y_post2[pli])
-	ys2 = std.(y_post2[pli])
-	plot!(pt, x[pli], ym2, alpha=0.8, ribbon=(-ys2,ys2), label="input posterior")
-	println(-logpdf(fx, y))
-	pt
+	pt = plot(λs, quiet, label="data")
+	f = build_gp((var_kernel = var_kernel, λ = λ))
+	fx = f(λs, 1e-6)
+	if plot_sample
+		for i in 1:3
+			plot!(pt, λs, rand(fx), label="sample")
+		end
+	end
+	f_post2 = posterior(fx, quiet)
+	y_post2 = marginals(f_post2(λs))
+	ym2 = mean.(y_post2)
+	ys2 = std.(y_post2)
+	plot!(pt, λs, ym2, alpha=0.8, ribbon=(-ys2,ys2), label="posterior")
+	return pt
 end
-# plt(1, 7570)
-plt(final_params.var_kernel, final_params.λ)
-
-
-# n=30
-# wavs = LinRange(log(1e3), log(1e6), n)
-# vars = LinRange(log(1e-2), log(1e3), n)
-# holder = zeros(n, n)
-# function ℓ(vars, wavs; y=y)
-# 	params = (var_kernel = exp(vars),
-# 		λ = exp(wavs),)
-# 	f = build_gp(params)
-# 	fx = f(x, 1e-6)
-# 	return -logpdf(fx, y)
-# end
-# for i in 1:n
-# 	for j in 1:n
-# 		holder[i,j] = ℓ(vars[j], wavs[i])
-# 	end
-# end
-#
-# ch = copy(holder)
-# ch[ch .> 0] .= 0
-# # heatmap(ch; xlabel="vars", ylabel="wavs")
-# pt = heatmap(exp.(vars), exp.(wavs), ch; xlabel="vars", ylabel="wavs", xscale=:log10, yscale=:log10)
-# png(pt, "tel gp params heatmap")
+plt(0.2, 180000.; plot_sample=true)

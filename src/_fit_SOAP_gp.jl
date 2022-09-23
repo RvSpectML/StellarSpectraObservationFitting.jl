@@ -25,32 +25,20 @@ quiet ./= maximum(quiet)
 # plot(λs, quiet)
 
 # Setting up kernel
-use_matern = true
-if use_matern
-	flat_initial_params, unflatten = value_flatten((
-		var_kernel = positive(0.1),
-		λ = positive(4e4),
-		))
-	function build_gp(params)
-	    f_naive = GP(params.var_kernel * Matern52Kernel() ∘ ScaleTransform(params.λ))
-	    return to_sde(f_naive, SArrayStorage(Float64))
-	end
-else
-	flat_initial_params, unflatten = value_flatten((
-		var_kernel = positive(0.1),
-		λ = positive(1e4),
-		))
-	function build_gp(params)
-	    f_naive = GP(params.var_kernel * PiecewisePolynomialKernel(;degree=2, dim=1) ∘ ScaleTransform(params.λ))
-		# return f_naive
-	    return to_sde(f_naive)
-	end
+flat_initial_params, unflatten = value_flatten((
+	var_kernel = positive(0.1),
+	λ = positive(4e4),
+	))
+function build_gp(params)
+    f_naive = GP(params.var_kernel * Matern52Kernel() ∘ ScaleTransform(params.λ))
+    return to_sde(f_naive, SArrayStorage(Float64))
 end
 params = unflatten(flat_initial_params)
 
 # Data
 x = λs
-y = quiet .- 1
+# y = quiet .- 1
+y = quiet .- mean(quiet)
 # Changing this changes the results significantly
 # ↑var_noise → ↑λ ↓var_kernel
 # var_noise = 1e-6 seems to lead to most sensible results i.e. draws from the
@@ -77,6 +65,7 @@ training_results = optimize(f, g!, flat_initial_params,
 	Optim.Options(show_trace=true))
 final_params = unflatten(training_results.minimizer)
 println(final_params)
+# final_params = (var_kernel = 0.19222435463373258, λ = 26801.464367577082) after taking out mean
 # final_params = (var_kernel = 0.2188511770097717, λ = 26063.07237159581)
 
 # f = build_gp(final_params)
