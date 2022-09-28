@@ -27,9 +27,7 @@ function mask!(var::AbstractMatrix, bad_inds::AbstractVector; padding::Int=0, us
 		affected = Int[]
 		l = size(var, 1)
 		for i in bad_inds
-			for j in max(1, i-padding):min(i+padding, l)
-				insert_and_dedup!(affected, j)
-			end
+			affected_pixels!(affected, max(1, i-padding):min(i+padding, l))
 		end
 		if using_weights
 			var[affected, :] .= 0
@@ -61,7 +59,10 @@ function mask_stellar_feature!(var::AbstractMatrix, log_λ_star::AbstractMatrix,
 	if verbose; println("masked some features in the stellar frame") end
 	return mask!(var, bad; kwargs...)
 end
-mask_stellar_feature!(d::Data, log_λ_low::Real, log_λ_high::Real; kwargs...) = mask_stellar_feature!(d.var, d.log_λ_star, log_λ_low, log_λ_high; kwargs...)
+function mask_stellar_feature!(d::Data, log_λ_low::Real, log_λ_high::Real; verbose::Bool=true, kwargs...)
+	mask_stellar_feature!(d.var_s, d.log_λ_star, log_λ_low, log_λ_high; verbose=verbose, kwargs...)
+	return mask_stellar_feature!(d.var, d.log_λ_star, log_λ_low, log_λ_high; verbose=false, kwargs...)
+end
 
 function mask_telluric_feature!(var::AbstractMatrix, log_λ_obs::AbstractMatrix, log_λ_star::AbstractMatrix, log_λ_low::Real, log_λ_high::Real; verbose::Bool=true, include_bary_shifts::Bool=true, kwargs...)
 	@assert log_λ_low < log_λ_high
@@ -74,11 +75,14 @@ function mask_telluric_feature!(var::AbstractMatrix, log_λ_obs::AbstractMatrix,
 		return mask!(var, log_λ_low .< log_λ_obs .< log_λ_high; kwargs...)
 	end
 end
-mask_telluric_feature!(d::Data, log_λ_low::Real, log_λ_high::Real; kwargs...) = mask_telluric_feature!(d.var, d.log_λ_obs, d.log_λ_star, log_λ_low, log_λ_high; kwargs...)
+function mask_telluric_feature!(d::Data, log_λ_low::Real, log_λ_high::Real; verbose::Bool=true, kwargs...)
+	mask_telluric_feature!(d.var_s, d.log_λ_obs, d.log_λ_star, log_λ_low, log_λ_high; verbose=verbose, kwargs...)
+	return mask_telluric_feature!(d.var, d.log_λ_obs, d.log_λ_star, log_λ_low, log_λ_high; verbose=false, kwargs...)
+end
 
 function mask_stellar_pixel!(var::AbstractMatrix, log_λ_star::AbstractMatrix, log_λ_star_bounds::AbstractMatrix, i::Int; padding::Int=0, verbose::Bool=true, kwargs...)
 	log_λ_low = minimum(view(log_λ_star_bounds, max(1, i - padding), :))
-	log_λ_high = maximum(view(log_λ_star_bounds, min(i + padding, size(log_λ_star_bounds, 1)), :))
+	log_λ_high = maximum(view(log_λ_star_bounds, min(i + padding + 1, size(log_λ_star_bounds, 1)), :))
 	if verbose; println("masked some pixels in the stellar frame") end
 	return mask_stellar_feature!(var, log_λ_star, log_λ_low, log_λ_high; verbose=false, kwargs...)
 end
@@ -93,4 +97,7 @@ function mask_stellar_pixel!(var::AbstractMatrix, log_λ_star::AbstractMatrix, l
 	end
 	return affected
 end
-mask_stellar_pixel!(d::Data, inds_or_i; kwargs...) = mask_stellar_pixel!(d.var, d.log_λ_star, d.log_λ_star_bounds, inds; kwargs...)
+function mask_stellar_pixel!(d::Data, inds_or_i; verbose::Bool=true, kwargs...)
+	mask_stellar_pixel!(d.var_s, d.log_λ_star, d.log_λ_star_bounds, inds; verbose=verbose, kwargs...)
+	return mask_stellar_pixel!(d.var, d.log_λ_star, d.log_λ_star_bounds, inds; verbose=false, kwargs...)
+end

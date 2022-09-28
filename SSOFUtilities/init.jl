@@ -192,6 +192,7 @@ function reformat_spectra(
 		end
 		@save save_path*"data.jld2" n_obs data times_nu airmasses
 		data_usage_plot(data, bad_inst, bad_high, bad_snap, bad_edge, bad_isol, bad_byeye; save_path=save_path)
+		# data_usage_plot(data, bad_inst, bad_high, bad_snap, bad_edge, bad_isol, bad_byeye; save_path=save_path * "_", use_var_s=false)
 		# plt = _plot(;size=(2 * _plt_size[1],_plt_size[2]), legend=:bottom)
 		# for j in 1:size(data_backup.flux, 2)
 		# 	ys = data_backup.flux[:, j]

@@ -302,9 +302,14 @@ function gated_plot!(plt, plotf!::Function, x::AbstractVector, y::AbstractVector
 	plotf!(x[m], y[m]; label=label, c=c, markerstrokewidth=0, alpha=alpha, markersize=markersize)
 end
 
-function data_usage_plot(d::SSOF.Data, bad_inst::Vector, bad_high::Vector, bad_snap::Vector, bad_edge::Vector, bad_isol::Vector, bad_byeye::Vector; save_path::String="")
-	ever_used = vec(any(.!isinf.(d.var_s); dims=2))
-	always_used = vec(all(.!(isinf.(d.var_s)); dims=2))
+function data_usage_plot(d::SSOF.Data, bad_inst::Vector, bad_high::Vector, bad_snap::Vector, bad_edge::Vector, bad_isol::Vector, bad_byeye::Vector; save_path::String="", use_var_s::Bool=true)
+	if use_var_s
+		ever_used = vec(any(.!isinf.(d.var_s); dims=2))
+		always_used = vec(all(.!(isinf.(d.var_s)); dims=2))
+	else
+		ever_used = vec(any(.!isinf.(d.var); dims=2))
+		always_used = vec(all(.!(isinf.(d.var)); dims=2))
+	end
 	sometimes_used = xor.(ever_used, always_used)
 	never_used = .!ever_used
 	mean_flux = vec(mean(d.flux; dims=2))
