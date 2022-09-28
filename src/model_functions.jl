@@ -176,7 +176,7 @@ struct GenericData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Dat
 	log_λ_obs_bounds::M
     log_λ_star::AM
 	log_λ_star_bounds::M
-	function GenericData(flux::AM, var::AM, log_λ_obs::AM, log_λ_star::AM) where {T<:Number, AM<:AbstractMatrix{T}}
+	function GenericData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_star::AM) where {T<:Number, AM<:AbstractMatrix{T}}
 		@assert size(flux) == size(var) == size(var_s) == size(log_λ_obs) == size(log_λ_star)
 		log_λ_obs_bounds = bounds_generator(log_λ_obs)
 		log_λ_star_bounds = bounds_generator(log_λ_star)
