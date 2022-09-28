@@ -183,12 +183,15 @@ function reformat_spectra(
 		else
 			data = SSOF.GenericData(flux_obs, var_obs, log_λ_obs, log_λ_star)
 		end
-		if is_NEID; neid_order_masks!(data, order, star) end
 		# data_backup = copy(data)
-
-		SSOF.process!(data; order=2, kwargs...)
+		bad_inst, bad_high, bad_snap, bad_edge, bad_isol = SSOF.process!(data; order=2, kwargs...)
+		if is_NEID
+			bad_byeye = neid_order_masks!(data, order, star)
+		else
+			bad_byeye = Int[]
+		end
 		@save save_path*"data.jld2" n_obs data times_nu airmasses
-		data_usage_plot(data; save_path=save_path)
+		data_usage_plot(data, bad_inst, bad_high, bad_snap, bad_edge, bad_isol, bad_byeye; save_path=save_path)
 		# plt = _plot(;size=(2 * _plt_size[1],_plt_size[2]), legend=:bottom)
 		# for j in 1:size(data_backup.flux, 2)
 		# 	ys = data_backup.flux[:, j]

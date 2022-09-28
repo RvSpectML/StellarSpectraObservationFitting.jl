@@ -8,7 +8,13 @@ _plt_size = (1920,1080)
 _thickness_scaling = 2
 _theme = :default
 # _theme = :juno
-_theme == :juno ? base_color = :white : base_color=:black
+if _theme == :juno
+	base_color = :white
+	anti_color = :black
+else
+	base_color = :black
+	anti_color = :white
+end
 _plot(; dpi = _plt_dpi, size = _plt_size, thickness_scaling=_thickness_scaling, kwargs...) =
     plot(; dpi=dpi, size=size, thickness_scaling=thickness_scaling, kwargs...)
 plot_spectrum(; xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const", kwargs...) =
@@ -286,26 +292,40 @@ function save_model_plots(mws, airmasses, times_nu, save_path::String; display_p
 	png(plt, save_path * "status_plot.png")
 end
 
-function gated_plot!(plt, plotf!::Function, x::AbstractVector, y::AbstractVector, ylims, c, alpha, label)
+function gated_plot!(plt, plotf!::Function, x::AbstractVector, y::AbstractVector, ylims, c, alpha, label, markersize)
 	@assert plotf! == scatter! || plotf! == plot!
 	m1 = y .< ylims[1]
-	scatter!(x[m1], ones(sum(m1)) .* (ylims[1] + .05); label="", c=c, markershape=:utriangle, markerstrokewidth=0, alpha=alpha)
+	scatter!(x[m1], ones(sum(m1)) .* (ylims[1] + .05); label="", c=c, markershape=:utriangle, markerstrokewidth=0, alpha=alpha, markersize=markersize)
 	m2 = y .> ylims[2]
-	scatter!(x[m2], ones(sum(m2)) .* (ylims[2] - .05); label="", c=c, markershape=:dtriangle, markerstrokewidth=0, alpha=alpha)
+	scatter!(x[m2], ones(sum(m2)) .* (ylims[2] - .05); label="", c=c, markershape=:dtriangle, markerstrokewidth=0, alpha=alpha, markersize=markersize)
 	m = .!m1 .&& .!m2
-	plotf!(x[m], y[m]; label=label, c=c, markerstrokewidth=0, alpha=alpha)
+	plotf!(x[m], y[m]; label=label, c=c, markerstrokewidth=0, alpha=alpha, markersize=markersize)
 end
 
-function data_usage_plot(d::SSOF.Data; save_path::String="")
+function data_usage_plot(d::SSOF.Data, bad_inst::Vector, bad_high::Vector, bad_snap::Vector, bad_edge::Vector, bad_isol::Vector, bad_byeye::Vector; save_path::String="")
 	ever_used = vec(any(.!isinf.(d.var); dims=2))
 	always_used = vec(all(.!(isinf.(d.var)); dims=2))
 	sometimes_used = xor.(ever_used, always_used)
+	never_used = .!ever_used
+	mean_flux = vec(mean(d.flux; dims=2))
+	pixs = 1:size(d.flux, 1)
 
 	yli = (-.05, 1.5)
-	plt = _plot(; title="Data usage", xlabel="Pixel #", ylabel="Normalized Flux", legend=:bottomright, ylims=yli)
-	gated_plot!(plt, plot!, (1:size(d.flux, 1))[always_used], vec(mean(view(d.flux, always_used, :); dims=2)), yli, base_color, 1, "Used at all times")
-	gated_plot!(plt, scatter!, (1:size(d.flux, 1))[sometimes_used], vec(mean(view(d.flux, sometimes_used, :); dims=2)), yli, plt_colors[1], 0.5, "Used sometimes")
-	gated_plot!(plt, scatter!, (1:size(d.flux, 1))[.!ever_used], vec(mean(view(d.flux, .!ever_used, :); dims=2)), yli, plt_colors[2], 0.5, "Never Used")
+	plt = _plot(; title="Data usage", xlabel="Pixel #", ylabel="Normalized Flux", legend=:outerright, ylims=yli)
+	if sum(always_used) > 0; gated_plot!(plt, scatter!, view(pixs, always_used), view(mean_flux, always_used), yli, base_color, 1, "Used at all times", 1) end
+
+	bads_str = ["Instrumental", "High", "Snappy", "Low SNR", "Isolated", "By Eye"]
+	bads = [bad_inst, bad_high, bad_snap, bad_edge, bad_isol, bad_byeye]
+	ss = [3, 3, 3, 2, 2, 2]
+	for i in 1:length(bads)
+		bad = bads[i]
+		bad_str = bads_str[i]
+		s = ss[i]
+		if length(bad) > 0; gated_plot!(plt, scatter!, bad, view(mean_flux, bad), yli, plt_colors[i+1], 0.4, bad_str, s) end
+	end
+
+	if sum(sometimes_used) > 0; gated_plot!(plt, scatter!, view(pixs, sometimes_used), view(mean_flux, sometimes_used), yli, plt_colors[1], 0.6, "Used sometimes", 1) end
+	if sum(never_used) > 0; gated_plot!(plt, scatter!, view(pixs, never_used), view(mean_flux, never_used), yli, :red, 1, "Never used", 1) end
 	if save_path != ""; png(plt, save_path * "data_usage.png") end
 	return plt
 end

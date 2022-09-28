@@ -85,31 +85,73 @@ end
 _min_flux_default = 0.
 _max_flux_default = 2.
 
-function mask_low_pixels!(y::AbstractVector, σ²::AbstractVector; min_flux::Real=_min_flux_default, padding::Int=2, using_weights::Bool=false)
-	bad = (y .< min_flux) .|| .!isfinite.(y)
+
+# function mask_infinite_pixels!(bad::AbstractVector, y::AbstractVector, σ²::AbstractVector; padding::Int=2, using_weights::Bool=false)
+# 	bad[:] = .!isfinite.(y) .|| .!isfinite.(σ²)
+# 	l = length(bad)
+# 	for i in findall(bad)
+# 		bad[max(1, i - padding):min(i + padding, l)] .= true
+# 	end
+# 	return _mask(σ², bad; using_weights=using_weights)
+# end
+# function mask_infinite_pixels!(y::AbstractVector, σ²::AbstractVector; kwargs...)
+# 	bad = Array{Bool}(undef, length(y))
+# 	mask_infinite_pixels!(bad, y, σ²; kwargs...)
+# end
+# function mask_infinite_pixels!(y::AbstractMatrix, σ²::AbstractMatrix; kwargs...)
+# 	affected = Int64[]
+# 	bad = Array{Bool}(undef, size(y, 1))
+# 	for i in 1:size(y, 2)
+# 		affected2 = mask_infinite_pixels!(bad, view(y, :, i), view(σ², :, i); kwargs...)
+# 		affected_pixels!(affected, affected2)
+# 	end
+# 	return affected
+# end
+# mask_infinite_pixels!(d::Data; kwargs...) = mask_infinite_pixels!(d.flux, d.var; kwargs...)
+function mask_infinite_pixels!(y::AbstractMatrix, σ²::AbstractMatrix, log_λ_star::AbstractMatrix, log_λ_star_bounds::AbstractMatrix; padding::Int=0, kwargs...)
+	i = findall(vec(all(.!isfinite.(y) .|| .!isfinite.(σ²); dims=2)))
+	if length(i) > 0
+		println("Instrumental pipeline already masked out pixels $i at all times")
+		# println("Instrumental pipeline already masked out many pixels")
+		return mask_stellar_pixel!(σ², log_λ_star, log_λ_star_bounds, i; padding=padding, print_something=false)
+	end
+	return Int[]
+end
+mask_infinite_pixels!(d::Data; kwargs...) = mask_infinite_pixels!(d.flux, d.var, d.log_λ_star, d.log_λ_star_bounds; kwargs...)
+
+function mask_low_pixels!(bad::AbstractVector, y::AbstractVector, σ²::AbstractVector; min_flux::Real=_min_flux_default, padding::Int=2, using_weights::Bool=false)
+	bad[:] = y .< min_flux
 	# y[bad] .= min_flux
 	l = length(bad)
 	for i in findall(bad)
 		bad[max(1, i - padding):min(i + padding, l)] .= true
 	end
-	using_weights ? σ²[bad] .= 0 : σ²[bad] .= Inf
+	return _mask(σ², bad; using_weights=using_weights)
+end
+function mask_low_pixels!(y::AbstractVector, σ²::AbstractVector; kwargs...)
+	bad = Array{Bool}(undef, length(y))
+	mask_low_pixels!(bad, y, σ²; kwargs...)
 end
 function mask_low_pixels!(y::AbstractMatrix, σ²::AbstractMatrix; kwargs...)
+	affected = Int64[]
+	bad = Array{Bool}(undef, size(y, 1))
 	for i in 1:size(y, 2)
-		mask_low_pixels!(view(y, :, i), view(σ², :, i); kwargs...)
+		affected2 = mask_low_pixels!(view(y, :, i), view(σ², :, i); kwargs...)
+		affected_pixels!(affected, affected2)
 	end
+	return affected
 end
 mask_low_pixels!(d::Data; kwargs...) = mask_low_pixels!(d.flux, d.var; kwargs...)
-function mask_low_pixels_all_times!(y::AbstractMatrix, σ²::AbstractMatrix; min_flux::Real=_min_flux_default, padding::Int=2, using_weights::Bool=false)
-	bad = (y .< min_flux) .|| .!isfinite.(y)
+function mask_low_pixels_all_times!(y::AbstractMatrix, σ²::AbstractMatrix, log_λ_star::AbstractMatrix, log_λ_star_bounds::AbstractMatrix; min_flux::Real=_min_flux_default, padding::Int=2, using_weights::Bool=false)
+	bad = y .< min_flux
 	# y[bad] .= min_flux
 	l = size(bad, 1)
 	low_pix = Int64[]
 	for ij in findall(bad)
-		i = ij[1]
+		i = ij[1]  # only get pixel, time doesn't matter
 		if !(i in low_pix)
 			append!(low_pix, [i])
-			bad[max(1, i - padding):min(i + padding, l), :] .= true  # masking the low pixel at all times
+			# bad[max(1, i - padding):min(i + padding, l), :] .= true  # masking the low pixel at all times
 		end
 	end
 	sort!(low_pix)
@@ -118,46 +160,54 @@ function mask_low_pixels_all_times!(y::AbstractMatrix, σ²::AbstractMatrix; min
 	elseif length(low_pix) > 0
 		println("masked out low pixels $low_pix (±$padding pixels) at all times")
 	end
-	using_weights ? σ²[bad] .= 0 : σ²[bad] .= Inf
+	mask_stellar_pixel!(σ², log_λ_star, log_λ_star_bounds, low_pix; padding=padding, using_weights=using_weights, print_something=false)
 end
-mask_low_pixels_all_times!(d::Data; kwargs...) = mask_low_pixels_all_times!(d.flux, d.var; kwargs...)
+mask_low_pixels_all_times!(d::Data; kwargs...) = mask_low_pixels_all_times!(d.flux, d.var, d.log_λ_star, d.log_λ_star_bounds; kwargs...)
 
-function mask_high_pixels!(y::AbstractVector, σ²::AbstractVector; max_flux::Real=_max_flux_default, padding::Int=2, using_weights::Bool=false)
-	bad = (y .> max_flux) .|| .!isfinite.(y)
+function mask_high_pixels!(bad::AbstractVector, y::AbstractVector, σ²::AbstractVector; max_flux::Real=_max_flux_default, padding::Int=2, kwargs...)
+	bad[:] = y .> max_flux
 	# y[bad] .= max_flux
 	l = length(bad)
 	for i in findall(bad)
 		bad[max(1, i - padding):min(i + padding, l)] .= true
 	end
-	using_weights ? σ²[bad] .= 0 : σ²[bad] .= Inf
+	return _mask(σ², bad; kwargs...)
+end
+function mask_high_pixels!(y::AbstractVector, σ²::AbstractVector; kwargs...)
+	bad = Array{Bool}(undef, length(y))
+	mask_high_pixels!(bad, y, σ²; kwargs...)
 end
 function mask_high_pixels!(y::AbstractMatrix, σ²::AbstractMatrix; kwargs...)
+	affected = Int64[]
+	bad = Array{Bool}(undef, size(y, 1))
 	for i in 1:size(y, 2)
-		mask_high_pixels!(view(y, :, i), view(σ², :, i); kwargs...)
+		affected2 = mask_high_pixels!(bad, view(y, :, i), view(σ², :, i); kwargs...)
+		affected_pixels!(affected, affected2)
 	end
+	return affected
 end
 mask_high_pixels!(d::Data; kwargs...) = mask_high_pixels!(d.flux, d.var; kwargs...)
 
-function mask_bad_edges!(y::AbstractVector, σ²::AbstractVector; window_width::Int=128, min_snr::Real=8.)
-	n_pix = length(y)
-	for window_start in 1:Int(floor(window_width/10)):(n_pix - window_width)
-		window_end = window_start + window_width
-		mean_snr = sqrt(mean((y[window_start:window_end] .^2) ./ abs.(σ²[window_start:window_end])))
-		if mean_snr > min_snr
-			σ²[1:window_start] .= Inf # trim everything to left of window
-			break
-		end
-	end
-	for window_end in n_pix:-Int(floor(window_width/10)):(window_width + 1)
-		window_start = window_end - window_width
-		mean_snr = sqrt(mean((y[window_start:window_end] .^2) ./ abs.(σ²[window_start:window_end])))
-		if mean_snr > min_snr
-			σ²[window_end:end] .= Inf # trim everything to right of window
-			break
-		end
-	end
-end
-function mask_bad_edges!(y::AbstractMatrix, σ²::AbstractMatrix; window_width::Int=128, min_snr::Real=8.)
+# function mask_bad_edges!(y::AbstractVector, σ²::AbstractVector; window_width::Int=128, min_snr::Real=8.)
+# 	n_pix = length(y)
+# 	for window_start in 1:Int(floor(window_width/10)):(n_pix - window_width)
+# 		window_end = window_start + window_width
+# 		mean_snr = sqrt(mean((y[window_start:window_end] .^2) ./ abs.(σ²[window_start:window_end])))
+# 		if mean_snr > min_snr
+# 			σ²[1:window_start] .= Inf # trim everything to left of window
+# 			break
+# 		end
+# 	end
+# 	for window_end in n_pix:-Int(floor(window_width/10)):(window_width + 1)
+# 		window_start = window_end - window_width
+# 		mean_snr = sqrt(mean((y[window_start:window_end] .^2) ./ abs.(σ²[window_start:window_end])))
+# 		if mean_snr > min_snr
+# 			σ²[window_end:end] .= Inf # trim everything to right of window
+# 			break
+# 		end
+# 	end
+# end
+function mask_bad_edges!(y::AbstractMatrix, σ²::AbstractMatrix, log_λ_star::AbstractMatrix, log_λ_star_bounds::AbstractMatrix; window_width::Int=128, min_snr::Real=8., kwargs...)
 	n_pix = size(y, 1)
 	window_start_tot = 0
 	window_end_tot = n_pix + 1
@@ -171,10 +221,6 @@ function mask_bad_edges!(y::AbstractMatrix, σ²::AbstractMatrix; window_width::
 			end
 		end
 	end
-	if window_start_tot > 1
-		σ²[1:window_start_tot, :] .= Inf # trim everything to left of window
-		println("masking out low SNR edge from 1:$window_start_tot")
-	end
 	for i in 1:size(y,2)
 		for window_end in n_pix:-Int(floor(window_width/10)):(window_width + 1)
 			window_start = window_end - window_width
@@ -185,13 +231,28 @@ function mask_bad_edges!(y::AbstractMatrix, σ²::AbstractMatrix; window_width::
 			end
 		end
 	end
+	if window_start_tot > 1
+		# σ²[1:window_start_tot, :] .= Inf # trim everything to left of window
+		println("masking out low SNR edge from 1:$window_start_tot")
+		log_λ_low = maximum(view(log_λ_star_bounds, max(1, window_start_tot), :))
+	else
+		log_λ_low = -Inf
+	end
 	if window_end_tot < n_pix
-		σ²[window_end_tot:end, :] .= Inf # trim everything to right of window
+		# σ²[window_end_tot:end, :] .= Inf # trim everything to right of window
+		log_λ_high = minimum(view(log_λ_star_bounds, min(window_end_tot, size(log_λ_star_bounds, 1)), :))
 		println("masking out low SNR edge from $window_end_tot:end")
+	else
+		log_λ_high = Inf
+	end
+	if window_start_tot > 1 || window_end_tot < n_pix
+		return mask_stellar_feature!(σ², log_λ_star, log_λ_low, log_λ_high; inverse=true, print_something=false, kwargs...)
+	else
+		return Int[]
 	end
 end
 function mask_bad_edges!(d::Data; kwargs...)
-	mask_bad_edges!(d.flux, d.var; kwargs...)
+	mask_bad_edges!(d.flux, d.var, d.log_λ_star, d.log_λ_star_bounds; kwargs...)
 end
 
 function flat_normalize!(d::Data; kwargs...)
@@ -259,19 +320,19 @@ function bad_pixel_flagger(y::AbstractMatrix, σ²::AbstractMatrix; prop::Real=.
 	return high_snap_pixels[.!outlier_mask(snp[high_snap_pixels]; prop=prop*length(snp)/length(high_snap_pixels), thres=thres)]
 end
 bad_pixel_flagger(d::Data; kwargs...) = bad_pixel_flagger(d.flux, d.var; kwargs...)
-function mask_bad_pixel!(y::AbstractMatrix, σ²::AbstractMatrix; kwargs...)
+function mask_bad_pixel!(y::AbstractMatrix, σ²::AbstractMatrix, log_λ_star::AbstractMatrix, log_λ_star_bounds::AbstractMatrix; padding::Int=2, kwargs...)
 	i = bad_pixel_flagger(y, σ²; kwargs...)
 	if length(i) > 15
 		println("lots of snappy pixels, investigate?")
 	elseif length(i) > 0
-		# y[i, :] .= 1
-		σ²[i, :] .= Inf
 		println("masked out high snap pixels $i at all times")
 	end
+	return mask_stellar_pixel!(σ², log_λ_star, log_λ_star_bounds, i; padding=padding, print_something=false)
 end
-mask_bad_pixel!(d::Data; kwargs...) = mask_bad_pixel!(d.flux, d.var; kwargs...)
+mask_bad_pixel!(d::Data; kwargs...) = mask_bad_pixel!(d.flux, d.var, d.log_λ_star, d.log_λ_star_bounds; kwargs...)
 
 function mask_isolated_pixels!(σ²::AbstractMatrix; neighbors_required::Int=29)
+	affected = Int[]
 	lo = 1
 	hi = 1
 	m = vec(all(isinf.(σ²); dims=2))
@@ -288,33 +349,49 @@ function mask_isolated_pixels!(σ²::AbstractMatrix; neighbors_required::Int=29)
 			if hi-lo < neighbors_required
 				σ²[lo:hi, :] .= Inf
 				println("masked isolated pixels $lo:$hi")
+				affected_pixels!(affected, lo:hi)
 			end
 			lo = hi + 1
 		end
 	end
+	return affected
 end
 mask_isolated_pixels!(d::Data; kwargs...) = mask_isolated_pixels!(d.var; kwargs...)
 
 function process!(d; λ_thres::Real=4000., min_snr::Real=8, kwargs...)
 	flat_normalize!(d)
-	mask_low_pixels_all_times!(d; padding=0)
-	mask_high_pixels!(d; padding=0)
-	mask_bad_pixel!(d)  # thres from 4-11 seems good
-	mask_bad_edges!(d; min_snr=min_snr)
-	mask_isolated_pixels!(d)
+	# mask_low_pixels_all_times!(d; padding=2)
+	bad_inst = mask_infinite_pixels!(d; padding=1)
+	bad_edge = mask_bad_edges!(d; min_snr=min_snr)
+	bad_high = mask_high_pixels!(d; padding=1)
+	bad_snap = mask_bad_pixel!(d; padding=1)  # thres from 4-11 seems good
+	bad_isol = mask_isolated_pixels!(d)
+
+	# @assert issorted(bad_infi)
+	# @assert issorted(bad_edge)
+	# @assert issorted(bad_high)
+	# @assert issorted(bad_snap)
+	# @assert issorted(bad_isol)
+	# filter_bads(bad) = [i for i in bad if length(searchsorted(bad_edge, i)) > 0]
+
+	filter_bads(bad) = [i for i in bad if !(i in bad_edge)]
+	bad_inst = filter_bads(bad_inst)
+	bad_high = filter_bads(bad_high)
+	bad_snap = filter_bads(bad_snap)
+	bad_isol = filter_bads(bad_isol)
+
 	# λ_thres = 4000 # is there likely to even be a continuum (neid index order 23+)
 	# λ_thres = 6200 # where neid blaze correction starts to break down (neid index order 77+)
-	# red_enough = minimum(d.log_λ_obs) > log(6200)
 	red_enough = minimum(d.log_λ_obs) > log(λ_thres)
+
 	# enough_points = (sum(isinf.(d.var)) / length(d.var)) < 0.5
 	enough_points = true
+
 	if (red_enough && enough_points)
 		println("normalizing")
 		w = continuum_normalize!(d; kwargs...)
 	else
 		w = nothing
 	end
-	# recognize_bad_normalization!(d; thres=20)
-	# recognize_bad_drift!(d; thres=20)
-	return w
+	return bad_inst, bad_high, bad_snap, bad_edge, bad_isol
 end
