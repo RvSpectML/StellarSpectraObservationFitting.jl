@@ -9,22 +9,22 @@ abstract type AdamWorkspace<:ModelWorkspace end
 abstract type OptimWorkspace<:ModelWorkspace end
 
 _χ²_loss(model, data, variance) = ((model .- data) .^ 2) ./ variance
-_χ²_loss(model, data::Data) = _χ²_loss(model, data.flux, data.var)
-__loss_diagnostic(tel, star, rv, d::GenericData) =
-	_χ²_loss(total_model(tel, star, rv), d)
-__loss_diagnostic(tel, star, rv, d::LSFData) =
-	_χ²_loss(d.lsf * total_model(tel, star, rv), d)
-__loss_diagnostic(tel, star, d::GenericData) =
-	_χ²_loss(total_model(tel, star), d)
-__loss_diagnostic(tel, star, d::LSFData) =
-	_χ²_loss(d.lsf * total_model(tel, star), d)
+_χ²_loss(model, data::Data; use_var_s::Bool=false) = use_var_s ? _χ²_loss(model, data.flux, data.var_s) : _χ²_loss(model, data.flux, data.var)
+__loss_diagnostic(tel, star, rv, d::GenericData; kwargs...) =
+	_χ²_loss(total_model(tel, star, rv), d; kwargs...)
+__loss_diagnostic(tel, star, rv, d::LSFData; kwargs...) =
+	_χ²_loss(d.lsf * total_model(tel, star, rv), d; kwargs...)
+__loss_diagnostic(tel, star, d::GenericData; kwargs...) =
+	_χ²_loss(total_model(tel, star), d; kwargs...)
+__loss_diagnostic(tel, star, d::LSFData; kwargs...) =
+	_χ²_loss(d.lsf * total_model(tel, star), d; kwargs...)
 function _loss_diagnostic(o::Output, om::OrderModel, d::Data;
-	tel=nothing, star=nothing, rv=nothing)
+	tel=nothing, star=nothing, rv=nothing, kwargs...)
     !isnothing(tel) ? tel_o = spectra_interp(_eval_lm_vec(om, tel; log_lm=log_lm(om.tel.lm)), om.t2o) : tel_o = o.tel
 	if typeof(om) <: OrderModelDPCA
 		!isnothing(star) ? star_o = spectra_interp(_eval_lm_vec(om, star; log_lm=log_lm(om.star.lm)), om.b2o) : star_o = o.star
 		!isnothing(rv) ? rv_o = spectra_interp(_eval_lm(om.rv.lm.M, rv), om.b2o) : rv_o = o.rv
-		return __loss_diagnostic(tel_o, star_o, rv_o, d)
+		return __loss_diagnostic(tel_o, star_o, rv_o, d; kwargs...)
 	end
 	if !isnothing(star)
 		if !isnothing(rv)
@@ -37,13 +37,13 @@ function _loss_diagnostic(o::Output, om::OrderModel, d::Data;
 	else
 		star_o = o.star
 	end
-	return __loss_diagnostic(tel_o, star_o, d)
+	return __loss_diagnostic(tel_o, star_o, d; kwargs...)
 end
 _loss_diagnostic(mws::ModelWorkspace; kwargs...) = _loss_diagnostic(mws.o, mws.om, mws.d; kwargs...)
 
 # χ² loss function
-_loss(tel, star, rv, d::Data) = sum(__loss_diagnostic(tel, star, rv, d))
-_loss(tel, star, d::Data) = sum(__loss_diagnostic(tel, star, d))
+_loss(tel, star, rv, d::Data; kwargs...) = sum(__loss_diagnostic(tel, star, rv, d; kwargs...))
+_loss(tel, star, d::Data; kwargs...) = sum(__loss_diagnostic(tel, star, d; kwargs...))
 _loss(o::Output, om::OrderModel, d::Data; kwargs...) = sum(_loss_diagnostic(o, om, d; kwargs...))
 _loss(mws::ModelWorkspace; kwargs...) = _loss(mws.o, mws.om, mws.d; kwargs...)
 # function _loss(o::Output, om::OrderModel, d::Data;
@@ -105,10 +105,10 @@ function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
 			tel = nothing
 			star = nothing
 		end
-		return _loss(o, om, d; tel=tel, star=star) + prior
+		return _loss(o, om, d; tel=tel, star=star, use_var_s=true) + prior
     end
 
-    l_rv(rv) = _loss(o, om, d; rv=rv)
+    l_rv(rv) = _loss(o, om, d; rv=rv, use_var_s=true)
 
     return l_telstar, l_telstar_s, l_rv
 end
@@ -138,7 +138,7 @@ function loss_funcs_total(o::Output, om::OrderModelDPCA, d::Data)
 			tel = nothing
 			star = nothing
 		end
-		return _loss(o, om, d; tel=tel, star=star, rv=total_s[1+is_star_time_variable+is_tel_time_variable]) + prior
+		return _loss(o, om, d; tel=tel, star=star, rv=total_s[1+is_star_time_variable+is_tel_time_variable], use_var_s=true) + prior
     end
 
     return l_total, l_total_s
@@ -168,7 +168,7 @@ function loss_funcs_total(o::Output, om::OrderModelWobble, d::Data)
 			tel = nothing
 			star = nothing
 		end
-		return _loss(o, om, d; tel=tel, star=star, rv=total_s[1+is_star_time_variable+is_tel_time_variable]) + prior
+		return _loss(o, om, d; tel=tel, star=star, rv=total_s[1+is_star_time_variable+is_tel_time_variable], use_var_s=true) + prior
     end
 
     return l_total, l_total_s
@@ -201,7 +201,7 @@ function loss_funcs_frozen_tel(o::Output, om::OrderModel, d::Data)
 			tel = nothing
 			star = nothing
 		end
-		return _loss(o, om, d; tel=tel, star=star, rv=total_s[1+is_star_time_variable+is_tel_time_variable]) + prior
+		return _loss(o, om, d; tel=tel, star=star, rv=total_s[1+is_star_time_variable+is_tel_time_variable], use_var_s=true) + prior
     end
     return l_frozen_tel, l_frozen_tel_s
 end
@@ -284,7 +284,7 @@ function AdamState!(as::AdamState, ℓ, Δ)
 	AdamState!_helper(as, :L∞_Δ, L∞(Δ))
 end
 
-_print_stuff_def = false
+_verbose_def = false
 _iter_def = 100
 _f_reltol_def = 1e-4
 _g_reltol_def = 1e-3
@@ -429,7 +429,7 @@ FrozenTelWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
 FrozenTelWorkspace(om::OrderModel, d::Data; kwargs...) =
 	FrozenTelWorkspace(Output(om, d), om, d; kwargs...)
 
-function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, print_stuff::Bool=_print_stuff_def, shift_scores::Bool=true, winsor::Bool=true, kwargs...)
+function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, verbose::Bool=_verbose_def, shift_scores::Bool=true, winsor::Bool=true, kwargs...)
 
     if ignore_regularization
         reg_tel_holder = copy(mws.om.reg_tel)
@@ -446,9 +446,9 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
 				remove_lm_score_means!(mws.om.star.lm; prop=0.2)
 			end
 		end
-		if print_stuff; println(as) end
+		if verbose; println(as) end
 	end
-	# print_stuff ? cb(as::AdamState) = println(as) : cb(as::AdamState) = nothing
+	# verbose ? cb(as::AdamState) = println(as) : cb(as::AdamState) = nothing
 
 	result = train_SubModel!(mws.total; cb=cb, kwargs...)
 	mws.total.as.iter = 0
@@ -589,16 +589,16 @@ function optim_print(x::OptimizationState)
 	return false
 end
 # ends optimization if true
-function optim_cb_f(; print_stuff::Bool=true)
-    if print_stuff
+function optim_cb_f(; verbose::Bool=true)
+    if verbose
 		return (x::OptimizationState) -> optim_print(x::OptimizationState)
     else
 		return (x::OptimizationState) -> false
     end
 end
 
-function train_OrderModel!(ow::OptimTelStarWorkspace; print_stuff::Bool=_print_stuff_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, train_telstar::Bool=true, ignore_regularization::Bool=false, kwargs...)
-    optim_cb = optim_cb_f(; print_stuff=print_stuff)
+function train_OrderModel!(ow::OptimTelStarWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, train_telstar::Bool=true, ignore_regularization::Bool=false, kwargs...)
+    optim_cb = optim_cb_f(; verbose=verbose)
 
     if ignore_regularization
         reg_tel_holder = copy(ow.om.reg_tel)
@@ -643,8 +643,8 @@ function train_OrderModel!(ow::OptimTelStarWorkspace; print_stuff::Bool=_print_s
     end
     return result_telstar, result_rv
 end
-function train_OrderModel!(ow::OptimTotalWorkspace; print_stuff::Bool=_print_stuff_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, ignore_regularization::Bool=false, kwargs...)
-    optim_cb = optim_cb_f(; print_stuff=print_stuff)
+function train_OrderModel!(ow::OptimTotalWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, ignore_regularization::Bool=false, kwargs...)
+    optim_cb = optim_cb_f(; verbose=verbose)
 
     if ignore_regularization
         reg_tel_holder = copy(ow.om.reg_tel)
@@ -712,15 +712,15 @@ train_rvs_optim!(ow::OptimTelStarWorkspace, optim_cb::Function; kwargs...) =
 		train_rvs_optim!(ow.rv, ow.om.rv, ow.om.star, optim_cb; kwargs...) :
 		train_rvs_optim!(ow.rv, ow.om.rv, optim_cb; kwargs...)
 
-function finalize_scores_setup(mws::ModelWorkspace; print_stuff::Bool=_print_stuff_def, f_tol::Real=_f_reltol_def_s, g_tol::Real=_g_L∞tol_def_s, kwargs...)
+function finalize_scores_setup(mws::ModelWorkspace; verbose::Bool=_verbose_def, f_tol::Real=_f_reltol_def_s, g_tol::Real=_g_L∞tol_def_s, kwargs...)
 	if is_time_variable(mws.om.tel) || is_time_variable(mws.om.star)
 		mws_s = OptimTotalWorkspace(mws.om, mws.d; only_s=true)  # does not converge reliably
 		# mws_s = OptimTelStarWorkspace(mws.om, mws.d; only_s=true)
-		score_trainer() = train_OrderModel!(mws_s; print_stuff=print_stuff, f_tol=f_tol, g_tol=g_tol, kwargs...)
+		score_trainer() = train_OrderModel!(mws_s; verbose=verbose, f_tol=f_tol, g_tol=g_tol, kwargs...)
 		return score_trainer
 	end
-	optim_cb=optim_cb_f(; print_stuff=print_stuff)
-	loss_rv(rv) = _loss(mws; rv=rv)
+	optim_cb=optim_cb_f(; verbose=verbose)
+	loss_rv(rv) = _loss(mws; rv=rv, use_var_s=true)
 	return _finalize_scores_setup(mws, mws.om, loss_rv, optim_cb; f_tol=f_tol, g_tol=g_tol, kwargs...)
 end
 function _finalize_scores_setup(mws::ModelWorkspace, om::OrderModelDPCA, loss_rv::Function, optim_cb::Function; kwargs...)

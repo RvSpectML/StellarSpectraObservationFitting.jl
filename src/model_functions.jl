@@ -147,70 +147,74 @@ end
 struct LSFData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
     flux::AM
     var::AM
+	var_s::AM
     log_λ_obs::AM
 	log_λ_obs_bounds::M
     log_λ_star::AM
 	log_λ_star_bounds::M
 	lsf::_current_matrix_modifier
-	function LSFData(flux::AM, var::AM, log_λ_obs::AM, log_λ_star::AM, lsf::_current_matrix_modifier) where {T<:Real, AM<:AbstractMatrix{T}}
-		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
+	function LSFData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_star::AM, lsf::_current_matrix_modifier) where {T<:Real, AM<:AbstractMatrix{T}}
+		@assert size(flux) == size(var) == size(var_s) == size(log_λ_obs) == size(log_λ_star)
 		@assert size(lsf, 1) == size(lsf, 2) == size(flux, 1)
 		log_λ_obs_bounds = bounds_generator(log_λ_obs)
 		log_λ_star_bounds = bounds_generator(log_λ_star)
-		return new{T, AM, typeof(log_λ_obs_bounds)}(flux::AM, var::AM, log_λ_obs::AM, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds, lsf)
+		return new{T, AM, typeof(log_λ_obs_bounds)}(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds, lsf)
 	end
 end
-LSFData(flux::AM, var::AM, log_λ_obs::AM, log_λ_star::AM, lsf::Nothing) where {T<:Real, AM<:AbstractMatrix{T}} =
-	GenericData(flux, var, log_λ_obs, log_λ_star)
+LSFData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_star::AM, lsf::Nothing) where {T<:Real, AM<:AbstractMatrix{T}} =
+	GenericData(flux, var, var_s, log_λ_obs, log_λ_star)
 (d::LSFData)(inds::AbstractVecOrMat) =
-	LSFData(view(d.flux, :, inds), view(d.var, :, inds),
+	LSFData(view(d.flux, :, inds), view(d.var, :, inds), view(d.var_s, :, inds),
 	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds), d.lsf)
-Base.copy(d::LSFData) = LSFData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star), copy(d.lsf))
+Base.copy(d::LSFData) = LSFData(copy(d.flux), copy(d.var), copy(d.var_s), copy(d.log_λ_obs), copy(d.log_λ_star), copy(d.lsf))
 
 struct GenericData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
     flux::AM
     var::AM
+	var_s::AM
     log_λ_obs::AM
 	log_λ_obs_bounds::M
     log_λ_star::AM
 	log_λ_star_bounds::M
 	function GenericData(flux::AM, var::AM, log_λ_obs::AM, log_λ_star::AM) where {T<:Number, AM<:AbstractMatrix{T}}
-		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
+		@assert size(flux) == size(var) == size(var_s) == size(log_λ_obs) == size(log_λ_star)
 		log_λ_obs_bounds = bounds_generator(log_λ_obs)
 		log_λ_star_bounds = bounds_generator(log_λ_star)
-		return new{T, AM, typeof(log_λ_obs_bounds)}(flux, var, log_λ_obs, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds)
+		return new{T, AM, typeof(log_λ_obs_bounds)}(flux, var, var_s, log_λ_obs, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds)
 	end
 end
 (d::GenericData)(inds::AbstractVecOrMat) =
-	GenericData(view(d.flux, :, inds), view(d.var, :, inds),
+	GenericData(view(d.flux, :, inds), view(d.var, :, inds), view(d.var_s, :, inds),
 	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds))
-Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star))
-GenericData(d::LSFData) = GenericData(d.flux, d.var, d.log_λ_obs, d.log_λ_star)
+Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.var_s), copy(d.log_λ_obs), copy(d.log_λ_star))
+GenericData(d::LSFData) = GenericData(d.flux, d.var, d.var_s, d.log_λ_obs, d.log_λ_star)
 GenericData(d::GenericData) = d
 
 struct GenericDatum{T<:Number, AV<:AbstractVector{T}, V<:Vector{<:Number}} <: Data
     flux::AV
     var::AV
+	var_s::AV
     log_λ_obs::AV
 	log_λ_obs_bounds::V
     log_λ_star::AV
 	log_λ_star_bounds::V
 	function GenericDatum(flux::AV, var::AV, log_λ_obs::AV, log_λ_star::AV) where {T<:Number, AV<:AbstractVector{T}}
-		@assert size(flux) == size(var) == size(log_λ_obs) == size(log_λ_star)
+		@assert size(flux) == size(var) == size(var_s) == size(log_λ_obs) == size(log_λ_star)
 		log_λ_obs_bounds = bounds_generator(log_λ_obs)
 		log_λ_star_bounds = bounds_generator(log_λ_star)
-		return new{T, AV, typeof(log_λ_obs_bounds)}(flux, var, log_λ_obs, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds)
+		return new{T, AV, typeof(log_λ_obs_bounds)}(flux, var, var_s, log_λ_obs, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds)
 	end
 end
 (d::GenericDatum)(inds::AbstractVecOrMat) =
-	GenericData(view(d.flux, inds), view(d.var, inds),
+	GenericData(view(d.flux, inds), view(d.var, inds), view(d.var_s, inds),
 	view(d.log_λ_obs, inds), view(d.log_λ_star, inds))
-Base.copy(d::GenericDatum) = GenericDatum(copy(d.flux), copy(d.var), copy(d.log_λ_obs), copy(d.log_λ_star))
+Base.copy(d::GenericDatum) = GenericDatum(copy(d.flux), copy(d.var), copy(d.var_s), copy(d.log_λ_obs), copy(d.log_λ_star))
 function GenericData(d::Vector{<:GenericDatum})
 	len_obs = length(d[1].flux)
 	n_obs = length(d)
 	flux_obs = ones(len_obs, n_obs)
 	var_obs = Array{Float64}(undef, len_obs, n_obs)
+	var_obs_s = Array{Float64}(undef, len_obs, n_obs)
 	log_λ_obs = Array{Float64}(undef, len_obs, n_obs)
 	# log_λ_obs_bounds = Array{Float64}(undef, len_obs+1, n_obs)
 	log_λ_star = Array{Float64}(undef, len_obs, n_obs)
@@ -218,12 +222,13 @@ function GenericData(d::Vector{<:GenericDatum})
 	for i in 1:n_obs # 13s
 		flux_obs[:, i] .= d[i].flux
 		var_obs[:, i] .= d[i].var
+		var_obs_s[:, i] .= d[i].var_s
 		log_λ_obs[:, i] .= d[i].log_λ_obs
 		# log_λ_obs_bounds[:, i] .= d[i].log_λ_obs_bounds
 		log_λ_star[:, i] .= d[i].log_λ_star
 		# log_λ_star_bounds[:, i] .= d[i].log_λ_star_bounds
 	end
-	return GenericData(flux_obs, var_obs, log_λ_obs, log_λ_star)
+	return GenericData(flux_obs, var_obs, var_obs_s, log_λ_obs, log_λ_star)
 end
 
 function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=1.)

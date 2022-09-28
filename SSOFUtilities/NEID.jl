@@ -139,7 +139,7 @@ function neid_order_masks!(data::SSOF.Data, order::Int, star::String)
 		elseif order==48
 		    return SSOF.mask_stellar_feature!(data, log(4909.8), 100)
 		elseif order==60
-		    return SSOF.mask_telluric_feature!(data, 0, log(5326.2))
+		    return SSOF.mask_stellar_feature!(data, 0, log(5325.7))
 		elseif order==61
 			# not sure which it is
 		    return SSOF.mask_stellar_feature!(data, 0, log(5374))

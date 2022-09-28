@@ -178,10 +178,10 @@ function reformat_spectra(
 		var_obs[nan_mask] .= Inf
 		if lsf_f != nothing
 			is_NEID ?
-				data = SSOF.LSFData(flux_obs, var_obs, log_λ_obs, log_λ_star, lsf_f(order)) :
-				data = SSOF.LSFData(flux_obs, var_obs, log_λ_obs, log_λ_star, lsf_f(exp.(log_λ_obs), order))
+				data = SSOF.LSFData(flux_obs, var_obs, copy(var_obs), log_λ_obs, log_λ_star, lsf_f(order)) :
+				data = SSOF.LSFData(flux_obs, var_obs, copy(var_obs), log_λ_obs, log_λ_star, lsf_f(exp.(log_λ_obs), order))
 		else
-			data = SSOF.GenericData(flux_obs, var_obs, log_λ_obs, log_λ_star)
+			data = SSOF.GenericData(flux_obs, var_obs, copy(var_obs), log_λ_obs, log_λ_star)
 		end
 		# data_backup = copy(data)
 		bad_inst, bad_high, bad_snap, bad_edge, bad_isol = SSOF.process!(data; order=2, kwargs...)
