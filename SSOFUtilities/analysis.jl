@@ -191,6 +191,7 @@ function _finish_downsizing(mws::SSOF.ModelWorkspace, model::SSOF.OrderModel; no
 	mws_smol.om.metadata[:todo][:downsized] = true
 	mws_smol.om.metadata[:todo][:initialized] = true
 	SSOF.update_interpolation_locations!(mws_smol)
+	SSOF.flip_basis_vectors!(mws_smol.om)
 	SSOF.train_OrderModel!(mws_smol; kwargs...)  # 120s
 	SSOF.finalize_scores!(mws_smol; f_tol=SSOF._f_reltol_def_s, g_tol=SSOF._g_L∞tol_def_s)
 	return mws_smol
