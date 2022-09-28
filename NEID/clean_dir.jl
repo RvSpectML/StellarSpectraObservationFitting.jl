@@ -14,7 +14,8 @@ include("data_locs.jl")  # defines expres_data_path and expres_save_path
 cutoff = now() - Week(1)
 # cutoff = DateTime(2022,8,19)
 input_ind = SSOF.parse_args(1, Int, 2)
-delete = SSOF.parse_args(2, Bool, false)
+how_deep = SSOF.parse_args(2, Int, 1)
+delete = SSOF.parse_args(3, Bool, false)
 
 mtime_r(fn::String) = isdir(fn) ?
     maximum(mtime_r.(fn .* readdir(fn))) :
@@ -41,6 +42,6 @@ end
 input_ind == 0 ? star_inds = (1:length(stars)) : star_inds = input_ind
 for star_ind in star_inds
     for order in orders_list[star_ind]
-        clean(neid_save_path*stars[star_ind]*"/$(order)/", 1)
+        clean(neid_save_path*stars[star_ind]*"/$(order)/", how_deep)
     end
 end
