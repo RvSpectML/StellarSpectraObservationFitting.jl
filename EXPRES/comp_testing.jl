@@ -55,7 +55,7 @@ end
 
 ## Optimizing model
 
-@time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; print_stuff=true)  # 16s
+@time results_telstar, _ = SSOF.fine_train_OrderModel!(workspace; verbose=true)  # 16s
 rvs_notel_opt = SSOF.rvs(test_model)
 if interactive; status_plot(workspace.o, workspace.d) end
 test_model.metadata[:todo][:optimized] = true

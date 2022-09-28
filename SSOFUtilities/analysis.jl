@@ -87,7 +87,7 @@ function create_workspace(model, data, opt::String)
 	return mws
 end
 
-function improve_regularization!(mws::SSOF.ModelWorkspace; redo::Bool=false, print_stuff::Bool=true, testing_ratio::Real=0.33, save_fn::String="", kwargs...)
+function improve_regularization!(mws::SSOF.ModelWorkspace; redo::Bool=false, verbose::Bool=true, testing_ratio::Real=0.33, save_fn::String="", kwargs...)
 
 	save = save_fn!=""
 
@@ -96,7 +96,7 @@ function improve_regularization!(mws::SSOF.ModelWorkspace; redo::Bool=false, pri
 		@assert 0 < testing_ratio < 1
 		n_obs = size(mws.d.flux, 2)
 
-	    SSOF.train_OrderModel!(mws; print_stuff=print_stuff, ignore_regularization=true)  # 45s
+	    SSOF.train_OrderModel!(mws; verbose=verbose, ignore_regularization=true)  # 45s
 	    n_obs_test = Int(round(testing_ratio * n_obs))
 	    test_start_ind = max(1, Int(round(rand() * (n_obs - n_obs_test))))
 	    testing_inds = test_start_ind:test_start_ind+n_obs_test-1
@@ -106,12 +106,12 @@ function improve_regularization!(mws::SSOF.ModelWorkspace; redo::Bool=false, pri
 	end
 end
 
-function improve_model!(mws::SSOF.ModelWorkspace; print_stuff::Bool=true, show_plot::Bool=false, save_fn::String="", kwargs...)
+function improve_model!(mws::SSOF.ModelWorkspace; verbose::Bool=true, show_plot::Bool=false, save_fn::String="", kwargs...)
 	save = save_fn!=""
 	model = mws.om
     SSOF.update_interpolation_locations!(mws)
-	SSOF.train_OrderModel!(mws; print_stuff=print_stuff, kwargs...)  # 120s
-	results = SSOF.finalize_scores!(mws; print_stuff=print_stuff, kwargs...)
+	SSOF.train_OrderModel!(mws; verbose=verbose, kwargs...)  # 120s
+	results = SSOF.finalize_scores!(mws; verbose=verbose, kwargs...)
     if show_plot; status_plot(mws) end
     if save; @save save_fn model end
 	return results
@@ -122,7 +122,7 @@ function improve_model!(mws::SSOF.ModelWorkspace, airmasses::AbstractVector, tim
 	return results
 end
 
-function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel::Vector{<:SSOF.LinearModel}, lm_star::Vector{<:SSOF.LinearModel}; save_fn::String="", decision_fn::String="", print_stuff::Bool=true, plots_fn::String="", iter::Int=50, ignore_regularization::Bool=true, multithread::Bool=nthreads() > 3, kwargs...)
+function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel::Vector{<:SSOF.LinearModel}, lm_star::Vector{<:SSOF.LinearModel}; save_fn::String="", decision_fn::String="", verbose::Bool=true, plots_fn::String="", iter::Int=50, ignore_regularization::Bool=true, multithread::Bool=nthreads() > 3, kwargs...)
 	model = mws.om
 
 	if !model.metadata[:todo][:downsized]  # 1.5 hrs (for 9x9)
@@ -161,7 +161,7 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 	    if save_md; @save decision_fn comp_ls ℓ aics bics best_ind ks test_n_comp_tel test_n_comp_star comp_stds comp_intra_stds better_models end
 
 	    # model_large = copy(model)
-		mws_smol = _downsize_model(mws, n_comps_best, better_models[best_ind], lm_tel, lm_star; print_stuff=print_stuff, iter=iter, ignore_regularization=ignore_regularization)
+		mws_smol = _downsize_model(mws, n_comps_best, better_models[best_ind], lm_tel, lm_star; verbose=verbose, iter=iter, ignore_regularization=ignore_regularization)
 
 		if save_plots
 			diagnostics = [ℓ, aics, bics, comp_stds, comp_intra_stds]
@@ -312,17 +312,17 @@ function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int
 	return reshape(σs, size(x))
 end
 
-function estimate_σ_curvature_helper_finalizer!(σs::AbstractVecOrMat, _ℓs::AbstractVector, x_test::AbstractVector, i::Int; use_gradient::Bool=false, param_str::String="", print_every::Int=10, print_stuff::Bool=false, show_plots::Bool=false, )
+function estimate_σ_curvature_helper_finalizer!(σs::AbstractVecOrMat, _ℓs::AbstractVector, x_test::AbstractVector, i::Int; use_gradient::Bool=false, param_str::String="", print_every::Int=10, verbose::Bool=false, show_plots::Bool=false, )
 	if use_gradient
 		poly_f = SSOF.ordinary_lst_sq_f(_ℓs, 1; x=x_test)
 		σs[i] = sqrt(1 / poly_f.w[2])
 		max_dif = maximum(abs.((poly_f.(x_test)./_ℓs) .- 1))
-		if print_stuff; println("∇_$i: $(poly_f.w[1] + poly_f.w[2] * x[i])") end
+		if verbose; println("∇_$i: $(poly_f.w[1] + poly_f.w[2] * x[i])") end
 	else
 		poly_f = SSOF.ordinary_lst_sq_f(_ℓs, 2; x=x_test)
 		σs[i] = sqrt(1 / (2 * poly_f.w[3]))
 		max_dif = maximum(abs.((poly_f.(x_test)./_ℓs) .- 1))
-		if print_stuff; println("∇_$i: $(poly_f.w[2] + 2 * poly_f.w[3] * x[i])") end
+		if verbose; println("∇_$i: $(poly_f.w[2] + 2 * poly_f.w[3] * x[i])") end
 	end
 	if show_plots
 		plt = scatter(x_test, _ℓs; label="ℓ")
@@ -342,12 +342,12 @@ function estimate_σ_bootstrap_reducer(shaper::AbstractArray, holder::AbstractAr
 	return result
 end
 
-function estimate_σ_bootstrap_helper!(rv_holder::AbstractMatrix, tel_holder, star_holder, i::Int, mws::SSOF.ModelWorkspace, data_noise::AbstractMatrix, n::Int; print_stuff::Bool=true)
+function estimate_σ_bootstrap_helper!(rv_holder::AbstractMatrix, tel_holder, star_holder, i::Int, mws::SSOF.ModelWorkspace, data_noise::AbstractMatrix, n::Int; verbose::Bool=true)
 	time_var_tel = SSOF.is_time_variable(mws.om.tel)
 	time_var_star = SSOF.is_time_variable(mws.om.star)
 	_mws = typeof(mws)(copy(mws.om), copy(mws.d))
 	_mws.d.flux .= mws.d.flux .+ (data_noise .* randn(size(mws.d.var)))
-	improve_model!(_mws, iter=50, print_stuff=false)
+	improve_model!(_mws, iter=50, verbose=false)
 	rv_holder[i, :] = SSOF.rvs(_mws.om)
 	if time_var_tel
 		tel_holder[i, :, :] .= _mws.om.tel.lm.s
@@ -355,10 +355,10 @@ function estimate_σ_bootstrap_helper!(rv_holder::AbstractMatrix, tel_holder, st
 	if time_var_star
 		star_holder[i, :, :] .= _mws.om.star.lm.s
 	end
-	if (print_stuff && i%10==0); println("done with $i/$n bootstraps") end
+	if (verbose && i%10==0); println("done with $i/$n bootstraps") end
 end
 
-function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", n::Int=50, return_holders::Bool=false, recalc_mean::Bool=false, multithread::Bool=nthreads() > 3, print_stuff::Bool=true)
+function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", n::Int=50, return_holders::Bool=false, recalc_mean::Bool=false, multithread::Bool=nthreads() > 3, verbose::Bool=true)
 	save = save_fn!=""
 	if recalc || !mws.om.metadata[:todo][:err_estimated] # 25 mins
 	    mws.d.var[mws.d.var.==Inf] .= 0
@@ -383,11 +383,11 @@ function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, sav
 			# @batch per=core for i in 1:n
 			# using ThreadsX  # tiny bit better performance
 			ThreadsX.foreach(1:n) do i
-				estimate_σ_bootstrap_helper!(rv_holder, tel_holder, star_holder, i, mws, data_noise, n; print_stuff=false)
+				estimate_σ_bootstrap_helper!(rv_holder, tel_holder, star_holder, i, mws, data_noise, n; verbose=false)
 			end
 		else
 			for i in 1:n
-				estimate_σ_bootstrap_helper!(rv_holder, tel_holder, star_holder, i, mws, data_noise, n; print_stuff=print_stuff)
+				estimate_σ_bootstrap_helper!(rv_holder, tel_holder, star_holder, i, mws, data_noise, n; verbose=verbose)
 			end
 	    end
 		recalc_mean ? rvs = vec(mean(rv_holder; dims=1)) : rvs = SSOF.rvs(mws.om)
@@ -428,7 +428,7 @@ end
 
 
 # # the code is slow and doesn't seem to work
-# function estimate_σ_mcmc(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", n::Int=52, return_holders::Bool=false, recalc_mean::Bool=false, multithread::Bool=nthreads() > 3, print_stuff::Bool=true)
+# function estimate_σ_mcmc(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", n::Int=52, return_holders::Bool=false, recalc_mean::Bool=false, multithread::Bool=nthreads() > 3, verbose::Bool=true)
 # 	save = save_fn!=""
 # 	if recalc || !mws.om.metadata[:todo][:err_estimated] # 25 mins
 #
@@ -542,7 +542,7 @@ end
 # end
 
 # # the example code is slow as heck so not going to try to implement
-# function estimate_σ_vi(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", n::Int=52, return_holders::Bool=false, recalc_mean::Bool=false, multithread::Bool=nthreads() > 3, print_stuff::Bool=true)
+# function estimate_σ_vi(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", n::Int=52, return_holders::Bool=false, recalc_mean::Bool=false, multithread::Bool=nthreads() > 3, verbose::Bool=true)
 # 	Pkg.add("DistributionsAD")
 # 	Pkg.add("AdvancedVI")
 # 	using DistributionsAD, AdvancedVI

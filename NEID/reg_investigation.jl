@@ -24,7 +24,7 @@ save_path = neid_save_path * star * "/$(desired_order)/"
 @time model = SSOF.OrderModel(data, "NEID", desired_order, star; n_comp_tel=max_components, n_comp_star=max_components)
 @time rvs_notel, fracvar_tel, fracvar_star = SSOF.initialize!(model, data)
 mws = SSOF.OptimWorkspace(model, data)
-@time SSOF.train_OrderModel!(mws; print_stuff=true, ignore_regularization=true)  # 45s
+@time SSOF.train_OrderModel!(mws; verbose=true, ignore_regularization=true)  # 45s
 
 ## Plotting
 
@@ -49,7 +49,7 @@ n_comps_best, ℓ, aics, bics = SSOF.choose_n_comps(comp_ls, ks, test_n_comp_tel
 # downsizing and refitting
 model = SSOF.downsize(model, n_comps_best[1]+1, n_comps_best[2]+1)
 mws = typeof(mws)(model, data)
-@time SSOF.train_OrderModel!(mws; print_stuff=true, ignore_regularization=true)  # 45s
+@time SSOF.train_OrderModel!(mws; verbose=true, ignore_regularization=true)  # 45s
 
 # plt = status_plot(mws)
 # png(plt, "test7")
