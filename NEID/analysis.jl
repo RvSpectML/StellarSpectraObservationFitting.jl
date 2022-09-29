@@ -83,13 +83,13 @@ lm_tel, lm_star, stellar_dominated = SSOFU.initialize_model!(model, data; init_f
 if all(isone.(model.tel.lm.μ)) && !SSOF.is_time_variable(model.tel); opt = "frozen-tel" end
 if !use_lsf; data = SSOF.GenericData(data) end
 mws = SSOFU.create_workspace(model, data, opt)
-# mws = SSOFU._downsize_model(mws, [2,0], 1, lm_tel, lm_star; print_stuff=true, ignore_regularization=true)
+# mws = SSOFU._downsize_model(mws, [2,0], 1, lm_tel, lm_star; verbose=true, ignore_regularization=true)
 if use_custom_n_comp
 	println("using by-eye number of basis vectors")
 	base_path *= "by_eye/"
 	save_path = base_path * "results.jld2"
 	mkpath(base_path)
-	mws = SSOFU._downsize_model(mws, [n_comp_tel, n_comp_star], better_model, lm_tel, lm_star; print_stuff=true, ignore_regularization=true, lm_tel_ind=2, lm_star_ind=2)
+	mws = SSOFU._downsize_model(mws, [n_comp_tel, n_comp_star], better_model, lm_tel, lm_star; verbose=true, ignore_regularization=true, lm_tel_ind=2, lm_star_ind=2)
 else
 	solar ? base_path *= "bic/" : base_path *= "aic/"
 	save_path = base_path * "results.jld2"
@@ -101,7 +101,7 @@ df_act = SSOFU.neid_activity_indicators(pipeline_path, data)
 SSOFU.neid_plots(mws, airmasses, times_nu, SSOF.rvs(mws.om), zeros(length(times_nu)), star, base_path*"noreg/", pipeline_path, desired_order;
 	display_plt=interactive, df_act=df_act);
 SSOFU.improve_regularization!(mws; save_fn=save_path)
-if !mws.om.metadata[:todo][:err_estimated]; SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path, iter=500, print_stuff=true) end
+if !mws.om.metadata[:todo][:err_estimated]; SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path, iter=500, verbose=true) end
 rvs, rv_errors, tel_errors, star_errors = SSOFU.estimate_σ_curvature(mws; save_fn=base_path * "results_curv.jld2", recalc=recalc, multithread=false)
 mws.om.metadata[:todo][:err_estimated] = false
 rvs_b, rv_errors_b, tel_s_b, tel_errors_b, star_s_b, star_errors_b, rv_holder, tel_holder, star_holder = SSOFU.estimate_σ_bootstrap(mws; save_fn=base_path * "results_boot.jld2", recalc_mean=true, recalc=recalc, return_holders=true)
