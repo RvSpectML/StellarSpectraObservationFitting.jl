@@ -13,7 +13,7 @@ input_ind = SSOF.parse_args(1, Int, 0)
 dates = ["2021/12/10", "2021/12/19", "2021/12/20", "2021/12/23"]
 
 input_ind == 0 ? date_inds = (1:4) : date_inds = input_ind
-orders_list = repeat([4:118], length(stars))
+orders_list = repeat([7:118], length(stars))
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
 # prep_str = "noreg_"
 prep_str = "nolsf_"

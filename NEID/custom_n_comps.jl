@@ -19,7 +19,7 @@
 # 	n_star_by_eye=Int[],
 # 	has_reciprocal_continuum=Bool[])
 #
-# orders = 4:118
+# orders = 7:118
 # for i in 1:length(orders)
 # 	order=orders[i]
 # 	base_path = neid_save_path * star * "/$(order)/log_vil_lsf/"
