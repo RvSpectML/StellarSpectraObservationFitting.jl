@@ -16,6 +16,7 @@ bootstrap = SSOF.parse_args(2, Bool, true)
 log_lm = SSOF.parse_args(3, Bool, true)
 dpca = SSOF.parse_args(4, Bool, false)
 use_lsf = SSOF.parse_args(5, Bool, true)
+by_eye = SSOF.parse_args(6, Bool, false)
 
 stars = ["10700", "26965", "22049", "3651", "95735", "2021/12/19", "2021/12/20", "2021/12/23"]
 input_ind == 0 ? star_inds = (1:length(stars)) : star_inds = input_ind:input_ind
@@ -25,9 +26,11 @@ bootstrap ? appe_str = "_boot" : appe_str = "_curv"
 log_lm ? prep_str = "log_" : prep_str = "lin_"
 dpca ? prep_str *= "dcp_" : prep_str *= "vil_"
 use_lsf ? prep_str *= "lsf/" : prep_str *= "nol/"
+by_eye ? prep_str *= "by_eye/" : prep_str *= "aic/"
 
-SSOFU.retrieve_all_rvs(
-    [neid_save_path*star*"/60/data.jld2" for star in stars[star_inds]],
+SSOFU.retrieve(
+    ["jld2/neid_" * replace("$(prep_str)$(star)_rvs$(appe_str).jld2", "/" => "_") for star in stars[star_inds]],
     [[neid_save_path*stars[i]*"/$order/$(prep_str)results$(appe_str).jld2" for order in orders_list[i]] for i in star_inds],
-    ["jld2/neid_" * replace("$(prep_str)$(star)_rvs$(appe_str).jld2", "/" => "_") for star in stars[star_inds]]
+    [[neid_save_path*stars[i]*"/$order/$(prep_str)results.jld2" for order in orders_list[i]] for i in star_inds],
+    [[neid_save_path*stars[i]*"/$order/data.jld2" for order in orders_list[i]] for i in star_inds],
     )
