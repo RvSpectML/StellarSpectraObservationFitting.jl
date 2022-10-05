@@ -589,7 +589,7 @@ function how_many_comps(str::String, recalc::Bool, desired_order::Int)
 
 	# they passed a proposed amount of parameters
 	elseif str[1] == '[' && str[end] == ']'
-		matches = [parse(Int64,t.match) for t in eachmatch(r"([0-9]+)", str)]
+		matches = [parse(Int64, t.match) for t in eachmatch(r"-?[0-9]+", str)]
 		@assert length(matches) == 2 "should only pass things of the form [n_comps_tel::Int, n_comps_star::Int]"
 		n_comp_tel = matches[1]
 		n_comp_star = matches[2]
