@@ -96,7 +96,11 @@ end
 function parse_args(ind::Int, type::DataType, default)
 	@assert typeof(default) <: type
 	if length(ARGS) > (ind - 1)
-        return parse(type, ARGS[ind])
+		if type <: AbstractString
+			return ARGS[ind]
+		else
+			return parse(type, ARGS[ind])
+		end
     else
         return default
     end
