@@ -39,7 +39,7 @@ log_lm ? base_path *= "log_" : base_path *= "lin_"
 dpca ? base_path *= "dcp_" : base_path *= "vil_"
 use_lsf ? base_path *= "lsf/" : base_path *= "nol/"
 mkpath(base_path)
-init_path = base_path * "results_init.jld2"
+use_custom_n_comp ? init_path = "" : init_path = base_path * "results_init.jld2"
 if save_folder != ""
 	base_path *= save_folder * "/"
 	mkpath(base_path)
