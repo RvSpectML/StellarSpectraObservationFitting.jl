@@ -95,13 +95,11 @@ end
 
 function parse_args(ind::Int, type::DataType, default)
 	@assert typeof(default) <: type
-    if length(ARGS) > (ind - 1)
-        x = tryparse(type, ARGS[ind])
-		if !isnothing(x)
-			return x
-		end
-	end
-	return default
+	if length(ARGS) > (ind - 1)
+        return parse(type, ARGS[ind])
+    else
+        return default
+    end
 end
 
 
