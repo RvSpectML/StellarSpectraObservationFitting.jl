@@ -559,3 +559,58 @@ end
 # 	advi = ADVI(10, 10_000)
 # 	q = vi(logπ, advi, getq, randn(4))
 # end
+
+
+function how_many_comps(str::String, recalc::Bool, desired_order::Int)
+
+	# they said to look for a file
+	if isfile(str)
+		df_n_comp = DataFrame(CSV.File(str))
+		i_df = SSOF.int2ind(df_n_comp.order, desired_order)
+		@assert df_n_comp[i_df, :order] == desired_order
+		function look(field, default)
+			try
+				return df_n_comp[i_df, field]
+			catch err
+				if typeof(err) <: ArgumentError
+					return default
+				end
+			end
+		end
+		use_custom_n_comp = look(:redo, true)
+		recalc = recalc || use_custom_n_comp
+		n_comp_tel = look(:n_tel_by_eye, 5)
+		n_comp_star = look(:n_star_by_eye, 5)
+		# better_model = look(:better_model, 1)
+		# remove_reciprocal_continuum = look(:has_reciprocal_continuum, false)
+		remove_reciprocal_continuum = false
+		pairwise = false
+		println("using $n_comp_tel telluric components and $n_comp_star stellar components from " * str)
+
+	# they passed a proposed amount of parameters
+	elseif str[1] == '[' && str[end] == ']'
+		matches = [parse(Int64,t.match) for t in eachmatch(r"([0-9]+)", str)]
+		@assert length(matches) == 2 "should only pass things of the form [n_comps_tel::Int, n_comps_star::Int]"
+		n_comp_tel = matches[1]
+		n_comp_star = matches[2]
+		# length(matches) < 3 ? better_model = 1 : better_model = matches[3]
+		# @assert 0 < better_model < 3
+		use_custom_n_comp = true
+		recalc = true
+		remove_reciprocal_continuum = false
+		pairwise = false
+		println("using $n_comp_tel telluric components and $n_comp_star stellar components")
+
+	# using the defaults
+	else
+		n_comp_tel = 5
+		n_comp_star = 5
+		remove_reciprocal_continuum = false
+		pairwise = true
+		# better_model = 1  # this will be ignored later
+		use_custom_n_comp = false
+		println("using $n_comp_tel telluric components and $n_comp_star stellar components (the default)")
+	end
+
+	return n_comp_tel, n_comp_star, use_custom_n_comp, recalc, remove_reciprocal_continuum, pairwise
+end

@@ -8,7 +8,9 @@ abstract type ModelWorkspace end
 abstract type AdamWorkspace<:ModelWorkspace end
 abstract type OptimWorkspace<:ModelWorkspace end
 
-_χ²_loss(model, data, variance) = ((model .- data) .^ 2) ./ variance
+_χ²_loss_σ(model_m_data, sigma) = (model_m_data ./ sigma) .^ 2
+_χ²_loss(model_m_data, variance) = ((model_m_data) .^ 2) ./ variance
+_χ²_loss(model, data, variance) = _χ²_loss(model .- data, variance)
 _χ²_loss(model, data::Data; use_var_s::Bool=false) = use_var_s ? _χ²_loss(model, data.flux, data.var_s) : _χ²_loss(model, data.flux, data.var)
 __loss_diagnostic(tel, star, rv, d::GenericData; kwargs...) =
 	_χ²_loss(total_model(tel, star, rv), d; kwargs...)

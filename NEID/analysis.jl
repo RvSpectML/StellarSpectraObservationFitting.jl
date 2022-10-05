@@ -20,37 +20,17 @@ solar = star_choice > 5
 interactive = length(ARGS) == 0
 if !interactive; ENV["GKSwstype"] = "100" end
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
-desired_order = SSOF.parse_args(2, Int, 81)  # 81 has a bunch of tels, 60 has very few
+desired_order = SSOF.parse_args(2, Int, 19)  # 81 has a bunch of tels, 60 has very few
 log_lm = SSOF.parse_args(3, Bool, true)
 dpca = SSOF.parse_args(4, Bool, false)
 use_lsf = SSOF.parse_args(5, Bool, true)
-recalc = SSOF.parse_args(6, Bool, false)
-use_custom_n_comp = SSOF.parse_args(7, Bool, true)
-use_reg = SSOF.parse_args(8, Bool, true)
-which_opt = SSOF.parse_args(9, Int, 1)
+recalc = SSOF.parse_args(6, Bool, true)
+n_comp_tel, n_comp_star, use_custom_n_comp, recalc, remove_reciprocal_continuum, pairwise =
+	SSOFU.how_many_comps(SSOF.parse_args(7, String, ""), recalc, desired_order)
+save_folder = SSOF.parse_args(8, String, "")
+use_reg = SSOF.parse_args(9, Bool, true)
+which_opt = SSOF.parse_args(10, Int, 1)
 opt = SSOFU.valid_optimizers[which_opt]
-
-if use_custom_n_comp
-	df_n_comp = DataFrame(CSV.File("NEID/n_comps.csv"))
-	i_df = desired_order - 3
-	@assert df_n_comp[i_df, :order] == desired_order
-	use_custom_n_comp = df_n_comp[i_df, :redo]
-end
-
-if use_custom_n_comp
-	recalc = recalc || use_custom_n_comp
-	n_comp_tel = df_n_comp[i_df, :n_tel_by_eye]
-	n_comp_star = df_n_comp[i_df, :n_star_by_eye]
-	better_model = df_n_comp[i_df, :better_model]
-	# remove_reciprocal_continuum = df[i, :has_reciprocal_continuum]
-	remove_reciprocal_continuum = false
-	pairwise = false
-else
-	n_comp_tel = 5
-	n_comp_star = 5
-	remove_reciprocal_continuum = false
-	pairwise = true
-end
 
 ## Loading in data and initializing model
 base_path = neid_save_path * star * "/$(desired_order)/"
@@ -59,8 +39,12 @@ log_lm ? base_path *= "log_" : base_path *= "lin_"
 dpca ? base_path *= "dcp_" : base_path *= "vil_"
 use_lsf ? base_path *= "lsf/" : base_path *= "nol/"
 mkpath(base_path)
-save_path = base_path * "results.jld2"
 init_path = base_path * "results_init.jld2"
+if save_folder != ""
+	base_path *= save_folder * "/"
+	mkpath(base_path)
+end
+save_path = base_path * "results.jld2"
 pipeline_path = neid_save_path * star * "/neid_pipeline.jld2"
 
 if solar
@@ -85,15 +69,13 @@ if !use_lsf; data = SSOF.GenericData(data) end
 mws = SSOFU.create_workspace(model, data, opt)
 # mws = SSOFU._downsize_model(mws, [2,0], 1, lm_tel, lm_star; verbose=true, ignore_regularization=true)
 if use_custom_n_comp
-	println("using by-eye number of basis vectors")
-	base_path *= "by_eye/"
-	save_path = base_path * "results.jld2"
-	mkpath(base_path)
+	if n_comp_tel > 0 && n_comp_star > 0
+		_, _, _, _, better_model = SSOF.test_ℓ_for_n_comps([n_comp_tel, n_comp_star], mws, times_nu, lm_tel, lm_star; lm_tel_ind=2, lm_star_ind=2, iter=50)
+	else
+		better_model = Int(n_comp_star > 0) + 1
+	end
 	mws = SSOFU._downsize_model(mws, [n_comp_tel, n_comp_star], better_model, lm_tel, lm_star; verbose=true, ignore_regularization=true, lm_tel_ind=2, lm_star_ind=2)
 else
-	solar ? base_path *= "bic/" : base_path *= "aic/"
-	save_path = base_path * "results.jld2"
-	mkpath(base_path)
 	mws = SSOFU.downsize_model(mws, times_nu, lm_tel, lm_star; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path, use_aic=!solar)
 end
 mkpath(base_path*"noreg/")

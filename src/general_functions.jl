@@ -96,10 +96,12 @@ end
 function parse_args(ind::Int, type::DataType, default)
 	@assert typeof(default) <: type
     if length(ARGS) > (ind - 1)
-        return parse(type, ARGS[ind])
-    else
-        return default
-    end
+        x = tryparse(type, ARGS[ind])
+		if !isnothing(x)
+			return x
+		end
+	end
+	return default
 end
 
 
@@ -307,4 +309,32 @@ function est_∇(f::Function, inputs::Vector{<:Real}; dif::Real=1e-7, ignore_0_i
 		if i%100==0; println("done with $i/$(length(inputs))") end
     end
     return grad
+end
+
+
+function self_cor(a::AbstractMatrix; set_diag::Bool=true)
+    n = size(a, 1)
+    cors = Array{Float64}(undef, n, n)
+    for i in 1:n
+        for j in i+1:n
+            cors[i, j] = cor(view(a, i, :), view(a, j, :))
+        end
+    end
+    if set_diag
+        cors[diagind(cors)] .= 1
+    else
+        cors[diagind(cors)] .= 0
+    end
+    return Symmetric(cors)
+end
+
+
+function int2ind(a::AbstractVecOrMat, x::Int)
+	@assert typeof(a).parameters[1] <: Int
+    i = searchsortedfirst(a, x)
+    if i <= length(a) && a[i] == x
+        return i
+    else
+        return 0
+    end
 end

@@ -48,7 +48,7 @@ function _test_om(mws_inp::ModelWorkspace, om::OrderModel, times::AbstractVector
     model_rvs = rvs(mws.om)
     return _loss(mws), n, std(model_rvs), intra_night_std(model_rvs, times; show_warn=false)
 end
-function test_ℓ_for_n_comps(n_comps::Vector, mws_inp::ModelWorkspace, times::AbstractVector, lm_tel::Vector{<:LinearModel}, lm_star::Vector{<:LinearModel}; return_inters::Bool=false, kwargs...)
+function test_ℓ_for_n_comps(n_comps::Vector, mws_inp::ModelWorkspace, times::AbstractVector, lm_tel::Vector{<:LinearModel}, lm_star::Vector{<:LinearModel}; return_inters::Bool=false, lm_tel_ind::Int=n_comps[2]+1, lm_star_ind::Int=n_comps[1]+1, kwargs...)
     _om = downsize(mws_inp.om, max(0, n_comps[1]), n_comps[2])
 
     # if either of the models are constant, there will only be one initialization
@@ -66,11 +66,11 @@ function test_ℓ_for_n_comps(n_comps::Vector, mws_inp::ModelWorkspace, times::A
         in_rv_stds = zeros(2)
 
         # test telluric components first
-		_fill_model!(_om, n_comps, 1, lm_tel, lm_star)
+		_fill_model!(_om, n_comps, 1, lm_tel, lm_star; lm_tel_ind=lm_tel_ind, lm_star_ind=lm_star_ind)
         ls[1], ns[1], rv_stds[1], in_rv_stds[1] = _test_om(mws_inp, _om, times; kwargs...)
 
         # test star components next
-		_fill_model!(_om, n_comps, 2, lm_tel, lm_star)
+		_fill_model!(_om, n_comps, 2, lm_tel, lm_star; lm_tel_ind=lm_tel_ind, lm_star_ind=lm_star_ind)
         ls[2], ns[2], rv_stds[2], in_rv_stds[2] = _test_om(mws_inp, _om, times; kwargs...)
 
         better_model = argmin(ls)
