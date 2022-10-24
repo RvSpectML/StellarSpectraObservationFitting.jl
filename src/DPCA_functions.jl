@@ -72,9 +72,24 @@ function project_doppler_comp!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::
 	return rvs
 end
 
+function project_doppler_comp!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, fixed_comp::AbstractVector, weights::AbstractMatrix)
+	M[:, 1] = fixed_comp  # Force fixed (i.e., Doppler) component to replace first PCA component
+	_solve_coeffs!(view(M, :, 1), view(scores, 1, :), Xtmp, weights)
+	Xtmp .-= view(M, :, 1) * view(scores, 1, :)'
+	rvs = -light_speed_nu * scores[1, :]  # c * z
+	return rvs
+end
+
+function project_doppler_comp(Xtmp::AbstractMatrix, fixed_comp::AbstractVector, weights::AbstractMatrix)
+	scores = Array{Float64}(undef, 1, size(weights, 2))
+	_solve_coeffs!(fixed_comp, view(scores, 1, :), Xtmp, weights)
+	rvs = -light_speed_nu * scores  # c * z
+	return rvs
+end
+
 function DEMPCA!(M::AbstractMatrix, scores::AbstractMatrix, μ::AbstractVector, Xtmp::AbstractMatrix, weights::AbstractMatrix, doppler_comp::Vector{T}; min_flux::Real=_min_flux_default, max_flux::Real=_max_flux_default, kwargs...) where {T<:Real}
 	Xtmp .-= μ
-	rvs = project_doppler_comp!(M, scores, Xtmp, doppler_comp)
+	rvs = project_doppler_comp!(M, scores, Xtmp, doppler_comp, weights)
 	Xtmp .+= μ
 	mask_low_pixels!(Xtmp, weights; min_flux=min_flux, using_weights=true)
 	mask_high_pixels!(Xtmp, weights; max_flux=max_flux, using_weights=true)

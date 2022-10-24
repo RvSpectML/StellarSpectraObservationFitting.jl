@@ -431,7 +431,7 @@ FrozenTelWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
 FrozenTelWorkspace(om::OrderModel, d::Data; kwargs...) =
 	FrozenTelWorkspace(Output(om, d), om, d; kwargs...)
 
-function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, verbose::Bool=_verbose_def, shift_scores::Bool=true, winsor::Bool=true, kwargs...)
+function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, verbose::Bool=_verbose_def, shift_scores::Bool=true, μ_positive::Bool=false, winsor::Bool=true, kwargs...)
 
     if ignore_regularization
         reg_tel_holder = copy(mws.om.reg_tel)
@@ -446,6 +446,10 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
 			end
 			if typeof(mws.om) <: OrderModelWobble
 				remove_lm_score_means!(mws.om.star.lm; prop=0.2)
+			end
+			if μ_positive
+				mws.om.tel.lm.μ[mws.om.tel.lm.μ .< 1e-10] .= 1e-10
+				mws.om.tel.lm.μ[mws.om.tel.lm.μ .< 1e-10] .= 1e-10
 			end
 		end
 		if verbose; println(as) end
@@ -645,7 +649,7 @@ function train_OrderModel!(ow::OptimTelStarWorkspace; verbose::Bool=_verbose_def
     end
     return result_telstar, result_rv
 end
-function train_OrderModel!(ow::OptimTotalWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, ignore_regularization::Bool=false, kwargs...)
+function train_OrderModel!(ow::OptimTotalWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, ignore_regularization::Bool=false, μ_positive::Bool=false, kwargs...)
     optim_cb = optim_cb_f(; verbose=verbose)
 
     if ignore_regularization
@@ -703,7 +707,7 @@ function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::Submodel, star::Submodel
 	rv.lm.s[:] = rv_ws.unflatten(rv_ws.p0)
 	return result_rv
 end
-function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::AbstractVector, optim_cb::Function; g_tol::Real=_g_L∞tol_def_s, f_tol::Real=_f_reltol_def_s, iter::Int=_iter_def, kwargs...)
+function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::AbstractVector, optim_cb::Function; g_tol::Real=_g_L∞tol_def_s, f_tol::Real=_f_reltol_def_s, iter::Int=_iter_def, ignore_regularization::Bool=false, μ_positive::Bool=false, kwargs...)
 	options = Optim.Options(; callback=optim_cb, g_tol=g_tol, f_tol=f_tol, iterations=iter, kwargs...)
 	result_rv = _OSW_optimize!(rv_ws, options)
 	rv[:] = rv_ws.unflatten(rv_ws.p0)
@@ -749,6 +753,7 @@ is_time_variable(lm::LinearModel) = !(typeof(lm) <: TemplateModel)
 is_time_variable(sm::Submodel) = is_time_variable(sm.lm)
 
 
+# TODO: do this for undersamp_interp_helper as well
 function update_interpolation_locations!(om::OrderModel, d::Data; use_mean::Bool=false)
 	if typeof(om) <: OrderModelWobble
 		if use_mean

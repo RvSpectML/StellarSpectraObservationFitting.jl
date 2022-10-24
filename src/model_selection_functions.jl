@@ -3,14 +3,6 @@ total_length(x::AbstractArray) = length(x)
 total_length(mws::AdamWorkspace) = total_length(mws.total.θ)
 total_length(mws::OptimTelStarWorkspace) = length(mws.telstar.p0) + length(mws.rv.p0)
 total_length(mws::OptimTotalWorkspace) = length(mws.total.p0)
-function effective_length(x; return_mask::Bool=false, masked_val::Real = Inf)
-    mask = x .!= masked_val
-    if return_mask
-        return sum(mask), mask
-    else
-        return sum(mask)
-    end
-end
 function intra_night_std(rvs::AbstractVector, times::AbstractVector; thres::Int=3, show_warn::Bool=true)
     intra_night_stds = [std(rvs[i]) for i in observation_night_inds(times) if length(i)>(thres-1)]
     if length(intra_night_stds) < 1
@@ -92,26 +84,43 @@ function _fill_model!(model::OrderModel, n_comps::Vector{<:Int}, better_model::I
 	# end
 end
 
+function ℓ_prereqs(vars::Matrix)
+	mask = isfinite.(vars)
+	n = sum(mask)
+	logdet_Σ = sum(log.(vars[mask]))
+	return logdet_Σ, n
+end
+ℓ(χ²::Real, logdet_Σ::Real, n::Int) = -1/2 * (χ² + logdet_Σ + n * _log2π)
+aic(k::Int, ℓ::Real) = 2 * (k - ℓ)
+aic(mws::ModelWorkspace, logdet_Σ::Real, n::Int) =
+	aic(total_length(mws), ℓ(_loss(mws), logdet_Σ, n))
+function aic(mws::ModelWorkspace)
+	n, logdet_Σ = ℓ_prereqs(mws.d.var)
+	return aic(mws, n, logdet_Σ)
+end
+bic(k::Int, ℓ::Real, n::Int) = k * log(n) - 2 * ℓ
+
 function choose_n_comps(ls::Matrix, ks::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector, var::AbstractMatrix; return_inters::Bool=false, use_aic::Bool=true)
 
     ## max likelihood
     # ans_ml = argmin(ls)
 
-    n, mask = effective_length(var; return_mask=true)
-    ℓ = -1/2 .* (ls .+ (sum(log.(var[mask])) + (n * log(2 * π))))
-	ℓ[isnan.(ℓ)] .= -Inf
-    aic = 2 .* (ks - ℓ)
-    ans_aic = argmin(aic)
+	n, logdet_Σ = ℓ_prereqs(var)
 
-    bic = log(n) .* ks - 2 .* ℓ
-    ans_bic = argmin(bic)
+    ℓs = ℓ.(ls, logdet_Σ, n)
+	ℓs[isnan.(ℓs)] .= -Inf
+    aics = aic.(ks, ℓs)
+    ans_aic = argmin(aics)
+
+    bics = bic.(ks, ℓs, n)
+    ans_bic = argmin(bics)
 
     if ans_aic != ans_bic; @warn "AIC and BIC gave different answers" end
 
     use_aic ? best_ind = ans_aic : best_ind = ans_bic
     n_comps = [test_n_comp_tel[best_ind[1]], test_n_comp_star[best_ind[2]]]
     if return_inters
-        return n_comps, ℓ, aic, bic, best_ind
+        return n_comps, ℓs, aics, bics, best_ind
     else
         return n_comps
     end

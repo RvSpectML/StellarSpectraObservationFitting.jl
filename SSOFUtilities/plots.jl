@@ -304,10 +304,10 @@ end
 
 function data_usage_plot(d::SSOF.Data, bad_inst::Vector, bad_high::Vector, bad_snap::Vector, bad_edge::Vector, bad_isol::Vector, bad_byeye::Vector; save_path::String="", use_var_s::Bool=true)
 	if use_var_s
-		ever_used = vec(any(.!isinf.(d.var_s); dims=2))
+		ever_used = vec(any(isfinite.(d.var_s); dims=2))
 		always_used = vec(all(.!(isinf.(d.var_s)); dims=2))
 	else
-		ever_used = vec(any(.!isinf.(d.var); dims=2))
+		ever_used = vec(any(isfinite.(d.var); dims=2))
 		always_used = vec(all(.!(isinf.(d.var)); dims=2))
 	end
 	sometimes_used = xor.(ever_used, always_used)

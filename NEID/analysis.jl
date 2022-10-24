@@ -27,7 +27,7 @@ use_lsf = SSOF.parse_args(5, Bool, true)
 recalc = SSOF.parse_args(6, Bool, true)
 n_comp_tel, n_comp_star, use_custom_n_comp, recalc, remove_reciprocal_continuum, pairwise =
 	SSOFU.how_many_comps(SSOF.parse_args(7, String, ""), recalc, desired_order)
-save_folder = SSOF.parse_args(8, String, "")
+save_folder = SSOF.parse_args(8, String, "aic")
 use_reg = SSOF.parse_args(9, Bool, true)
 which_opt = SSOF.parse_args(10, Int, 1)
 opt = SSOFU.valid_optimizers[which_opt]

@@ -29,7 +29,7 @@ function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVecto
     A = _vander(x .- mean(x), order)
     m = fill(true, length(x))
 	# σ² = copy(σ²)
-	# σ²_thres = quantile(σ²[.!isinf.(σ²)], _high_quantile_default)/10
+	# σ²_thres = quantile(σ²[isfinite.(σ²)], _high_quantile_default)/10
 	# σ²[σ² .< σ²_thres] .= σ²_thres
 	m[y .< 0.5] .= false  # mask out the bad pixels
 	m[σ² .== Inf] .= false  # mask out the bad pixels
@@ -303,7 +303,7 @@ function outlier_mask(v::AbstractVecOrMat; thres::Real=10, prop::Real=0.2, retur
 end
 
 # function recognize_bad_normalization!(d::Data; kwargs...)
-# 	mask = outlier_mask([mean(view(d.var, .!isinf.(view(d.var, :, i)), i)) for i in 1:size(d.var, 2)]; kwargs...) .|| outlier_mask(vec(std(d.flux; dims=1)); kwargs...)
+# 	mask = outlier_mask([mean(view(d.var, isfinite.(view(d.var, :, i)), i)) for i in 1:size(d.var, 2)]; kwargs...) .|| outlier_mask(vec(std(d.flux; dims=1)); kwargs...)
 # 	for i in 1:size(d.log_λ_obs, 2)
 # 		if !mask[i]
 # 			# d.var[:, i] .= Inf
@@ -325,7 +325,7 @@ end
 function snap(y::AbstractMatrix, σ²::AbstractMatrix)
 	@assert size(y) == size(σ²)
 	snp = Array{Float64}(undef, size(y, 1), size(y, 2))
-	m = .!isinf.(σ²)
+	m = isfinite.(σ²)
 	l = size(m, 1)
 	snp[1:2, :] .= 0
 	snp[end-1:end, :] .= 0

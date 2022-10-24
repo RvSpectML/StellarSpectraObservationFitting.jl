@@ -3,6 +3,7 @@ import TemporalGPs; TGP = TemporalGPs
 using Nabla
 using SparseArrays
 import StellarSpectraObservationFitting as SSOF
+using LinearAlgebra
 
 println("Testing...")
 
@@ -59,6 +60,43 @@ end
     f_nabla(x) = sum(SSOF.spectra_interp_nabla(x.^2, As) * C)
 
     @test ∇(f_custom_sensitivity)(B) == ∇(f_nabla)(B)
+
+    println()
+end
+
+
+@testset "weighted project_doppler_comp!()" begin
+
+    flux_star = rand(100, 20)
+    weights = sqrt.(flux_star)
+    μ = make_template(flux_star, weights; min=0, max=1.2, use_mean=true)
+    doppler_comp = calc_doppler_component_RVSKL(LinRange(5000,6000,100), μ)
+    M = zeros(100, 3)
+    s = zeros(3, 20)
+
+    Xtmp = copy(flux_star)
+    Xtmp .-= μ
+    rvs1 = SSOF.project_doppler_comp!(M, s, Xtmp, doppler_comp)
+    s1 = s[1, :]
+    M1 = M[:, 1]
+
+    Xtmp = copy(flux_star)
+    Xtmp .-= μ
+    rvs2 = SSOF.project_doppler_comp!(M, s, Xtmp, doppler_comp, ones(size(Xtmp)))
+    s2 = s[1, :]
+    M2 = M[:, 1]
+
+    Xtmp = copy(flux_star)
+    Xtmp .-= μ
+    rvs3 = SSOF.project_doppler_comp!(M, s, Xtmp, doppler_comp, weights)
+    s3 = s[1, :]
+    M3 = M[:, 1]
+
+    @test M1 == M2 == M3
+    @test rvs1 == rvs2
+    @test s1 == s2
+    @test rvs2 != rvs3
+    @test s2 != s3
 
     println()
 end

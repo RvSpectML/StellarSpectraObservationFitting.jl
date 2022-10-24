@@ -20,8 +20,8 @@ function _empca!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix
 	if length(inds) > 0
 		@assert inds[1] > 0
 		vec_by_vec ?
-			_empca_vec_by_vec!(view(M, :, inds), view(scores, inds, :), Xtmp, weights; nvec=length(inds), kwargs...) :
-			_empca_all_at_once!(view(M, :, inds), view(scores, inds, :), Xtmp, weights; nvec=length(inds), kwargs...)
+			_empca_vec_by_vec!(M, scores, Xtmp, weights; inds=inds, kwargs...) :
+			_empca_all_at_once!(M, scores, Xtmp, weights; inds=inds, kwargs...)
 	end
 end
 
@@ -30,17 +30,17 @@ function _solve_coeffs!(eigvec::AbstractVector, coeff::AbstractVector, data::Abs
 		coeff[i] = _solve(eigvec, view(data, :, i), view(weights, :, i))
 	end
 end
-function _solve_coeffs!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix)
+function _solve_coeffs!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(eigvec, 2))
 	for i in 1:size(data, 2)
-		coeff[:, i] .= _solve(eigvec, view(data, :, i), view(weights, :, i))
+		coeff[inds, i] .= _solve(view(eigvec, :, inds), view(data, :, i), view(weights, :, i))
 	end
 	# solve_model!(model, eigvec, coeff)
 end
 
-function _solve_eigenvectors!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix)
-	nvar, nvec = size(eigvec)
+function _solve_eigenvectors!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(eigvec, 2))
+	nvar = size(eigvec, 1)
 	cw = Array{Float64}(undef, size(data, 2))
-	for i in 1:nvec
+	for i in inds
 		c = view(coeff, i, :)
 		for j in 1:nvar
 			cw[:] = c .* view(weights, j, :)
@@ -49,15 +49,8 @@ function _solve_eigenvectors!(eigvec::AbstractMatrix, coeff::AbstractMatrix, dat
 		end
 		data .-= view(eigvec, :, i) * c'
 	end
-	#- Renormalize and re-orthogonalize the answer
 	eigvec[:, 1] ./= norm(view(eigvec, :, 1))
-	for k in 2:nvec
-		for kx in 1:(k-1)
-			c = dot(view(eigvec, :, k), view(eigvec, :, kx))
-			eigvec[:, k] .-=  c .* view(eigvec, :, kx)
-		end
-		eigvec[:, k] ./= norm(view(eigvec, :, k))
-	end
+	_reorthogonalize(eigvec)
 	# solve_model!(model, eigvec, coeff)
 end
 function _solve_eigenvectors!(eigvec::AbstractVector, coeff::AbstractVector, data::AbstractMatrix, weights::AbstractMatrix)
@@ -71,31 +64,42 @@ function _solve_eigenvectors!(eigvec::AbstractVector, coeff::AbstractVector, dat
 	# Renormalize the answer
 	eigvec ./= norm(eigvec)
 end
+function _reorthogonalize!(eigvec::AbstractMatrix)
+	#- Renormalize and re-orthogonalize the answer
+	nvec = size(eigvec, 2)
+	if nvec > 1
+		for k in 2:nvec
+			for kx in 1:(k-1)
+				c = dot(view(eigvec, :, k), view(eigvec, :, kx))
+				eigvec[:, k] .-=  c .* view(eigvec, :, kx) / sum(abs2, view(eigvec, :, kx))
+			end
+			eigvec[:, k] ./= norm(view(eigvec, :, k))
+		end
+	end
+end
 
-function _random_orthonormal(nvar::Int, nvec::Int; log_λ::Union{Nothing, AbstractVector}=nothing)
-	A = Array{Float64}(undef, nvar, nvec)
+function _random_orthonormal!(A::AbstractMatrix, nvar::Int; log_λ::Union{Nothing, AbstractVector}=nothing, inds::UnitRange{<:Int}=1:size(A, 2))
 	keep_going = true
 	i = 0
 	while keep_going
 		i += 1
 		if log_λ != nothing
 			fx = SOAP_gp(log_λ, SOAP_gp_var)
-			for i in 1:nvec
+			for i in inds
 				A[:, i] = rand(fx)
 			end
 		else
-			A .= randn(nvar, nvec)
+			A[:, inds] .= randn(nvar, length(inds))
 		end
-		A[:, 1] ./= norm(view(A, :, 1))
-		for i in 2:nvec
-			for j in 1:i
+		for i in inds
+			for j in 1:(i-1)
 				A[:, i] .-= dot(view(A, :, j), view(A, :, i)) .* view(A, :, j)
-				A[:, i] ./= norm(view(A, :, i))
 			end
+			A[:, i] ./= norm(view(A, :, i))
 		end
 		keep_going = any(isnan.(A)) && (i < 100)
 	end
-	if i > 99; println("_random_orthonormal() in empca failed for some reason") end
+	if i > 99; println("_random_orthonormal!() in empca failed for some reason") end
 	return A
 end
 
@@ -106,50 +110,48 @@ function _solve(
     return (dm' * (w .* dm)) \ (dm' * (w .* data))
 end
 
-function _empca_all_at_once!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; niter::Int=100, nvec::Int=5, kwargs...)
+function _empca_all_at_once!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; niter::Int=100, inds::UnitRange{<:Int}=1:size(eigvec, 2), kwargs...)
 
     #- Basic dimensions
     nvar, nobs = size(data)
     @assert size(data) == size(weights)
-	@assert size(coeff, 1) == size(eigvec, 2) == nvec
+	@assert size(coeff, 1) == size(eigvec, 2)
 	@assert size(coeff, 2) == nobs
 	@assert size(eigvec, 1) == nvar
 
     #- Starting random guess
-    eigvec .= _random_orthonormal(nvar, nvec; kwargs...)
+    eigvec .= _random_orthonormal!(eigvec, nvar; inds=inds, kwargs...)
 
 	_solve_coeffs!(eigvec, coeff, data, weights)
 	_data = copy(data)
     for k in 1:niter
-		_solve_eigenvectors!(eigvec, coeff, _data, weights)
+		_solve_eigenvectors!(eigvec, coeff, _data, weights; inds=inds)
 		_data .= data
-        _solve_coeffs!(eigvec, coeff, _data, weights)
+        _solve_coeffs!(eigvec, coeff, _data, weights; inds=inds)
 	end
 
     return eigvec, coeff
 end
 
 
-function _empca_vec_by_vec!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; niter::Int=100, nvec::Int=5, kwargs...)
+function _empca_vec_by_vec!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; niter::Int=100, inds::UnitRange{<:Int}=1:size(eigvec, 2), kwargs...)
 
     #- Basic dimensions
     nvar, nobs = size(data)
     @assert size(data) == size(weights)
-	@assert size(coeff, 1) == size(eigvec, 2) == nvec
+	@assert size(coeff, 1) == size(eigvec, 2)
 	@assert size(coeff, 2) == nobs
 	@assert size(eigvec, 1) == nvar
 
 	_data = copy(data)
-	for i in 1:nvec
-		# I don't believe I have to explicitly enforce orthagonality as it is
-		# implicitly enforced by ftting the data without previous component's
-		# variances
+	for i in inds
 		eigvec[:, i] .= randn(nvar)
-		eigvec[:, i] ./= norm(view(eigvec, :, i))
-
+		# eigvec[:, i] ./= norm(view(eigvec, :, i))
+		_reorthogonalize!(view(eigvec, :, 1:i))  # actually useful
 		_solve_coeffs!(view(eigvec, :, i), view(coeff, i, :), data, weights)
 	    for k in 1:niter
 			_solve_eigenvectors!(view(eigvec, :, i), view(coeff, i, :), _data, weights)
+			_reorthogonalize!(view(eigvec, :, 1:i))  # actually useful
 	        _solve_coeffs!(view(eigvec, :, i), view(coeff, i, :), _data, weights)
 		end
 		_data .-= view(eigvec, :, i) * view(coeff, i, :)'

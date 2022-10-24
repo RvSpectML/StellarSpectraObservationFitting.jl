@@ -19,25 +19,27 @@ stars = ["10700", "26965", "22049", "3651", "95735", "2021/12/19", "2021/12/20",
 orders_list = repeat([7:118], length(stars))
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
 star_ind = SSOF.parse_args(1, Int, 2)
-bootstrap = SSOF.parse_args(2, Bool, false)
+bootstrap = SSOF.parse_args(2, Bool, true)
 log_lm = SSOF.parse_args(3, Bool, true)
 dpca = SSOF.parse_args(4, Bool, false)
-use_lsf = SSOF.parse_args(5, Bool, false)
+use_lsf = SSOF.parse_args(5, Bool, true)
+by_eye = SSOF.parse_args(6, Bool, false)
 
 bootstrap ? appe_str = "_boot" : appe_str = "_curv"
 log_lm ? prep_str = "log_" : prep_str = "lin_"
 dpca ? prep_str *= "dcp_" : prep_str *= "vil_"
 use_lsf ? prep_str *= "lsf_" : prep_str *= "nol_"
+by_eye ? prep_str *= "by_eye_" : prep_str *= "aic_"
 
-# for star_ind in [1,2,5]
-#     for prep_str in ["wobble_", ""]
 star = stars[star_ind]
 save_fn = "figs/neid_" * prep_str * star * appe_str * "_"
 orders = orders_list[star_ind]
-orders2inds(selected_orders::AbstractVector) = [searchsortedfirst(orders, order) for order in selected_orders]
+order2ind(selected_order::Int) = SSOF.int2ind(orders, selected_order)
 
 ## RV reduction
-@load "jld2/neid_$(prep_str)$(star)_rvs$appe_str.jld2" rvs rvs_σ n_obs times_nu airmasses n_ord
+@load "jld2/neid_$(prep_str)$(star)_rvs$appe_str.jld2" n_obs times_nu airmasses n_ord rvs rvs_σ constant no_tel wavelength_range all_star_s all_tel_s
+rvs .-= median(rvs; dims=2)
+@assert n_ord==length(orders)
 
 @load neid_save_path * star * "/neid_pipeline.jld2" neid_time neid_rv neid_rv_σ
 neid_rv .-= median(neid_rv)
@@ -46,27 +48,36 @@ star=="10700" ? mask = .!(2459525 .< times_nu .< 2459530) : mask = Bool.(ones(le
 # # plotting order means which don't matter because the are constant shifts for the reduced rv
 # _scatter(orders, mean(rvs; dims=2); series_annotations=annot, legend=:topleft)
 rvs .-= median(rvs; dims=2)
-χ² = vec(sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2))
+# χ² = vec(sum((rvs .- mean(rvs; dims=2)) .^ 2 ./ (rvs_σ .^ 2); dims=2))
 med_rvs_σ = vec(median(rvs_σ; dims=2))
 rvs_std = vec(std(rvs; dims=2))
-std_floor = round(8 * std(neid_rv[mask]))
+best_ords = 25:75
+best_ords_i = order2ind.(best_ords)
+std_floor = 2 * median(rvs_std[best_ords_i])  # round(8 * std(neid_rv[mask]))
 σ_floor = std_floor / 3
 
-χ²_sortperm = [i for i in sortperm(χ²) if !iszero(χ²[i])]
-χ²_thres = 4.5e3 / 37 * size(rvs, 2)
-χ²_orders = [i for i in χ²_sortperm if χ²[i] < χ²_thres]
-χ²_orders = [orders[χ²_order] for χ²_order in χ²_orders]
-inds = orders2inds([orders[i] for i in eachindex(orders) if ((rvs_std[i] < std_floor) && (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders))])
-inds = orders2inds([orders[i] for i in eachindex(orders) if ((rvs_std[i] < std_floor) && (med_rvs_σ[i] < σ_floor) && true)])
-println("starting with $(length(orders)) orders")
-println("$(length(orders) - length(χ²_sortperm)) orders ignored for unfinished analyses or otherwise weird")
-println("$(length(χ²_sortperm) - length(χ²_orders)) worst orders (in χ²-sense) ignored")
-println("$(length(χ²_orders) - length(inds)) more orders ignored for having >$std_floor m/s RMS or >$σ_floor errors")
-println("$(length(inds)) orders used in total")
+# χ²_sortperm = [i for i in sortperm(χ²) if !iszero(χ²[i])]
+# χ²_thres = 4.5e3 / 37 * size(rvs, 2)
+# χ²_orders = [i for i in χ²_sortperm if χ²[i] < χ²_thres]
+# χ²_orders = [orders[χ²_order] for χ²_order in χ²_orders]
+# inds = order2ind.([orders[i] for i in eachindex(orders) if ((rvs_std[i] < std_floor) && (med_rvs_σ[i] < σ_floor) && (orders[i] in χ²_orders))])
+# inds = order2ind.([orders[i] for i in eachindex(orders) if ((rvs_std[i] < std_floor) && (med_rvs_σ[i] < σ_floor))])
+inds = order2ind.([orders[i] for i in best_ords_i if ((rvs_std[i] < std_floor) && (med_rvs_σ[i] < σ_floor))])
 
 rvs_red = collect(Iterators.flatten((sum(rvs[inds, :] ./ (rvs_σ[inds, :] .^ 2); dims=1) ./ sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1))'))
 rvs_red .-= median(rvs_red)
 rvs_σ_red = collect(Iterators.flatten(1 ./ sqrt.(sum(1 ./ (rvs_σ[inds, :] .^ 2); dims=1)')))
+
+## Print statements
+
+# println("starting with $(length(orders)) orders")
+println("starting with $(length(best_ords)) orders")
+# println("$(length(orders) - length(χ²_sortperm)) orders ignored for unfinished analyses or otherwise weird")
+# println("$(length(χ²_sortperm) - length(χ²_orders)) worst orders (in χ²-sense) ignored")
+# println("$(length(χ²_orders) - length(inds)) more orders ignored for having >$std_floor m/s RMS or >$σ_floor errors")
+# println("$(length(orders) - length(inds)) orders ignored for having >$std_floor m/s RMS or >$σ_floor errors or weird analysis")
+println("$(length(best_ords) - length(inds)) orders ignored for having >$std_floor m/s RMS or >$σ_floor errors or weird analysis")
+println("$(length(inds)) orders used in total")
 
 using LinearAlgebra
 lin = SSOF.general_lst_sq_f(rvs_red, Diagonal(rvs_σ_red .^ 2), 1; x=times_nu)

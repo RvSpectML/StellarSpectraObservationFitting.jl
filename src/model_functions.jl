@@ -455,6 +455,8 @@ function oversamp_interp_helper(to_bounds::AbstractVector, from_x::AbstractVecto
 end
 oversamp_interp_helper(to_bounds::AbstractMatrix, from_x::AbstractVector) =
 	[oversamp_interp_helper(view(to_bounds, :, i), from_x) for i in 1:size(to_bounds, 2)]
+oversamp_interp_helper(to_x::AbstractVector, from_x::AbstractMatrix) =
+	[oversamp_interp_helper(to_bounds, view(from_x, :, i)) for i in 1:size(from_x, 2)]
 
 function undersamp_interp_helper(to_x::AbstractVector, from_x::AbstractVector)
 	ans = spzeros(length(to_x), length(from_x))
@@ -463,15 +465,21 @@ function undersamp_interp_helper(to_x::AbstractVector, from_x::AbstractVector)
 	for i in 1:size(ans, 1)
 		x_new = to_x[i]
 		ind = to_inds[i]  # index of point in model below to_x[i]
-		dif = (x_new-from_x[ind]) / (from_x[ind+1] - from_x[ind])
-		ans[i, ind] = 1 - dif
-		ans[i, ind + 1] = dif
+		if ind < length(from_x)
+			dif = (x_new-from_x[ind]) / (from_x[ind+1] - from_x[ind])
+			ans[i, ind] = 1 - dif
+			ans[i, ind + 1] = dif
+		else
+			ans[i, ind] = 1
+		end
 	end
 	dropzeros!(ans)
 	return ans
 end
 undersamp_interp_helper(to_x::AbstractMatrix, from_x::AbstractVector) =
 	[undersamp_interp_helper(view(to_x, :, i), from_x) for i in 1:size(to_x, 2)]
+undersamp_interp_helper(to_x::AbstractVector, from_x::AbstractMatrix) =
+	[undersamp_interp_helper(to_x, view(from_x, :, i)) for i in 1:size(from_x, 2)]
 
 struct OrderModelDPCA{T<:Number} <: OrderModel
     tel::Submodel
@@ -618,6 +626,33 @@ downsize(m::OrderModelWobble, n_comp_tel::Int, n_comp_star::Int) =
 		downsize(m.star, n_comp_star),
 		copy(m.rv), copy(m.reg_tel), copy(m.reg_star), m.b2o, m.bary_rvs, m.t2o, copy(m.metadata), m.n)
 
+
+function downsize_view(lm::FullLinearModel, n_comp::Int)
+	if n_comp > 0
+		return FullLinearModel(view(lm.M, :, 1:n_comp), view(lm.s, 1:n_comp, :), lm.μ, lm.log)
+	else
+		return TemplateModel(lm.μ, size(lm.s, 2))
+	end
+end
+downsize_view(lm::BaseLinearModel, n_comp::Int) =
+	BaseLinearModel(view(lm.M, :, 1:n_comp), view(lm.s, 1:n_comp, :), lm.log)
+function downsize_view(lm::TemplateModel, n_comp::Int)
+	@assert n_comp==0
+	return lm
+end
+downsize_view(sm::Submodel, n_comp::Int) =
+	Submodel(sm.log_λ, sm.λ, downsize_view(sm.lm, n_comp), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff)
+downsize_view(m::OrderModelDPCA, n_comp_tel::Int, n_comp_star::Int) =
+	OrderModelDPCA(
+		downsize_view(m.tel, n_comp_tel),
+		downsize_view(m.star, n_comp_star),
+		m.rv, copy(m.reg_tel), copy(m.reg_star), m.b2o, m.t2o, copy(m.metadata), m.n)
+downsize_view(m::OrderModelWobble, n_comp_tel::Int, n_comp_star::Int) =
+	OrderModelWobble(
+		downsize_view(m.tel, n_comp_tel),
+		downsize_view(m.star, n_comp_star),
+		m.rv, copy(m.reg_tel), copy(m.reg_star), m.b2o, m.bary_rvs, m.t2o, copy(m.metadata), m.n)
+
 spectra_interp(model::AbstractVector, interp_helper::_current_matrix_modifier) =
 	interp_helper * model
 spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
@@ -724,8 +759,8 @@ function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix
 		gpd_μ = mean.(gpd) .+ gp_mean
 		fluxes[:, i] .= gpn_μ ./ gpd_μ
 		return_weights ?
-			vars[:, i] .= 1 ./ (var.(gpn) .+ ((gpn_μ .^ 2 .* var.(gpd)) ./ (gpd_μ .^2))) ./ (gpd_μ .^2) :
-			vars[:, i] .= (var.(gpn) .+ ((gpn_μ .^ 2 .* var.(gpd)) ./ (gpd_μ .^2))) ./ (gpd_μ .^2)
+			vars[:, i] .= 1 ./ (var.(gpn) ./ (gpd_μ .^2)) + (var.(gpd) .* (gpn_μ .^ 2) ./ (gpd_μ .^4)) :
+			vars[:, i] .= (var.(gpn) ./ (gpd_μ .^2)) + (var.(gpd) .* (gpn_μ .^ 2) ./ (gpd_μ .^4))
 		if keep_mask
 			inds = searchsortednearest(view(log_λ_obs, :, i), log_λ; lower=true)
 			for j in 1:length(inds)
@@ -733,7 +768,7 @@ function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix
 					if isinf(var_obs[1, i]); vars[j, i] = _inf end
 				elseif log_λ[j] >= log_λ_obs[end, i]
 					if isinf(var_obs[end, i]); vars[j, i] = _inf end
-				elseif isinf(var_obs[inds[j], i]) && isinf(var_obs[inds[j]+1, i])
+				elseif isinf(var_obs[inds[j], i]) || isinf(var_obs[inds[j]+1, i])
 					vars[j, i] = _inf
 				end
 			end

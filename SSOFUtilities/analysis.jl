@@ -588,7 +588,7 @@ function how_many_comps(str::String, recalc::Bool, desired_order::Int)
 		println("using $n_comp_tel telluric components and $n_comp_star stellar components from " * str)
 
 	# they passed a proposed amount of parameters
-	elseif str[1] == '[' && str[end] == ']'
+elseif length(str) > 0 && str[1] == '[' && str[end] == ']'
 		matches = [parse(Int64, t.match) for t in eachmatch(r"-?[0-9]+", str)]
 		@assert length(matches) == 2 "should only pass things of the form [n_comps_tel::Int, n_comps_star::Int]"
 		n_comp_tel = matches[1]

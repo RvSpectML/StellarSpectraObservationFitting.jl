@@ -78,6 +78,7 @@ end
 # Based on Kalman filter update (alg 10.18 in ASDE) for constant Ak and Qk
 # changing y only changes m_kbar, v_k, and m_k. Could be faster if
 # P_kbar, S_k, K_k, and P_k were saved?
+_log2π = log(2π)
 function gp_ℓ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_meas::Real=_σ²_meas_def, H_k::AbstractMatrix=H_k, P∞::AbstractMatrix=P∞)
 
     n = length(y)

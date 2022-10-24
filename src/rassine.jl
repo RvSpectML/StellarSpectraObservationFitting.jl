@@ -450,7 +450,7 @@ function calc_continuum(λ::AA1, f_obs::AA2, var_obs::AA3; λout::AA4 = λ, fwhm
             println("# Order index = ", ord_idx)
             flush(stdout)
         end
-        pix = .!isinf.(view(var_obs,:,ord_idx))
+        pix = isfinite.(view(var_obs,:,ord_idx))
         λ_use = view(λ,pix,ord_idx)
         f_obs_use = convert.(Float64,view(f_obs,pix,ord_idx))
         var_obs_use = convert.(Float64,view(var_obs,pix,ord_idx))
