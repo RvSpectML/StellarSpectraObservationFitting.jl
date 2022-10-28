@@ -927,6 +927,8 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	# get aic for only n_star=1 model
 	if search_new_star
 		oms[1,2] = downsize(om, 0, 1)
+		fill_OrderModel!(oms[1,2], oms[1,1], 0:0, 0:0)
+		dop_comp .= calc_doppler_component_RVSKL(oms[1,2].star.λ, oms[1,2].star.lm.μ)
 		oms[1,2].tel.lm.μ .= 1
 		# oms[1,2].rv .=
 		DEMPCA!(oms[1,2].star.lm, copy(flux_star_no_tel), 1 ./ vars_star_no_tel, dop_comp; log_lm=log_lm(oms[1,2].star.lm), save_doppler_in_M1=false, inds=1:1, extra_vec=dop_comp)
@@ -962,9 +964,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 			_var[use_tel, :] .= Inf
 
 			# get stellar template in portions of spectra where it is dominant
-			flux_tel .= 1
-			vars_tel .= SOAP_gp_var
-			interp_to_star!(; mask_extrema=false, data_var=_var)
+			_spectra_interp_gp!(flux_star, vars_star, oms[2,1].star.log_λ, d.flux, _var .+ SOAP_gp_var, d.log_λ_star; gp_mean=1.)
 			oms[2,1].star.lm.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
 
 			# get telluric template after dividing out the partial stellar template
@@ -980,6 +980,8 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		else
 
 			# get telluric template after diving out full stellar template we already found
+			fill_OrderModel!(oms[2,1], oms[1,1], 0:0, 0:0)
+			flux_star .= oms[2,1].star.lm.μ
 			interp_to_tel!(star_log_λ_tel; mask_extrema=false)
 			oms[2,1].tel.lm.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
 
@@ -991,7 +993,9 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 
 		# optimize both templates
 		mws = TotalWorkspace(oms[2,1], d)
-		mws.om.rv .= vec(project_doppler_comp(flux_star .- mws.om.star.lm.μ, calc_doppler_component_RVSKL(mws.om.star.λ, mws.om.star.lm.μ), 1 ./ vars_star))
+		# flux_tel .= oms[2,1].tel.lm.μ
+		# interp_to_star!(; mask_extrema=false)
+		# mws.om.rv .= vec(project_doppler_comp(flux_star .- mws.om.star.lm.μ, calc_doppler_component_RVSKL(mws.om.star.λ, mws.om.star.lm.μ), 1 ./ vars_star))
 		aics[2,1], om1 = get_aic(mws)
 
 	end
