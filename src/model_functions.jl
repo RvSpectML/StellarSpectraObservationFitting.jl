@@ -106,6 +106,7 @@ function StellarInterpolationHelper!(
 	sih.lower_inds_p1 .= sih.lower_inds .+ 1
 	return sih
 end
+Base.copy(s::StellarInterpolationHelper) = StellarInterpolationHelper(copy(s.log_λ_obs_m_model_log_λ_lo), s.model_log_λ_step, copy(s.lower_inds), copy(s.lower_inds_p1))
 
 function spectra_interp(model_flux::AbstractVector, rv::Real, sih::StellarInterpolationHelper; sih_ind::Int=1)
 	ratios = (view(sih.log_λ_obs_m_model_log_λ_lo, :, sih_ind) .+ rv_to_D(rv)) ./ sih.model_log_λ_step
@@ -325,9 +326,12 @@ _eval_lm(tlm::TemplateModel) = _eval_lm(tlm.μ, tlm.n)
 (blm::BaseLinearModel)(inds::AbstractVecOrMat) = _eval_lm(view(blm.M, inds, :), blm.s; log_lm=blm.log)
 (tlm::TemplateModel)(inds::AbstractVecOrMat) = repeat(view(tlm.μ, inds), 1, tlm.n)
 
-function copy_to_LinearModel!(to::TemplateModel, from::LinearModel)
+function copy_TemplateModel!(to::LinearModel, from::LinearModel)
 	to.μ .= from.μ
 end
+copy_to_LinearModel!(to::TemplateModel, from::TemplateModel) = copy_TemplateModel!(to, from)
+copy_to_LinearModel!(to::LinearModel, from::TemplateModel) = copy_TemplateModel!(to, from)
+copy_to_LinearModel!(to::TemplateModel, from::LinearModel) = copy_TemplateModel!(to, from)
 function copy_to_LinearModel!(to::LinearModel, from::LinearModel)
 	@assert typeof(to) == typeof(from)
 	@assert to.log == from.log
@@ -337,11 +341,17 @@ function copy_to_LinearModel!(to::LinearModel, from::LinearModel)
 end
 copy_to_LinearModel!(to::TemplateModel, from::LinearModel, inds) =
 	copy_to_LinearModel!(to, from)
+copy_to_LinearModel!(to::LinearModel, from::TemplateModel, inds) =
+	copy_to_LinearModel!(to, from)
+copy_to_LinearModel!(to::TemplateModel, from::TemplateModel, inds) =
+	copy_to_LinearModel!(to, from)
+nvec(lm::TemplateModel) = 0
+nvec(lm::LinearModel) = size(lm.M, 2)
 function copy_to_LinearModel!(to::FullLinearModel, from::FullLinearModel, inds)
 	@assert to.log == from.log
 	to.μ .= from.μ
-	to.M .= view(from.M, :, inds)
-	to.s .= view(from.s, inds, :)
+	to.M[:, inds] .= view(from.M, :, inds)
+	to.s[inds, :] .= view(from.s, inds, :)
 end
 function copy_to_LinearModel!(to::LinearModel, from::Vector)
 	if typeof(to) <: TemplateModel
@@ -550,7 +560,7 @@ Base.copy(om::OrderModelDPCA) = OrderModelDPCA(copy(om.tel), copy(om.star), copy
 (om::OrderModelDPCA)(inds::AbstractVecOrMat) =
 	OrderModelDPCA(om.tel(inds), om.star(inds), om.rv(inds), copy(om.reg_tel),
 		copy(om.reg_star), view(om.b2o, inds), view(om.t2o, inds), copy(om.metadata), length(inds))
-Base.copy(om::OrderModelWobble) = OrderModelWobble(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), om.b2o, om.bary_rvs, om.t2o, copy(om.metadata), om.n)
+Base.copy(om::OrderModelWobble) = OrderModelWobble(copy(om.tel), copy(om.star), copy(om.rv), copy(om.reg_tel), copy(om.reg_star), copy(om.b2o), om.bary_rvs, om.t2o, copy(om.metadata), om.n)
 (om::OrderModelWobble)(inds::AbstractVecOrMat) =
 	OrderModelWobble(om.tel(inds), om.star(inds), view(om.rv, inds), copy(om.reg_tel),
 		copy(om.reg_star), om.b2o(inds, length(om.star.lm.μ)), view(om.bary_rvs, inds), view(om.t2o, inds), copy(om.metadata), length(inds))
@@ -624,7 +634,7 @@ downsize(m::OrderModelWobble, n_comp_tel::Int, n_comp_star::Int) =
 	OrderModelWobble(
 		downsize(m.tel, n_comp_tel),
 		downsize(m.star, n_comp_star),
-		copy(m.rv), copy(m.reg_tel), copy(m.reg_star), m.b2o, m.bary_rvs, m.t2o, copy(m.metadata), m.n)
+		copy(m.rv), copy(m.reg_tel), copy(m.reg_star), copy(m.b2o), m.bary_rvs, m.t2o, copy(m.metadata), m.n)
 
 
 function downsize_view(lm::FullLinearModel, n_comp::Int)
@@ -732,7 +742,7 @@ function _spectra_interp_gp!(fluxes::AbstractVector, vars, log_λ, flux_obs::Abs
 				if isinf(var_obs[1]); vars[i] = Inf end
 			elseif log_λ[i] >= log_λ_obs[end]
 				if isinf(var_obs[end]); vars[i] = Inf end
-			elseif isinf(var_obs[inds[i]]) && isinf(var_obs[inds[i]+1])
+			elseif isinf(var_obs[inds[i]]) || isinf(var_obs[inds[i]+1])
 				vars[i] = Inf
 			end
 		end
@@ -750,29 +760,33 @@ function _spectra_interp_gp!(fluxes::AbstractMatrix, vars, log_λ, flux_obs, var
 	end
 end
 
-function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix, log_λ::AbstractVector, flux_obs::AbstractMatrix, var_obs::AbstractMatrix, log_λ_obs::AbstractMatrix, flux_other::AbstractMatrix, var_other::AbstractMatrix, log_λ_other::AbstractMatrix; gp_mean::Number=1., gp_base=SOAP_gp, gp_var=SOAP_gp_var, keep_mask::Bool=true, return_weights::Bool=false)
-	return_weights ? _inf = 0 : _inf = Inf
+function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix, log_λ::AbstractVector, flux_obs::AbstractMatrix, var_obs::AbstractMatrix, log_λ_obs::AbstractMatrix, flux_other::AbstractMatrix, var_other::AbstractMatrix, log_λ_other::AbstractMatrix; gp_mean::Number=1., gp_base=SOAP_gp, gp_var=SOAP_gp_var, keep_mask::Bool=true, return_weights::Bool=false, ignore_model_uncertainty::Bool=false)
 	for i in 1:size(flux_obs, 2)
 		gpn = get_marginal_GP(gp_base(view(log_λ_obs, :, i), view(var_obs, :, i) .+ gp_var), view(flux_obs, :, i) .- gp_mean, log_λ)
 		gpd = get_marginal_GP(gp_base(view(log_λ_other, :, i), view(var_other, :, i) .+ gp_var), view(flux_other, :, i) .- gp_mean, log_λ)
 		gpn_μ = mean.(gpn) .+ gp_mean
 		gpd_μ = mean.(gpd) .+ gp_mean
 		fluxes[:, i] .= gpn_μ ./ gpd_μ
-		return_weights ?
-			vars[:, i] .= 1 ./ (var.(gpn) ./ (gpd_μ .^2)) + (var.(gpd) .* (gpn_μ .^ 2) ./ (gpd_μ .^4)) :
+		if ignore_model_uncertainty
 			vars[:, i] .= (var.(gpn) ./ (gpd_μ .^2)) + (var.(gpd) .* (gpn_μ .^ 2) ./ (gpd_μ .^4))
+		else
+			vars[:, i] .= var.(gpn) ./ (gpd_μ .^2)
+		end
 		if keep_mask
 			inds = searchsortednearest(view(log_λ_obs, :, i), log_λ; lower=true)
 			for j in 1:length(inds)
 				if log_λ[j] <= log_λ_obs[1, i]
-					if isinf(var_obs[1, i]); vars[j, i] = _inf end
+					if isinf(var_obs[1, i]); vars[j, i] = Inf end
 				elseif log_λ[j] >= log_λ_obs[end, i]
-					if isinf(var_obs[end, i]); vars[j, i] = _inf end
+					if isinf(var_obs[end, i]); vars[j, i] = Inf end
 				elseif isinf(var_obs[inds[j], i]) || isinf(var_obs[inds[j]+1, i])
-					vars[j, i] = _inf
+					vars[j, i] = Inf
 				end
 			end
 		end
+	end
+	if return_weights
+		vars .= 1 ./ vars
 	end
 end
 function _spectra_interp_gp_div_gp(log_λ::AbstractVector, flux_obs::AbstractMatrix, var_obs::AbstractMatrix, log_λ_obs::AbstractMatrix, flux_other::AbstractMatrix, var_other::AbstractMatrix, log_λ_other::AbstractMatrix; kwargs...)
@@ -1137,11 +1151,29 @@ function fill_StarModel!(om::OrderModel, lm::FullLinearModel; inds=2:size(lm.M, 
 	copy_to_LinearModel!(om.star.lm, lm, inds)
 	if typeof(om) <: OrderModelDPCA
 		om.rv.lm.M .= view(lm.M, :, 1)
-		om.rv.lm.s[:] = view(lm.s, 1, :)
+		om.rv.lm.s[:] .= view(lm.s, 1, :)
 	else
 		om.rv .= view(lm.s, 1, :) .* -light_speed_nu #TODO check if this is correct
 	end
 end
+function fill_StarModel!(om::OrderModel, lm::LinearModel, rvs::Vector, inds)
+	copy_to_LinearModel!(om.star.lm, lm, inds)
+	if typeof(om) <: OrderModelDPCA
+		om.rv.lm.M .= calc_doppler_component_RVSKL(om.star.λ, om.star.lm.μ)
+		om.rv.lm.s[:] .= rvs ./ -light_speed_nu #TODO check if this is correct
+	else
+		om.rv .= rvs
+	end
+end
+function fill_OrderModel!(om1::OrderModel, om2::OrderModel, inds_tel, inds_star)
+	fill_TelModel!(om1, om2.tel.lm, inds_tel)
+	if typeof(om2) <: OrderModelWobble
+		fill_StarModel!(om1, om2.star.lm, om2.rv, inds_star)
+	else
+		fill_StarModel!(om1, om2.star.lm, om2.rv.lm.s, inds_star)
+	end
+end
+
 
 L1(a) = sum(abs, a)
 L2(a) = sum(abs2, a)

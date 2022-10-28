@@ -57,47 +57,54 @@ function calc_doppler_component_RVSKL_Flux(lambda::Vector{T}, flux::Matrix{T}, k
     return calc_doppler_component_RVSKL_Flux(lambda, vec(mean(flux, dims=2)), kwargs...)
 end
 
+# function project_doppler_comp!(M::AbstractMatrix, scores::AbstractVector, Xtmp::AbstractMatrix, fixed_comp::AbstractVector)
+# 	M[:, 1] = fixed_comp  # Force fixed (i.e., Doppler) component to replace first PCA component
+# 	fixed_comp_norm2 = sum(abs2, fixed_comp)
+# 	for i in 1:size(Xtmp, 2)
+# 		scores[i] = dot(view(Xtmp, :, i), fixed_comp) / fixed_comp_norm2  # Normalize differently, so scores are z (i.e., doppler shift)
+# 		Xtmp[:, i] -= scores[i] * fixed_comp
+# 	end
+#
+# 	# calculating radial velocities (in m/s) from redshifts
+# 	# I have no idea why the negative sign needs to be here
+# 	rvs = -light_speed_nu * scores  # c * z
+# 	return rvs
+# end
 
-function project_doppler_comp!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, fixed_comp::AbstractVector)
-	M[:, 1] = fixed_comp  # Force fixed (i.e., Doppler) component to replace first PCA component
-	fixed_comp_norm2 = sum(abs2, fixed_comp)
-	for i in 1:size(Xtmp, 2)
-		scores[1, i] = dot(view(Xtmp, :, i), fixed_comp) / fixed_comp_norm2  # Normalize differently, so scores are z (i.e., doppler shift)
-		Xtmp[:, i] -= scores[1, i] * fixed_comp
-	end
-
-	# calculating radial velocities (in m/s) from redshifts
-	# I have no idea why the negative sign needs to be here
-	rvs = -light_speed_nu * scores[1, :]  # c * z
-	return rvs
-end
-
-function project_doppler_comp!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, fixed_comp::AbstractVector, weights::AbstractMatrix)
-	M[:, 1] = fixed_comp  # Force fixed (i.e., Doppler) component to replace first PCA component
-	_solve_coeffs!(view(M, :, 1), view(scores, 1, :), Xtmp, weights)
-	Xtmp .-= view(M, :, 1) * view(scores, 1, :)'
-	rvs = -light_speed_nu * scores[1, :]  # c * z
-	return rvs
-end
-
-function project_doppler_comp(Xtmp::AbstractMatrix, fixed_comp::AbstractVector, weights::AbstractMatrix)
-	scores = Array{Float64}(undef, 1, size(weights, 2))
-	_solve_coeffs!(fixed_comp, view(scores, 1, :), Xtmp, weights)
+function project_doppler_comp!(scores::AbstractVector, Xtmp::AbstractMatrix, fixed_comp::AbstractVector, weights::AbstractMatrix)
+	_solve_coeffs!(fixed_comp, scores, Xtmp, weights)
+	Xtmp .-= fixed_comp * scores'
 	rvs = -light_speed_nu * scores  # c * z
 	return rvs
 end
+function project_doppler_comp!(M::AbstractMatrix, scores::AbstractVector, Xtmp::AbstractMatrix, fixed_comp::AbstractVector, weights::AbstractMatrix)
+	M[:, 1] = fixed_comp  # Force fixed (i.e., Doppler) component to replace first PCA component
+	return project_doppler_comp!(scores, Xtmp, fixed_comp, weights)
+end
+function project_doppler_comp(Xtmp::AbstractMatrix, fixed_comp::AbstractVector, weights::AbstractMatrix)
+	scores = Array{Float64}(undef, size(weights, 2))
+	return project_doppler_comp!(scores, Xtmp, fixed_comp, weights)
+end
 
-function DEMPCA!(M::AbstractMatrix, scores::AbstractMatrix, μ::AbstractVector, Xtmp::AbstractMatrix, weights::AbstractMatrix, doppler_comp::Vector{T}; min_flux::Real=_min_flux_default, max_flux::Real=_max_flux_default, kwargs...) where {T<:Real}
+function DEMPCA!(M::AbstractVecOrMat, scores::AbstractVecOrMat, rv_scores::AbstractVector, μ::AbstractVector, Xtmp::AbstractMatrix, weights::AbstractMatrix, doppler_comp::Vector{T}; min_flux::Real=_min_flux_default, max_flux::Real=_max_flux_default, save_doppler_in_M1::Bool=true, kwargs...) where {T<:Real}
 	Xtmp .-= μ
-	rvs = project_doppler_comp!(M, scores, Xtmp, doppler_comp, weights)
+	if save_doppler_in_M1
+		rvs = project_doppler_comp!(M, rv_scores, Xtmp, doppler_comp, weights)
+	else
+		rvs = project_doppler_comp!(rv_scores, Xtmp, doppler_comp, weights)
+	end
 	Xtmp .+= μ
 	mask_low_pixels!(Xtmp, weights; min_flux=min_flux, using_weights=true)
 	mask_high_pixels!(Xtmp, weights; max_flux=max_flux, using_weights=true)
-	if size(M, 2) > 1
-		EMPCA!(M, scores, μ, Xtmp, weights; inds=2:size(M, 2), kwargs...)
+	if size(M, 2) > 0
+		EMPCA!(M, scores, μ, Xtmp, weights; kwargs...)
 	end
 	return rvs
 end
+DEMPCA!(M::AbstractVecOrMat, scores::AbstractMatrix, μ::AbstractVector, Xtmp::AbstractMatrix, weights::AbstractMatrix, doppler_comp::Vector{T}; inds=2:size(M, 2), kwargs...) where {T<:Real} =
+	DEMPCA!(M, scores, view(scores, 1, :), μ, Xtmp, weights, doppler_comp; inds=inds, kwargs...)
+DEMPCA!(lm::FullLinearModel, Xtmp, weights, doppler_comp; log_lm=log_lm(lm), kwargs...) = DEMPCA!(lm.M, lm.s, lm.μ, Xtmp, weights, doppler_comp; log_lm=log_lm, kwargs...)
+DEMPCA!(lm::FullLinearModel, rv_scores, Xtmp, weights, doppler_comp; log_lm=log_lm(lm), kwargs...) = DEMPCA!(lm.M, lm.s, rv_scores, lm.μ, Xtmp, weights, doppler_comp; log_lm=log_lm, kwargs...)
 
 _fracvar(X::AbstractVecOrMat, Y::AbstractVecOrMat; var_tot=sum(abs2, X)) =
 	sum(abs2, X - Y) / var_tot

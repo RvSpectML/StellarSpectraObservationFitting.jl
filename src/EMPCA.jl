@@ -15,6 +15,8 @@ function EMPCA!(M::AbstractMatrix, scores::AbstractMatrix, μ::AbstractVector, X
 	end
 	_empca!(M, scores, Xtmp, weights; kwargs...)
 end
+EMPCA!(lm::FullLinearModel, Xtmp::AbstractMatrix, weights::AbstractMatrix; kwargs...) =
+	EMPCA!(lm.M, lm.s, lm.μ, Xtmp, weights; log_lm=log_lm(lm), kwargs...)
 
 function _empca!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(M, 2), vec_by_vec::Bool=true, kwargs...)
 	if length(inds) > 0
@@ -64,18 +66,28 @@ function _solve_eigenvectors!(eigvec::AbstractVector, coeff::AbstractVector, dat
 	# Renormalize the answer
 	eigvec ./= norm(eigvec)
 end
-function _reorthogonalize!(eigvec::AbstractMatrix)
+function _reorthogonalize!(eigvec::AbstractMatrix; inds=2:size(eigvec, 2), kwargs...)
 	#- Renormalize and re-orthogonalize the answer
 	nvec = size(eigvec, 2)
+	@assert inds[1] > 1
 	if nvec > 1
-		for k in 2:nvec
-			for kx in 1:(k-1)
-				c = dot(view(eigvec, :, k), view(eigvec, :, kx))
-				eigvec[:, k] .-=  c .* view(eigvec, :, kx) / sum(abs2, view(eigvec, :, kx))
-			end
-			eigvec[:, k] ./= norm(view(eigvec, :, k))
+		for i in inds
+			_reorthogonalize_vec_i!(eigvec, i; kwargs...)
 		end
 	end
+end
+function _reorthogonalize_vec_i!(eigvec::AbstractMatrix, i::Int; extra_vec::Union{Nothing, AbstractVector}=nothing)
+	#- Renormalize and re-orthogonalize the answer
+	if !isnothing(extra_vec)
+		_reorthogonalize_no_renorm!(view(eigvec, :, i), extra_vec)
+	end
+	for j in 1:(i-1)
+		_reorthogonalize_no_renorm!(view(eigvec, :, i), view(eigvec, :, j))
+	end
+	eigvec[:, i] ./= norm(view(eigvec, :, i))
+end
+function _reorthogonalize_no_renorm!(eigvec1::AbstractVector, eigvec2::AbstractVector)
+	eigvec1 .-=  dot(eigvec1, eigvec2) .* eigvec2 / sum(abs2, eigvec2)
 end
 
 function _random_orthonormal!(A::AbstractMatrix, nvar::Int; log_λ::Union{Nothing, AbstractVector}=nothing, inds::UnitRange{<:Int}=1:size(A, 2))
@@ -144,15 +156,17 @@ function _empca_vec_by_vec!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data:
 	@assert size(eigvec, 1) == nvar
 
 	_data = copy(data)
-	for i in inds
-		eigvec[:, i] .= randn(nvar)
-		# eigvec[:, i] ./= norm(view(eigvec, :, i))
-		_reorthogonalize!(view(eigvec, :, 1:i))  # actually useful
-		_solve_coeffs!(view(eigvec, :, i), view(coeff, i, :), data, weights)
-	    for k in 1:niter
-			_solve_eigenvectors!(view(eigvec, :, i), view(coeff, i, :), _data, weights)
-			_reorthogonalize!(view(eigvec, :, 1:i))  # actually useful
-	        _solve_coeffs!(view(eigvec, :, i), view(coeff, i, :), _data, weights)
+	for i in 1:inds[end]
+		if i in inds
+			eigvec[:, i] .= randn(nvar)
+			# eigvec[:, i] ./= norm(view(eigvec, :, i))
+			_reorthogonalize_vec_i!(eigvec, i; kwargs...)  # actually useful
+			_solve_coeffs!(view(eigvec, :, i), view(coeff, i, :), data, weights)
+		    for k in 1:niter
+				_solve_eigenvectors!(view(eigvec, :, i), view(coeff, i, :), _data, weights)
+				_reorthogonalize_vec_i!(eigvec, i; kwargs...)  # actually useful
+		        _solve_coeffs!(view(eigvec, :, i), view(coeff, i, :), _data, weights)
+			end
 		end
 		_data .-= view(eigvec, :, i) * view(coeff, i, :)'
 	end

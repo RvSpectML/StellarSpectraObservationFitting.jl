@@ -433,6 +433,8 @@ FrozenTelWorkspace(om::OrderModel, d::Data; kwargs...) =
 
 function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, verbose::Bool=_verbose_def, shift_scores::Bool=true, μ_positive::Bool=false, winsor::Bool=true, kwargs...)
 
+	update_interpolation_locations!(mws)
+
     if ignore_regularization
         reg_tel_holder = copy(mws.om.reg_tel)
         reg_star_holder = copy(mws.om.reg_star)
@@ -447,11 +449,16 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
 			if typeof(mws.om) <: OrderModelWobble
 				remove_lm_score_means!(mws.om.star.lm; prop=0.2)
 			end
-			if μ_positive
-				mws.om.tel.lm.μ[mws.om.tel.lm.μ .< 1e-10] .= 1e-10
-				mws.om.tel.lm.μ[mws.om.tel.lm.μ .< 1e-10] .= 1e-10
-			end
 		end
+		if μ_positive
+			mws.om.tel.lm.μ[mws.om.tel.lm.μ .< 1e-10] .= 1e-10
+			mws.om.tel.lm.μ[mws.om.tel.lm.μ .< 1e-10] .= 1e-10
+		end
+
+		if as.iter % 10 == 9
+			update_interpolation_locations!(mws)
+		end
+
 		if verbose; println(as) end
 	end
 	# verbose ? cb(as::AdamState) = println(as) : cb(as::AdamState) = nothing
