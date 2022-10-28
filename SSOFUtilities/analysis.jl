@@ -9,6 +9,40 @@ using ThreadsX
 
 valid_optimizers = ["adam", "l-bfgs", "frozen-tel"]
 
+
+function get_data(data_fn::String; min_pix::Int=800, use_lsf::Bool=true)
+	# save_path = save_path_base * star * "/$(desired_order)/"
+	@load data_fn n_obs data times_nu airmasses
+	if sum(all(.!(isinf.(data.var)); dims=2)) < min_pix
+		@error "quitting analysis as there is not enough useful data (<$min_pix pixels used at all times)"
+	end
+	data.var[data.var .== 0] .= Inf
+	if !use_lsf; data = SSOF.GenericData(data) end
+	return data, times_nu, airmasses
+end
+function calculate_initial_model(data::SSOF.Data, instrument::String, desired_order::Int, star::String;
+	n_comp_tel::Int=5, n_comp_star::Int=5, save_fn::String="",
+	recalc::Bool=false, use_custom_n_comp::Bool=false, use_reg::Bool=true, kwargs...)
+
+	save = save_fn!=""
+	if isfile(save_fn) && !recalc
+		println("using saved model at $save_fn")
+		@load save_fn model
+	else
+		model = SSOF.calculate_initial_model(data, instrument, desired_order, star;
+			max_n_tel=n_comp_tel, max_n_star=n_comp_star, use_all_comps=use_custom_n_comp, kwargs...)
+
+		if !use_reg
+			SSOF.rm_regularization!(model)
+			model.metadata[:todo][:reg_improved] = true
+		end
+		if save
+			@save save_fn model
+		end
+	end
+	return model
+end
+
 function create_model(
 	data_fn::String,
 	desired_order::Int,
@@ -32,7 +66,6 @@ function create_model(
 	end
 	data.var[data.var .== 0] .= Inf
 
-	# takes a couple mins now
 	if isfile(save_fn) && !recalc
 		println("using saved model at $save_fn")
 	    @load save_fn model
@@ -109,7 +142,6 @@ end
 function improve_model!(mws::SSOF.ModelWorkspace; verbose::Bool=true, show_plot::Bool=false, save_fn::String="", kwargs...)
 	save = save_fn!=""
 	model = mws.om
-    SSOF.update_interpolation_locations!(mws)
 	SSOF.train_OrderModel!(mws; verbose=verbose, kwargs...)  # 120s
 	results = SSOF.finalize_scores!(mws; verbose=verbose, kwargs...)
     if show_plot; status_plot(mws) end
@@ -190,7 +222,6 @@ function _finish_downsizing(mws::SSOF.ModelWorkspace, model::SSOF.OrderModel; no
 	end
 	mws_smol.om.metadata[:todo][:downsized] = true
 	mws_smol.om.metadata[:todo][:initialized] = true
-	SSOF.update_interpolation_locations!(mws_smol)
 	SSOF.flip_basis_vectors!(mws_smol.om)
 	SSOF.train_OrderModel!(mws_smol; kwargs...)  # 120s
 	SSOF.finalize_scores!(mws_smol; f_tol=SSOF._f_reltol_def_s, g_tol=SSOF._g_L∞tol_def_s)
@@ -583,8 +614,6 @@ function how_many_comps(str::String, recalc::Bool, desired_order::Int)
 		n_comp_star = look(:n_star_by_eye, 5)
 		# better_model = look(:better_model, 1)
 		# remove_reciprocal_continuum = look(:has_reciprocal_continuum, false)
-		remove_reciprocal_continuum = false
-		pairwise = false
 		println("using $n_comp_tel telluric components and $n_comp_star stellar components from " * str)
 
 	# they passed a proposed amount of parameters
@@ -597,20 +626,16 @@ elseif length(str) > 0 && str[1] == '[' && str[end] == ']'
 		# @assert 0 < better_model < 3
 		use_custom_n_comp = true
 		recalc = true
-		remove_reciprocal_continuum = false
-		pairwise = false
 		println("using $n_comp_tel telluric components and $n_comp_star stellar components")
 
 	# using the defaults
 	else
 		n_comp_tel = 5
 		n_comp_star = 5
-		remove_reciprocal_continuum = false
-		pairwise = true
 		# better_model = 1  # this will be ignored later
 		use_custom_n_comp = false
 		println("using $n_comp_tel telluric components and $n_comp_star stellar components (the default)")
 	end
 
-	return n_comp_tel, n_comp_star, use_custom_n_comp, recalc, remove_reciprocal_continuum, pairwise
+	return n_comp_tel, n_comp_star, use_custom_n_comp, recalc
 end

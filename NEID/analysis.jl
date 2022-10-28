@@ -25,7 +25,7 @@ log_lm = SSOF.parse_args(3, Bool, true)
 dpca = SSOF.parse_args(4, Bool, false)
 use_lsf = SSOF.parse_args(5, Bool, true)
 recalc = SSOF.parse_args(6, Bool, true)
-n_comp_tel, n_comp_star, use_custom_n_comp, recalc, remove_reciprocal_continuum, pairwise =
+n_comp_tel, n_comp_star, use_custom_n_comp, recalc =
 	SSOFU.how_many_comps(SSOF.parse_args(7, String, ""), recalc, desired_order)
 save_folder = SSOF.parse_args(8, String, "aic")
 use_reg = SSOF.parse_args(9, Bool, true)
@@ -47,41 +47,22 @@ end
 save_path = base_path * "results.jld2"
 pipeline_path = neid_save_path * star * "/neid_pipeline.jld2"
 
-if solar
-    @load neid_save_path * "10700/$(desired_order)/results.jld2" model
-	seed = model
-    model, data, times_nu, airmasses = SSOFU.create_model(data_path,
-		desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path,
-		recalc=recalc, seed=seed, dpca=dpca, log_lm=log_lm, n_comp_tel=n_comp_tel,
-		n_comp_star=n_comp_star, log_λ_gp_star=1/SSOF.SOAP_gp_params.λ,
-		log_λ_gp_tel=1/SSOFU.neid_neid_temporal_gp_lsf_λ(desired_order))
-else
-    model, data, times_nu, airmasses = SSOFU.create_model(data_path,
-		desired_order, "NEID", star; use_reg=use_reg, save_fn=save_path,
-		recalc=recalc, dpca=dpca, log_lm=log_lm, n_comp_tel=n_comp_tel,
-		n_comp_star=n_comp_star, log_λ_gp_star=1/SSOF.SOAP_gp_params.λ,
-		log_λ_gp_tel=1/SSOFU.neid_neid_temporal_gp_lsf_λ(desired_order))
-end
+data, times_nu, airmasses = SSOFU.get_data(data_path; use_lsf=use_lsf)
 times_nu .-= 2400000.5
-lm_tel, lm_star, stellar_dominated = SSOFU.initialize_model!(model, data; init_fn=init_path, recalc=recalc, remove_reciprocal_continuum=remove_reciprocal_continuum, pairwise=pairwise)
+
+model = SSOFU.calculate_initial_model(data, "NEID", desired_order, star;
+	n_comp_tel=n_comp_tel, n_comp_star=n_comp_star, save_fn=save_path,
+	recalc=recalc, use_reg=use_reg, use_custom_n_comp=use_custom_n_comp,
+	dpca=dpca, log_lm=log_lm, log_λ_gp_star=1/SSOF.SOAP_gp_params.λ,
+	# log_λ_gp_tel=1/110000,
+	log_λ_gp_tel=1/SSOFU.neid_neid_temporal_gp_lsf_λ(desired_order))
 if all(isone.(model.tel.lm.μ)) && !SSOF.is_time_variable(model.tel); opt = "frozen-tel" end
-if !use_lsf; data = SSOF.GenericData(data) end
 mws = SSOFU.create_workspace(model, data, opt)
-# mws = SSOFU._downsize_model(mws, [2,0], 1, lm_tel, lm_star; verbose=true, ignore_regularization=true)
-if use_custom_n_comp
-	if n_comp_tel > 0 && n_comp_star > 0
-		_, _, _, _, better_model = SSOF.test_ℓ_for_n_comps([n_comp_tel, n_comp_star], mws, times_nu, lm_tel, lm_star; lm_tel_ind=2, lm_star_ind=2, iter=50)
-	else
-		better_model = Int(n_comp_star > 0) + 1
-	end
-	mws = SSOFU._downsize_model(mws, [n_comp_tel, n_comp_star], better_model, lm_tel, lm_star; verbose=true, ignore_regularization=true, lm_tel_ind=2, lm_star_ind=2)
-else
-	mws = SSOFU.downsize_model(mws, times_nu, lm_tel, lm_star; save_fn=save_path, decision_fn=base_path*"model_decision.jld2", plots_fn=base_path, use_aic=!solar)
-end
 mkpath(base_path*"noreg/")
 df_act = SSOFU.neid_activity_indicators(pipeline_path, data)
 SSOFU.neid_plots(mws, airmasses, times_nu, SSOF.rvs(mws.om), zeros(length(times_nu)), star, base_path*"noreg/", pipeline_path, desired_order;
 	display_plt=interactive, df_act=df_act);
+
 SSOFU.improve_regularization!(mws; save_fn=save_path)
 if !mws.om.metadata[:todo][:err_estimated]; SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path, iter=500, verbose=true) end
 rvs, rv_errors, tel_errors, star_errors = SSOFU.estimate_σ_curvature(mws; save_fn=base_path * "results_curv.jld2", recalc=recalc, multithread=false)

@@ -221,6 +221,8 @@ function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool
 		plt = plot_spectrum(; legend = :bottomright, layout = grid(3, 1, heights=[0.6, 0.2, 0.2]), ylabel="Flux + Constant Shift", kwargs...) :
 		plt = plot_spectrum(; legend = :bottomright, layout = grid(2, 1, heights=[0.85, 0.15]), kwargs...)
 
+
+	# TODO: take average after broadening with LSF
 	tel_model = time_average(mws.om.tel.lm())
     plot_telluric_with_lsf!(plt[1], mws.om, vec(tel_model); d=mws.d, label="Mean Telluric Model", color=plt_colors[1])
     shift = 1.1 - minimum(tel_model)

@@ -452,7 +452,7 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
 		end
 		if μ_positive
 			mws.om.tel.lm.μ[mws.om.tel.lm.μ .< 1e-10] .= 1e-10
-			mws.om.tel.lm.μ[mws.om.tel.lm.μ .< 1e-10] .= 1e-10
+			mws.om.star.lm.μ[mws.om.star.lm.μ .< 1e-10] .= 1e-10
 		end
 
 		if as.iter % 10 == 9
@@ -777,3 +777,337 @@ function update_interpolation_locations!(om::OrderModel, d::Data; use_mean::Bool
 	end
 end
 update_interpolation_locations!(mws::ModelWorkspace) = update_interpolation_locations!(mws.om, mws.d)
+
+
+# TODO: Make this work for OrderModelDPCA
+function calculate_initial_model(data::Data, instrument::String, desired_order::Int, star::String;
+	μ_min::Real=0, μ_max::Real=Inf, use_mean::Bool=true, stop_early::Bool=false,
+	remove_reciprocal_continuum::Bool=false, return_full_path::Bool=false,
+	max_n_tel::Int=5, max_n_star::Int=5, use_all_comps::Bool=false, kwargs...)
+
+	d = GenericData(data)
+
+	@assert max_n_tel >= -1
+	@assert max_n_star >= 0
+	test_n_comp_tel = -1:max_n_tel
+	test_n_comp_star = 0:max_n_star
+	aics = Inf .* ones(length(test_n_comp_tel), length(test_n_comp_star))
+	oms = Array{OrderModelWobble}(undef, length(test_n_comp_tel), length(test_n_comp_star))
+	logdet_Σ, n = ℓ_prereqs(d.var)
+	comp2ind(n_tel::Int, n_star::Int) = (n_tel+2, n_star+1)
+	n_obs = size(d.flux, 2)
+
+	om = OrderModel(d, instrument, desired_order, star; n_comp_tel=max_n_tel, n_comp_star=max_n_star, kwargs...)
+
+	star_log_λ_tel = _shift_log_λ_model(d.log_λ_obs, d.log_λ_star, om.star.log_λ)
+	tel_log_λ_star = _shift_log_λ_model(d.log_λ_star, d.log_λ_obs, om.tel.log_λ)
+	flux_star = ones(length(om.star.log_λ), n_obs)
+	vars_star = SOAP_gp_var .* ones(length(om.star.log_λ), n_obs)
+	flux_tel = ones(length(om.tel.log_λ), n_obs)
+	vars_tel = SOAP_gp_var .* ones(length(om.tel.log_λ), n_obs)
+
+	function reciprocal_continuum_mask(continuum::AbstractVector, other_interpolated_continuum::AbstractVector; probe_depth::Real=0.02, return_cc::Bool=false)
+		# probe_depth=0.0
+		cc = (1 .- continuum) .* (1 .- other_interpolated_continuum)
+		ccm = find_modes(-cc)
+
+		ccm = [i for i in ccm if ((cc[i] < -(probe_depth^2)) && (0.5 < abs(continuum[i] / other_interpolated_continuum[i]) < 2))]
+		mask = zeros(Bool, length(cc))
+		l = length(cc)
+		for m in ccm
+			i = m
+			while i <= l && cc[i] < 0
+				mask[i] = true
+				i += 1
+			end
+			i = m-1
+			while i >= 1 && cc[i] < 0
+				mask[i] = true
+				i -= 1
+			end
+		end
+		if return_cc
+			return mask, cc
+		end
+		return mask
+	end
+	reciprocal_continuum_mask(continuum::AbstractVector, other_interpolated_continuum::AbstractMatrix; kwargs...) =
+		reciprocal_continuum_mask(continuum, vec(mean(other_interpolated_continuum; dims=2)); kwargs...)
+
+	function remove_reciprocal_continuum!(om::OrderModel, flux_star_holder::AbstractMatrix, vars_star_holder::AbstractMatrix, flux_tel_holder::AbstractMatrix, vars_tel_holder::AbstractMatrix; use_stellar_continuum::Bool=true, kwargs...)
+
+		lm_tel = om.tel.lm
+		lm_star = om.star.lm
+
+		_, c_t, _ = calc_continuum(om.tel.λ, lm_tel.μ, ones(length(lm_tel.μ)) ./ 1000;
+			min_R_factor=1, smoothing_half_width=0,
+			stretch_factor=10., merging_threshold = 0.)
+
+		_, c_s, _ = calc_continuum(om.star.λ, lm_star.μ, ones(length(lm_star.μ)) ./ 1000;
+			min_R_factor=1,
+			stretch_factor=10., merging_threshold = 0.)
+
+		flux_star_holder .= c_s
+		vars_star_holder .= SOAP_gp_var
+		_spectra_interp_gp!(flux_tel_holder, vars_tel_holder, om.tel.log_λ, flux_star_holder, vars_star_holder, star_log_λ_tel; gp_mean=1.)
+		m, cc = reciprocal_continuum_mask(c_t, flux_tel_holder; return_cc=true, kwargs...)
+		use_stellar_continuum ?
+			lm_tel.μ[m] .*= vec(mean(flux_tel_holder[m, :]; dims=2)) :
+			lm_tel.μ[m] ./= c_t[m]
+		did_anything = any(m)
+
+		flux_tel .= c_t
+		vars_tel .= SOAP_gp_var
+		_spectra_interp_gp!(flux_star_holder, vars_star_holder, om.star.log_λ, flux_tel_holder, vars_tel_holder, tel_log_λ_star; gp_mean=1.)
+		m, cc = reciprocal_continuum_mask(c_s, flux_star_holder; return_cc=true, kwargs...)
+		use_stellar_continuum ?
+			lm_star.μ[m] ./= c_s[m] :
+			lm_star.μ[m] .*= vec(mean(flux_star_holder[m, :]; dims=2))
+		return did_anything || any(m)
+
+	end
+
+	function improve_model!(mws::ModelWorkspace; kwargs...)
+		train_OrderModel!(mws; verbose=false, ignore_regularization=true, μ_positive=true, kwargs...)  # 120s
+		finalize_scores!(mws; verbose=false, ignore_regularization=true, μ_positive=true, kwargs...)
+	end
+	function nicer_model!(mws::ModelWorkspace)
+		SSOF.remove_lm_score_means!(mws.om)
+		SSOF.flip_basis_vectors!(mws.om)
+		mws.om.metadata[:todo][:initialized] = true
+		mws.om.metadata[:todo][:downsized] = true
+	end
+	function get_aic(mws::ModelWorkspace)
+		if mws.d != data
+			improve_model!(mws; iter=30)
+			mws2 = typeof(mws)(copy(mws.om), data)
+			improve_model!(mws2; iter=50)
+			_aic = aic(mws2, logdet_Σ, n)  # nicer_model!() shouldn't affect this but not taking any risks
+			nicer_model!(mws2)
+			return _aic, mws2.om
+		else
+			improve_model!(mws; iter=50)
+			_aic = aic(mws, logdet_Σ, n)  # nicer_model!() shouldn't affect this but not taking any risks
+			nicer_model!(mws)
+			return _aic, mws.om
+		end
+	end
+
+	# stellar models assuming no tellurics
+	n_tel_cur = -1
+	n_star_cur = 0
+	search_new_tel = n_tel_cur+1 <= max_n_tel
+	search_new_star = n_star_cur+1 <= max_n_star
+	oms[1,1] = downsize(om, 0, 0)
+	oms[1,1].tel.lm.μ .= 1
+	_spectra_interp_gp!(flux_star, vars_star, oms[1,1].star.log_λ, d.flux, d.var .+ SOAP_gp_var, d.log_λ_star; gp_mean=1.)
+	flux_star_no_tel = copy(flux_star)
+	vars_star_no_tel = copy(vars_star)
+	oms[1,1].star.lm.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
+	dop_comp = calc_doppler_component_RVSKL(oms[1,1].star.λ, oms[1,1].star.lm.μ)
+	# project_doppler_comp!(mws.om.rv, flux_star_no_tel .- mws.om.star.lm.μ, dop_comp, 1 ./ vars_star)
+	mask_low_pixels!(flux_star_no_tel, vars_star_no_tel)
+	mask_high_pixels!(flux_star_no_tel, vars_star_no_tel)
+	χ²_star = vec(sum(_χ²_loss(star_model(oms[1,1]), d); dims=2))  # TODO: could optimize before checking this
+	star_template_χ² = sum(χ²_star)
+
+	# get aic for base, only stellar template model
+	mws = FrozenTelWorkspace(oms[1,1], d)
+	aics[1,1], om0 = get_aic(mws)
+
+
+	# telluric template assuming no stellar (will be overwritten later)
+	oms[2,1] = downsize(om, 0, 0)
+	oms[2,1].star.lm.μ .= 1
+	_spectra_interp_gp!(flux_tel, vars_tel, oms[2,1].tel.log_λ, d.flux, d.var .+ SOAP_gp_var, d.log_λ_obs; gp_mean=1.)
+	oms[2,1].tel.lm.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
+	χ²_tel = vec(sum(_χ²_loss(tel_model(oms[2,1]), d); dims=2))  # TODO: could optimize before checking this
+	tel_template_χ² = sum(χ²_tel)
+
+	# sum(use_tel)
+	# plot(om.tel.log_λ, om.tel.lm.μ)
+	# plot!(mean(data.log_λ_obs; dims=2), use_tel)
+	# plot(om.star.log_λ, om.star.lm.μ)
+	# plot!(mean(data.log_λ_star; dims=2), use_tel)
+
+	# get aic for only n_star=1 model
+	if search_new_star
+		oms[1,2] = downsize(om, 0, 1)
+		oms[1,2].tel.lm.μ .= 1
+		# oms[1,2].rv .=
+		DEMPCA!(oms[1,2].star.lm, copy(flux_star_no_tel), 1 ./ vars_star_no_tel, dop_comp; log_lm=log_lm(oms[1,2].star.lm), save_doppler_in_M1=false, inds=1:1, extra_vec=dop_comp)
+		mws = FrozenTelWorkspace(oms[1,2], d)
+		aics[1,2], om2 = get_aic(mws)
+	end
+
+	function interp_helper!(flux_to::AbstractMatrix, vars_to::AbstractMatrix, log_λ_to::AbstractVector,
+		flux_from::AbstractMatrix, vars_from::AbstractMatrix, log_λ_from::AbstractMatrix,
+		log_λ_data::AbstractMatrix; mask_extrema::Bool=true, keep_data_mask::Bool=true, data_var::AbstractMatrix=d.var)
+		vars_from .= SOAP_gp_var
+		_spectra_interp_gp_div_gp!(flux_to, vars_to, log_λ_to, d.flux, data_var, log_λ_data, flux_from, vars_from, log_λ_from; keep_mask=keep_data_mask, ignore_model_uncertainty=true)
+		if mask_extrema
+			mask_low_pixels!(flux_to, vars_to)
+			mask_high_pixels!(flux_to, vars_to)
+		end
+	end
+	interp_to_star!(; kwargs...) = interp_helper!(flux_star, vars_star, om.star.log_λ,
+		flux_tel, vars_tel, tel_log_λ_star,
+		d.log_λ_star; kwargs...)
+	interp_to_tel!(x; kwargs...) = interp_helper!(flux_tel, vars_tel, om.tel.log_λ,
+		flux_star, vars_star, x,
+		d.log_λ_obs; kwargs...)
+
+	if search_new_tel
+
+		use_tel = χ²_star .> χ²_tel  # which pixels are telluric dominated
+
+		if sum(use_tel) > 0  # if any pixels are telluric dominated
+
+			# mask out the telluric dominated pixels for partial stellar template estimation
+			_var = copy(d.var)
+			_var[use_tel, :] .= Inf
+
+			# get stellar template in portions of spectra where it is dominant
+			flux_tel .= 1
+			vars_tel .= SOAP_gp_var
+			interp_to_star!(; mask_extrema=false, data_var=_var)
+			oms[2,1].star.lm.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
+			# plot(oms[2,1].star.log_λ, oms[2,1].star.lm.μ)
+			# plot!(mean(data.log_λ_star; dims=2), use_tel)
+
+			# get telluric template after dividing out the partial stellar template
+			flux_star .= oms[2,1].star.lm.μ
+			interp_to_tel!(star_log_λ_tel; mask_extrema=false)
+			oms[2,1].tel.lm.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
+			# plot(oms[2,1].tel.log_λ, oms[2,1].tel.lm.μ)
+			# plot!(mean(data.log_λ_obs; dims=2), use_tel)
+
+			# get stellar template after dividing out full telluric template
+			flux_tel .= oms[2,1].tel.lm.μ
+			interp_to_star!(; mask_extrema=false)
+			oms[2,1].star.lm.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
+			# plot(oms[2,1].star.log_λ, oms[2,1].star.lm.μ)
+			# plot!(mean(data.log_λ_star; dims=2), use_tel)
+
+		else
+
+			# get telluric template after diving out full stellar template we already found
+			interp_to_tel!(star_log_λ_tel; mask_extrema=false)
+			oms[2,1].tel.lm.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
+
+		end
+
+		if remove_reciprocal_continuum
+			remove_reciprocal_continuum!(oms[2,1], flux_star, vars_star, flux_tel, vars_tel)
+		end
+
+		# optimize both templates
+		mws = TotalWorkspace(oms[2,1], d)
+		mws.om.rv .= vec(project_doppler_comp(flux_star .- mws.om.star.lm.μ, calc_doppler_component_RVSKL(mws.om.star.λ, mws.om.star.lm.μ), 1 ./ vars_star))
+		aics[2,1], om1 = get_aic(mws)
+
+	end
+
+	j = comp2ind(n_tel_cur, n_star_cur)
+	oms[j...] = om0
+	search_new_tel ? aic_tel = aics[comp2ind(n_tel_cur+1, n_star_cur)...] : aic_tel = Inf
+	search_new_star ? aic_star = aics[comp2ind(n_tel_cur, n_star_cur+1)...] : aic_star = Inf
+	added_tel_better = aic_tel < aic_star
+	added_tel_better ? aic_next = aic_tel : aic_next = aic_star
+	n_tel_next = n_tel_cur+added_tel_better
+	n_star_next = n_star_cur+1-added_tel_better
+	add_comp = (!stop_early || aic_next < aics[j...]) && (search_new_tel || search_new_star)
+	if add_comp
+		if added_tel_better
+			om0 = om1
+		else
+			om0 = om2
+		end
+	end
+
+	while add_comp
+
+		println("n_comp: ($n_tel_cur,$n_star_cur) -> ($n_tel_next,$n_star_next)")
+		println("aic   : $(aics[comp2ind(n_tel_cur, n_star_cur)...]) -> $(aics[comp2ind(n_tel_next, n_star_next)...])")
+		n_tel_cur, n_star_cur = n_tel_next, n_star_next
+		search_new_tel = n_tel_cur+1 <= max_n_tel
+		search_new_star = n_star_cur+1 <= max_n_star
+		j = comp2ind(n_tel_cur, n_star_cur)
+
+		if search_new_tel
+
+			i = comp2ind(n_tel_cur+1, n_star_cur)
+			oms[i...] = downsize(om, n_tel_cur+1, n_star_cur)
+			fill_OrderModel!(oms[i...], oms[j...], 1:n_tel_cur, 1:n_star_cur)
+			oms[i...].rv .= 0  # the rv is a small effect that we could just be getting wrong
+			flux_star .= _eval_lm(oms[i...].star.lm)
+			interp_to_tel!(star_log_λ_tel)# .+ rv_to_D(oms[i...].rv)')  # the rv is a small effect that we could just be getting wrong
+			if n_tel_cur + 1 > 0
+				EMPCA!(oms[i...].tel.lm, flux_tel, 1 ./ vars_tel; inds=(n_tel_cur+1):(n_tel_cur+1))
+			else
+				oms[i...].tel.lm.μ .= make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
+			end
+			# remove_reciprocal_continuum!(oms[i...], flux_star, vars_star, flux_tel, vars_tel)
+			mws = TotalWorkspace(oms[i...], d)
+			aics[i...], om1 = get_aic(mws)
+
+
+		end
+
+		if search_new_star
+			i = comp2ind(n_tel_cur, n_star_cur+1)
+			oms[i...] = downsize(om, max(0, n_tel_cur), n_star_cur+1)
+			fill_OrderModel!(oms[i...], oms[j...], 1:n_tel_cur, 1:n_star_cur)
+			dop_comp .= calc_doppler_component_RVSKL(oms[i...].star.λ, oms[i...].star.lm.μ)
+			if n_tel_cur < 0
+				oms[i...].tel.lm.μ .= 1
+				# oms[i...].rv .=
+				DEMPCA!(oms[i...].star.lm, copy(flux_star_no_tel), 1 ./ vars_star_no_tel, dop_comp; save_doppler_in_M1=false, inds=(n_star_cur+1):(n_star_cur+1), extra_vec=dop_comp)
+				# remove_reciprocal_continuum!(oms[i...], flux_star, vars_star, flux_tel, vars_tel)
+				mws = FrozenTelWorkspace(oms[i...], d)
+			else
+				flux_tel .= _eval_lm(oms[i...].tel.lm)
+				interp_to_star!()
+				# oms[i...].rv .=
+				DEMPCA!(oms[i...].star.lm, flux_star, 1 ./ vars_star, dop_comp; save_doppler_in_M1=false, inds=(n_star_cur+1):(n_star_cur+1), extra_vec=dop_comp)
+				# remove_reciprocal_continuum!(oms[i...], flux_star, vars_star, flux_tel, vars_tel)
+				mws = TotalWorkspace(oms[i...], d)
+			end
+			aics[i...], om2 = get_aic(mws)
+		end
+
+		# TODO scatter(times_nu, om.bary_rvs)
+
+		# look at the (up to 2) new aics and choose where to go next
+		oms[j...] = om0
+		search_new_tel ? aic_tel = aics[comp2ind(n_tel_cur+1, n_star_cur)...] : aic_tel = Inf
+		search_new_star ? aic_star = aics[comp2ind(n_tel_cur, n_star_cur+1)...] : aic_star = Inf
+		added_tel_better = aic_tel < aic_star
+		added_tel_better ? aic_next = aic_tel : aic_next = aic_star
+		n_tel_next = n_tel_cur+added_tel_better
+		n_star_next = n_star_cur+1-added_tel_better
+		add_comp = (!stop_early || aic_next < aics[j...]) && (search_new_tel || search_new_star)
+		if add_comp
+			if added_tel_better
+				om0 = om1
+			else
+				om0 = om2
+			end
+		end
+
+	end
+	println("stopped at ($n_tel_cur,$n_star_cur)")
+	best_aic = argmin(aics)
+	println("($(test_n_comp_tel[best_aic[1]]),$(test_n_comp_star[best_aic[2]])) was the best at aic = $(aics[best_aic])")
+	println("best possible aic (k=0, χ²=0) = $(logdet_Σ + n * _log2π)")
+
+	if return_full_path
+		return oms, aics, comp2ind
+	else
+		if use_all_comps
+			return oms[end,end]
+		else
+			return oms[best_aic]
+		end
+	end
+end
