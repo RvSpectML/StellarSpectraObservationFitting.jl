@@ -51,7 +51,7 @@ function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat
     return plt
 end
 
-function plot_stellar_with_lsf!(plt, om::SSOF.OrderModel, y::AbstractVector; d::Union{SSOF.Data, Nothing}=nothing=nothing, alpha=1, label="", kwargs...)
+function plot_stellar_with_lsf!(plt, om::SSOF.OrderModel, y::AbstractVector; d::Union{SSOF.Data, Nothing}=nothing, alpha=1, label="", kwargs...)
 	if typeof(d) <: SSOF.LSFData
 		plot!(plt, om.star.λ, y; alpha=alpha/2, label="", kwargs...)
 		typeof(om) <: SSOF.OrderModelWobble ?
@@ -62,12 +62,31 @@ function plot_stellar_with_lsf!(plt, om::SSOF.OrderModel, y::AbstractVector; d::
 		plot!(plt, om.star.λ, y; alpha=alpha, label=label, kwargs...)
 	end
 end
-function plot_telluric_with_lsf!(plt, om::SSOF.OrderModel, y::AbstractVector; d::Union{SSOF.Data, Nothing}=nothing=nothing, alpha=1, label="", kwargs...)
+function plot_telluric_with_lsf!(plt, om::SSOF.OrderModel, y::AbstractVector; d::Union{SSOF.Data, Nothing}=nothing, alpha=1, label="", kwargs...)
 	if typeof(d) <: SSOF.LSFData
 		plot!(plt, om.tel.λ, y; alpha=alpha/2, label="", kwargs...)
 		plot!(plt, exp.(d.log_λ_obs[:, 1]), d.lsf * SSOF.spectra_interp(y, om.t2o[1]); alpha=alpha, label=label, kwargs...)
 	else
 		plot!(plt, om.tel.λ, y; alpha=alpha, label=label, kwargs...)
+	end
+end
+function plot_telluric_with_lsf!(plt, om::SSOF.OrderModel, y::AbstractMatrix; d::Union{SSOF.Data, Nothing}=nothing, alpha=1, label="", kwargs...)
+	if typeof(d) <: SSOF.LSFData
+		plot!(plt, om.tel.λ, vec(time_average(y)); alpha=alpha/2, label="", kwargs...)
+		plot!(plt, vec(time_average(exp.(d.log_λ_obs))), vec(time_average(d.lsf * SSOF.spectra_interp(y, om.t2o))); alpha=alpha, label=label, kwargs...)
+	else
+		plot!(plt, om.tel.λ, vec(time_average(y)); alpha=alpha, label=label, kwargs...)
+	end
+end
+function plot_stellar_with_lsf!(plt, om::SSOF.OrderModel, y::AbstractMatrix; d::Union{SSOF.Data, Nothing}=nothing, alpha=1, label="", kwargs...)
+	if typeof(d) <: SSOF.LSFData
+		plot!(plt, om.star.λ, vec(time_average(y)); alpha=alpha/2, label="", kwargs...)
+		typeof(om) <: SSOF.OrderModelWobble ?
+			y2 = vec(time_average(d.lsf * SSOF.spectra_interp(y, om.rv + om.bary_rvs, om.b2o))) :
+			y2 = vec(time_average(d.lsf * SSOF.spectra_interp(y, om.b2o)))
+		plot!(plt, vec(time_average(exp.(d.log_λ_star))), y2; alpha=alpha, label=label, kwargs...)
+	else
+		plot!(plt, om.star.λ, vec(time_average(y)); alpha=alpha, label=label, kwargs...)
 	end
 end
 
@@ -210,10 +229,10 @@ function plot_model(lm::SSOF.FullLinearModel; λ=1:length(lm.μ), times=1:size(l
 	return plt
 end
 
+time_average(a) = mean(a; dims=2)
 function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool=true, include_χ²::Bool=true, kwargs...)
     o = mws.o
 	d = mws.d
-	time_average(a) = mean(a; dims=2)
 	obs_mask = vec(all(.!(isinf.(d.var)); dims=2))
     obs_λ = time_average(exp.(d.log_λ_obs))
     plot_star_λs = time_average(exp.(d.log_λ_star))
@@ -225,14 +244,18 @@ function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool
 	# TODO: take average after broadening with LSF
 	tel_model = time_average(mws.om.tel.lm())
     plot_telluric_with_lsf!(plt[1], mws.om, vec(tel_model); d=mws.d, label="Mean Telluric Model", color=plt_colors[1])
+	# tel_model = mws.om.tel.lm()
+    # plot_telluric_with_lsf!(plt[1], mws.om, tel_model; d=mws.d, label="Mean Telluric Model", color=plt_colors[1])
     shift = 1.1 - minimum(tel_model)
 
 	star_model = time_average(mws.om.star.lm())
+	# star_model = mws.om.star.lm()
 	# typeof(mws.om) <: SSOF.OrderModelWobble ?
 	# 	star_model = time_average(mws.om.star()) :
 	# 	star_model = time_average(mws.om.star() + mws.om.rv())
 
 	plot_stellar_with_lsf!(plt[1], mws.om, vec(star_model .- shift); d=mws.d, label="Mean Stellar Model", color=plt_colors[2])
+	# plot_stellar_with_lsf!(plt[1], mws.om, star_model .- shift; d=mws.d, label="Mean Stellar Model", color=plt_colors[2])
 
     # shift += 1.1 - minimum(star_model)
     # plot!(plt[1], obs_λ, time_average(o.total) .- shift, label="Mean Full Model", color=base_color)
