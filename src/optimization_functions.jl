@@ -872,8 +872,8 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		finalize_scores!(mws; verbose=false, ignore_regularization=true, μ_positive=true, kwargs...)
 	end
 	function nicer_model!(mws::ModelWorkspace)
-		SSOF.remove_lm_score_means!(mws.om)
-		SSOF.flip_basis_vectors!(mws.om)
+		remove_lm_score_means!(mws.om)
+		flip_basis_vectors!(mws.om)
 		mws.om.metadata[:todo][:initialized] = true
 		mws.om.metadata[:todo][:downsized] = true
 	end
@@ -924,12 +924,6 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	χ²_tel = vec(sum(_χ²_loss(tel_model(oms[2,1]), d); dims=2))  # TODO: could optimize before checking this
 	tel_template_χ² = sum(χ²_tel)
 
-	# sum(use_tel)
-	# plot(om.tel.log_λ, om.tel.lm.μ)
-	# plot!(mean(data.log_λ_obs; dims=2), use_tel)
-	# plot(om.star.log_λ, om.star.lm.μ)
-	# plot!(mean(data.log_λ_star; dims=2), use_tel)
-
 	# get aic for only n_star=1 model
 	if search_new_star
 		oms[1,2] = downsize(om, 0, 1)
@@ -972,22 +966,16 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 			vars_tel .= SOAP_gp_var
 			interp_to_star!(; mask_extrema=false, data_var=_var)
 			oms[2,1].star.lm.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
-			# plot(oms[2,1].star.log_λ, oms[2,1].star.lm.μ)
-			# plot!(mean(data.log_λ_star; dims=2), use_tel)
 
 			# get telluric template after dividing out the partial stellar template
 			flux_star .= oms[2,1].star.lm.μ
 			interp_to_tel!(star_log_λ_tel; mask_extrema=false)
 			oms[2,1].tel.lm.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
-			# plot(oms[2,1].tel.log_λ, oms[2,1].tel.lm.μ)
-			# plot!(mean(data.log_λ_obs; dims=2), use_tel)
 
 			# get stellar template after dividing out full telluric template
 			flux_tel .= oms[2,1].tel.lm.μ
 			interp_to_star!(; mask_extrema=false)
 			oms[2,1].star.lm.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
-			# plot(oms[2,1].star.log_λ, oms[2,1].star.lm.μ)
-			# plot!(mean(data.log_λ_star; dims=2), use_tel)
 
 		else
 
