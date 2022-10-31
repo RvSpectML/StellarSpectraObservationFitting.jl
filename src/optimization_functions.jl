@@ -1074,6 +1074,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		oms[j...] = om0
 		search_new_tel ? aic_tel = aics[comp2ind(n_tel_cur+1, n_star_cur)...] : aic_tel = Inf
 		search_new_star ? aic_star = aics[comp2ind(n_tel_cur, n_star_cur+1)...] : aic_star = Inf
+		println("tel: $aic_tel, star: $aic_star")
 		added_tel_better = aic_tel < aic_star
 		added_tel_better ? aic_next = aic_tel : aic_next = aic_star
 		n_tel_next = n_tel_cur+added_tel_better
