@@ -28,8 +28,9 @@ recalc = SSOF.parse_args(6, Bool, true)
 n_comp_tel, n_comp_star, use_custom_n_comp, recalc =
 	SSOFU.how_many_comps(SSOF.parse_args(7, String, ""), recalc, desired_order)
 save_folder = SSOF.parse_args(8, String, "aic")
-use_reg = SSOF.parse_args(9, Bool, true)
-which_opt = SSOF.parse_args(10, Int, 1)
+use_custom_n_comp = SSOF.parse_args(9, Bool, false) && use_custom_n_comp
+use_reg = SSOF.parse_args(10, Bool, true)
+which_opt = SSOF.parse_args(11, Int, 1)
 opt = SSOFU.valid_optimizers[which_opt]
 
 ## Loading in data and initializing model
@@ -39,7 +40,6 @@ log_lm ? base_path *= "log_" : base_path *= "lin_"
 dpca ? base_path *= "dcp_" : base_path *= "vil_"
 use_lsf ? base_path *= "lsf/" : base_path *= "nol/"
 mkpath(base_path)
-use_custom_n_comp ? init_path = "" : init_path = base_path * "results_init.jld2"
 if save_folder != ""
 	base_path *= save_folder * "/"
 	mkpath(base_path)
