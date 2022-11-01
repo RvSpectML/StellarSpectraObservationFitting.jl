@@ -878,18 +878,26 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		mws.om.metadata[:todo][:downsized] = true
 	end
 	function get_aic(mws::ModelWorkspace)
-		if mws.d != data
-			improve_model!(mws; iter=30)
-			mws2 = typeof(mws)(copy(mws.om), data)
-			improve_model!(mws2; iter=50)
-			_aic = aic(mws2, logdet_Σ, n)  # nicer_model!() shouldn't affect this but not taking any risks
-			nicer_model!(mws2)
-			return _aic, mws2.om
-		else
-			improve_model!(mws; iter=50)
-			_aic = aic(mws, logdet_Σ, n)  # nicer_model!() shouldn't affect this but not taking any risks
-			nicer_model!(mws)
-			return _aic, mws.om
+		try
+			if mws.d != data
+				improve_model!(mws; iter=30)
+				mws2 = typeof(mws)(copy(mws.om), data)
+				improve_model!(mws2; iter=50)
+				_aic = aic(mws2, logdet_Σ, n)  # nicer_model!() shouldn't affect this but not taking any risks
+				nicer_model!(mws2)
+				return _aic, mws2.om
+			else
+				improve_model!(mws; iter=50)
+				_aic = aic(mws, logdet_Σ, n)  # nicer_model!() shouldn't affect this but not taking any risks
+				nicer_model!(mws)
+				return _aic, mws.om
+			end
+		catch err
+			if isa(err, DomainError)
+                return Inf, mws.om
+            else
+                rethrow()
+            end
 		end
 	end
 
@@ -1079,7 +1087,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		added_tel_better ? aic_next = aic_tel : aic_next = aic_star
 		n_tel_next = n_tel_cur+added_tel_better
 		n_star_next = n_star_cur+1-added_tel_better
-		add_comp = (!stop_early || aic_next < aics[j...]) && (search_new_tel || search_new_star)
+		add_comp = (isfinite(aic_tel) || isfinite(aic_star)) && (!stop_early || aic_next < aics[j...]) && (search_new_tel || search_new_star)
 		if add_comp
 			if added_tel_better
 				om0 = om1
