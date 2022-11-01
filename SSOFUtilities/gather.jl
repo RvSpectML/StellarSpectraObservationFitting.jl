@@ -80,6 +80,8 @@ function retrieve(n_obs::Int, rv_fns::Vector{String}, model_fns::Vector{String},
             end
         catch err
             catch_f(err, model_fns, i)
+            append!(all_tel_s, [[]])
+            append!(all_star_s, [[]])
         end
         try
             @load data_fns[i] data
