@@ -134,7 +134,8 @@ function check_for_valid_regularization(reg::Dict{Symbol, <:Real})
     end
 end
 
-
+min_reg = 1e-3
+max_reg = 1e12
 function fit_regularization!(mws::ModelWorkspace, testing_inds::AbstractVecOrMat; key_list::Vector{Symbol}=_key_list_fit, share_regs::Bool=false, kwargs...)
     om = mws.om
     n_obs = size(mws.d.flux, 2)
@@ -154,7 +155,7 @@ function fit_regularization!(mws::ModelWorkspace, testing_inds::AbstractVecOrMat
         if key == :L1_μ₊_factor
             test_factor, reg_min, reg_max = 1.2, 1e-1, 1e1
         else
-            test_factor, reg_min, reg_max = 10, 1e-3, 1e12
+            test_factor, reg_min, reg_max = 10, min_reg, max_reg
         end
         if share_regs
             before_ℓ = fit_regularization_helper!(_reg_fields, key, before_ℓ, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; start=hold_tel[key], kwargs...)

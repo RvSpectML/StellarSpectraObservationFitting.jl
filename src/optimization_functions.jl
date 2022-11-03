@@ -876,8 +876,16 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		flip_basis_vectors!(mws.om)
 		mws.om.metadata[:todo][:initialized] = true
 		mws.om.metadata[:todo][:downsized] = true
+		# SSOF.copy_dict!(mws.om.reg_tel, SSOF.default_reg_tel)
+		# SSOF.copy_dict!(mws.om.reg_star, SSOF.default_reg_star)
 	end
 	function get_aic(mws::ModelWorkspace)
+		# for (k, v) in mws.om.reg_tel
+		# 	mws.om.reg_tel[k] = SSOF.min_reg
+		# end
+		# for (k, v) in mws.om.reg_star
+		# 	mws.om.reg_star[k] = SSOF.min_reg
+		# end
 		try
 			if mws.d != data
 				improve_model!(mws; iter=30)
@@ -894,7 +902,8 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 			end
 		catch err
 			if isa(err, DomainError)
-                return Inf, mws.om
+                nicer_model!(mws)
+				return Inf, mws.om
             else
                 rethrow()
             end
@@ -925,11 +934,11 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 
 
 	# telluric template assuming no stellar (will be overwritten later)
-	oms[2,1] = downsize(om, 0, 0)
-	oms[2,1].star.lm.μ .= 1
-	_spectra_interp_gp!(flux_tel, vars_tel, oms[2,1].tel.log_λ, d.flux, d.var .+ SOAP_gp_var, d.log_λ_obs; gp_mean=1.)
-	oms[2,1].tel.lm.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
-	χ²_tel = vec(sum(_χ²_loss(tel_model(oms[2,1]), d); dims=2))  # TODO: could optimize before checking this
+	_om = downsize(om, 0, 0)
+	_om.star.lm.μ .= 1
+	_spectra_interp_gp!(flux_tel, vars_tel, _om.tel.log_λ, d.flux, d.var .+ SOAP_gp_var, d.log_λ_obs; gp_mean=1.)
+	_om.tel.lm.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
+	χ²_tel = vec(sum(_χ²_loss(tel_model(_om), d); dims=2))  # TODO: could optimize before checking this
 	tel_template_χ² = sum(χ²_tel)
 
 	# get aic for only n_star=1 model
@@ -963,7 +972,28 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 
 	if search_new_tel
 
+		oms[2,1] = SSOF.downsize(om, 0, 0)
+		oms[2,1].star.lm.μ .= 1
 		use_tel = χ²_star .> χ²_tel  # which pixels are telluric dominated
+		# use_tel_window = 11
+		# use_tel_density = 0.9
+		# @assert isodd(use_tel_window)
+		# _use_tel = χ²_star .> χ²_tel  # which pixels are telluric dominated
+		# i = findfirst(_use_tel)
+		# w = floor(Int, use_tel_window/2)
+		# thres = floor(Int, use_tel_density * use_tel_window)
+		# if !isnothing(i)
+		# 	i += w+1
+		# 	j = sum(view(_use_tel, (i-w-1):min(i+w-1, length(_use_tel))))  # look at first 11 use_tel
+		# 	use_tel = zeros(Bool, length(_use_tel))
+		# 	if j > thres; use_tel[(i-w-1):min(i+w-1, length(_use_tel))] .= true end
+		# 	while (i+w+1) <= length(_use_tel)
+		# 		j += _use_tel[i+w] - _use_tel[i-w-1]
+		# 		if j > thres; use_tel[(i-w):min(i+w, length(_use_tel))] .= true end
+		# 		i += 1
+		# 	end
+		# end
+
 
 		if sum(use_tel) > 0  # if any pixels are telluric dominated
 
@@ -1012,20 +1042,20 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	oms[j...] = om0
 	search_new_tel ? aic_tel = aics[comp2ind(n_tel_cur+1, n_star_cur)...] : aic_tel = Inf
 	search_new_star ? aic_star = aics[comp2ind(n_tel_cur, n_star_cur+1)...] : aic_star = Inf
+	println("tel: $aic_tel, star: $aic_star")
 	added_tel_better = aic_tel < aic_star
 	added_tel_better ? aic_next = aic_tel : aic_next = aic_star
 	n_tel_next = n_tel_cur+added_tel_better
 	n_star_next = n_star_cur+1-added_tel_better
-	add_comp = (!stop_early || aic_next < aics[j...]) && (search_new_tel || search_new_star)
-	if add_comp
+	add_comp = (isfinite(aic_tel) || isfinite(aic_star)) && (!stop_early || aic_next < aics[j...]) && (search_new_tel || search_new_star)
+
+	while add_comp
+
 		if added_tel_better
 			om0 = om1
 		else
 			om0 = om2
 		end
-	end
-
-	while add_comp
 
 		println("n_comp: ($n_tel_cur,$n_star_cur) -> ($n_tel_next,$n_star_next)")
 		println("aic   : $(aics[comp2ind(n_tel_cur, n_star_cur)...]) -> $(aics[comp2ind(n_tel_next, n_star_next)...])")
@@ -1088,13 +1118,6 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		n_tel_next = n_tel_cur+added_tel_better
 		n_star_next = n_star_cur+1-added_tel_better
 		add_comp = (isfinite(aic_tel) || isfinite(aic_star)) && (!stop_early || aic_next < aics[j...]) && (search_new_tel || search_new_star)
-		if add_comp
-			if added_tel_better
-				om0 = om1
-			else
-				om0 = om2
-			end
-		end
 
 	end
 	println("stopped at ($n_tel_cur,$n_star_cur)")
