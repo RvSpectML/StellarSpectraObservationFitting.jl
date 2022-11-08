@@ -972,7 +972,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 
 	if search_new_tel
 
-		oms[2,1] = SSOF.downsize(om, 0, 0)
+		oms[2,1] = downsize(om, 0, 0)
 		oms[2,1].star.lm.μ .= 1
 		use_tel = χ²_star .> χ²_tel  # which pixels are telluric dominated
 		# use_tel_window = 11
