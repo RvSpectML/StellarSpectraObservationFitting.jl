@@ -23,3 +23,6 @@ NEID/testing.jl
 *analysis_wobble.jl
 *test_linearsolve.jl
 *.ipynb
+*init_testing.jl
+*model_functions0.jl
+*.pptx
