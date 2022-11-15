@@ -431,7 +431,7 @@ FrozenTelWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
 FrozenTelWorkspace(om::OrderModel, d::Data; kwargs...) =
 	FrozenTelWorkspace(Output(om, d), om, d; kwargs...)
 
-function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, verbose::Bool=_verbose_def, shift_scores::Bool=true, μ_positive::Bool=false, winsor::Bool=true, kwargs...)
+function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, verbose::Bool=_verbose_def, shift_scores::Bool=true, μ_positive::Bool=true, winsor::Bool=true, kwargs...)
 
 	update_interpolation_locations!(mws)
 
@@ -876,15 +876,15 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		flip_basis_vectors!(mws.om)
 		mws.om.metadata[:todo][:initialized] = true
 		mws.om.metadata[:todo][:downsized] = true
-		# SSOF.copy_dict!(mws.om.reg_tel, SSOF.default_reg_tel)
-		# SSOF.copy_dict!(mws.om.reg_star, SSOF.default_reg_star)
+		# copy_dict!(mws.om.reg_tel, default_reg_tel)
+		# copy_dict!(mws.om.reg_star, default_reg_star)
 	end
 	function get_aic(mws::ModelWorkspace)
 		# for (k, v) in mws.om.reg_tel
-		# 	mws.om.reg_tel[k] = SSOF.min_reg
+		# 	mws.om.reg_tel[k] = min_reg
 		# end
 		# for (k, v) in mws.om.reg_star
-		# 	mws.om.reg_star[k] = SSOF.min_reg
+		# 	mws.om.reg_star[k] = min_reg
 		# end
 		try
 			if mws.d != data
@@ -932,7 +932,6 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	mws = FrozenTelWorkspace(oms[1,1], d)
 	aics[1,1], om0 = get_aic(mws)
 
-
 	# telluric template assuming no stellar (will be overwritten later)
 	_om = downsize(om, 0, 0)
 	_om.star.lm.μ .= 1
@@ -942,16 +941,17 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	tel_template_χ² = sum(χ²_tel)
 
 	# get aic for only n_star=1 model
-	if search_new_star
-		oms[1,2] = downsize(om, 0, 1)
-		fill_OrderModel!(oms[1,2], oms[1,1], 0:0, 0:0)
-		dop_comp .= calc_doppler_component_RVSKL(oms[1,2].star.λ, oms[1,2].star.lm.μ)
-		oms[1,2].tel.lm.μ .= 1
-		# oms[1,2].rv .=
-		DEMPCA!(oms[1,2].star.lm, copy(flux_star_no_tel), 1 ./ vars_star_no_tel, dop_comp; log_lm=log_lm(oms[1,2].star.lm), save_doppler_in_M1=false, inds=1:1, extra_vec=dop_comp)
-		mws = FrozenTelWorkspace(oms[1,2], d)
-		aics[1,2], om2 = get_aic(mws)
-	end
+	# if search_new_star
+	# 	oms[1,2] = downsize(om, 0, 1)
+	# 	fill_OrderModel!(oms[1,2], oms[1,1], 0:0, 0:0)
+	# 	dop_comp .= calc_doppler_component_RVSKL(oms[1,2].star.λ, oms[1,2].star.lm.μ)
+	# 	oms[1,2].tel.lm.μ .= 1
+	# 	# oms[1,2].rv .=
+	# 	DEMPCA!(oms[1,2].star.lm, copy(flux_star_no_tel), 1 ./ vars_star_no_tel, dop_comp; log_lm=log_lm(oms[1,2].star.lm), save_doppler_in_M1=false, inds=1:1, extra_vec=dop_comp)
+	# 	mws = FrozenTelWorkspace(oms[1,2], d)
+	# 	aics[1,2], om2 = get_aic(mws)
+	# end
+	om2 = om0
 
 	function interp_helper!(flux_to::AbstractMatrix, vars_to::AbstractMatrix, log_λ_to::AbstractVector,
 		flux_from::AbstractMatrix, vars_from::AbstractMatrix, log_λ_from::AbstractMatrix,
@@ -975,6 +975,8 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		oms[2,1] = downsize(om, 0, 0)
 		oms[2,1].star.lm.μ .= 1
 		use_tel = χ²_star .> χ²_tel  # which pixels are telluric dominated
+
+		# # modify use_tel to be more continuous
 		# use_tel_window = 11
 		# use_tel_density = 0.9
 		# @assert isodd(use_tel_window)
@@ -1041,13 +1043,14 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	j = comp2ind(n_tel_cur, n_star_cur)
 	oms[j...] = om0
 	search_new_tel ? aic_tel = aics[comp2ind(n_tel_cur+1, n_star_cur)...] : aic_tel = Inf
-	search_new_star ? aic_star = aics[comp2ind(n_tel_cur, n_star_cur+1)...] : aic_star = Inf
-	println("tel: $aic_tel, star: $aic_star")
-	added_tel_better = aic_tel < aic_star
-	added_tel_better ? aic_next = aic_tel : aic_next = aic_star
+	# search_new_star ? aic_star = aics[comp2ind(n_tel_cur, n_star_cur+1)...] : aic_star = Inf
+	# println("tel: $aic_tel, star: $aics[j...]")
+	added_tel_better = aic_tel < aics[j...]
+	n_star_next = n_star_cur
 	n_tel_next = n_tel_cur+added_tel_better
-	n_star_next = n_star_cur+1-added_tel_better
-	add_comp = (isfinite(aic_tel) || isfinite(aic_star)) && (!stop_early || aic_next < aics[j...]) && (search_new_tel || search_new_star)
+	added_tel_better ? aic_next = aic_tel : aic_next = aics[j...]
+	add_comp = true
+	println("looking for time variability...")
 
 	while add_comp
 
@@ -1057,8 +1060,10 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 			om0 = om2
 		end
 
-		println("n_comp: ($n_tel_cur,$n_star_cur) -> ($n_tel_next,$n_star_next)")
-		println("aic   : $(aics[comp2ind(n_tel_cur, n_star_cur)...]) -> $(aics[comp2ind(n_tel_next, n_star_next)...])")
+		if (n_tel_cur != n_tel_next) || (n_star_cur != n_star_next)
+			println("n_comp: ($n_tel_cur,$n_star_cur) -> ($n_tel_next,$n_star_next)")
+			println("aic   : $(aics[comp2ind(n_tel_cur, n_star_cur)...]) -> $(aics[comp2ind(n_tel_next, n_star_next)...])")
+		end
 		n_tel_cur, n_star_cur = n_tel_next, n_star_next
 		search_new_tel = n_tel_cur+1 <= max_n_tel
 		search_new_star = n_star_cur+1 <= max_n_star
@@ -1112,7 +1117,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		oms[j...] = om0
 		search_new_tel ? aic_tel = aics[comp2ind(n_tel_cur+1, n_star_cur)...] : aic_tel = Inf
 		search_new_star ? aic_star = aics[comp2ind(n_tel_cur, n_star_cur+1)...] : aic_star = Inf
-		println("tel: $aic_tel, star: $aic_star")
+		# println("tel: $aic_tel, star: $aic_star")
 		added_tel_better = aic_tel < aic_star
 		added_tel_better ? aic_next = aic_tel : aic_next = aic_star
 		n_tel_next = n_tel_cur+added_tel_better

@@ -1,10 +1,10 @@
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-EMPCA = "e1a4e9fb-620a-4045-b313-23b3f0ae950a"
 GLOM_RV_Example = "3d369fb6-3996-5181-b3f3-8f741c4f9e19"
 GPLinearODEMaker = "27ef9b34-1325-4cec-ba33-00f2f4637873"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 StellarSpectraObservationFitting = "6b1189bd-9150-44f8-8055-f6ca7d16451e"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+UnitfulAstro = "6112ee07-acf9-5e0f-b108-d242c714bf9f"
