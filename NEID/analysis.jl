@@ -50,8 +50,8 @@ pipeline_path = neid_save_path * star * "/neid_pipeline.jld2"
 data, times_nu, airmasses = SSOFU.get_data(data_path; use_lsf=use_lsf)
 times_nu .-= 2400000.5
 
-model = SSOFU.calculate_initial_model(data, "NEID", desired_order, star;
-	n_comp_tel=n_comp_tel, n_comp_star=n_comp_star, save_fn=save_path,
+model = SSOFU.calculate_initial_model(data, "NEID", desired_order, star, times_nu;
+	n_comp_tel=n_comp_tel, n_comp_star=n_comp_star, save_fn=save_path, plots_fn=base_path,
 	recalc=recalc, use_reg=use_reg, use_custom_n_comp=use_custom_n_comp,
 	dpca=dpca, log_lm=log_lm, log_λ_gp_star=1/SSOF.SOAP_gp_params.λ,
 	# log_λ_gp_tel=1/110000,

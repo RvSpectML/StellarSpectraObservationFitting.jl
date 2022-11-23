@@ -2,6 +2,7 @@ using LinearAlgebra
 using Plots
 using Statistics
 import StellarSpectraObservationFitting as SSOF
+using LaTeXStrings
 
 _plt_dpi = 400
 _plt_size = (1920,1080)
@@ -270,8 +271,8 @@ function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool
     return plt
 end
 
-function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector; size=(_plt_size[1],_plt_size[2]*1.5), ylabel="ℓ")
-    plt = _plot(; ylabel=ylabel, layout=grid(2, 1), size=size)
+function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n_comp_star::AbstractVector; size=(_plt_size[1],_plt_size[2]*1.5), ylabel="ℓ", xguidefontsize = 16, kwargs...)
+    plt = _plot(; ylabel=ylabel, layout=grid(2, 1), size=size, xguidefontsize = xguidefontsize, kwargs...)
 	# lims = [maximum(ys[.!(isinf.(ys))]), minimum(ys[.!(isinf.(ys))])]
 	lims = Array{Float64}(undef, 2)
 	lim_inds = ones(Int, 2)
@@ -284,7 +285,8 @@ function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n
 		if test_n_comp_star[1] == 0
 			lim_inds[2] = min(2, best[2])
 		end
-		lims[1] = minimum(ys[lim_inds[1]:end, lim_inds[2]:end])
+		window = view(ys, lim_inds[1]:length(test_n_comp_tel), lim_inds[2]:length(test_n_comp_star))
+		lims[1] = minimum(window[isfinite.(window)])
 		lims[2] = ys[best]
 	else
 		best = argmin(ys)
@@ -295,15 +297,17 @@ function component_test_plot(ys::Matrix, test_n_comp_tel::AbstractVector, test_n
 			lim_inds[2] = min(2, best[2])
 		end
 		lims[1] = ys[best]
-		lims[2] = maximum(ys[lim_inds[1]:end, lim_inds[2]:end])
+		window = view(ys, (lim_inds[1]):length(test_n_comp_tel), (lim_inds[2]):length(test_n_comp_star))
+		lims[2] = maximum(window[isfinite.(window)])
 	end
 	buffer = 0.3 * (lims[2] - lims[1])
 	ylims!(plt, lims[1] - buffer, lims[2] + buffer)
     for i in eachindex(test_n_comp_tel)
-        plot!(plt[1], test_n_comp_star, ys[i, :]; label="$(test_n_comp_tel[i]) tel", xlabel="# of stellar components")
+		test_n_comp_tel[i]==-1 ? _label="∅" : _label="$(test_n_comp_tel[i])"
+        plot!(plt[1], test_n_comp_star, ys[i, :]; label=_label, leg_title=L"K_\oplus", shape=:diamond, msw=0, xlabel=L"K_\star")
     end
     for i in eachindex(test_n_comp_star)
-        plot!(plt[2], test_n_comp_tel, ys[:, i]; label="$(test_n_comp_star[i]) stellar", xlabel="# of telluric components")
+        plot!(plt[2], test_n_comp_tel, ys[:, i]; label="$(test_n_comp_star[i])", leg_title=L"K_\star", shape=:diamond, msw=0, xlabel=L"K_\oplus")
     end
     # display(plt)
     return plt

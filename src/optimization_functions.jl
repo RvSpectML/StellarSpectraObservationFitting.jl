@@ -780,7 +780,7 @@ update_interpolation_locations!(mws::ModelWorkspace) = update_interpolation_loca
 
 
 # TODO: Make this work for OrderModelDPCA
-function calculate_initial_model(data::Data, instrument::String, desired_order::Int, star::String;
+function calculate_initial_model(data::Data, instrument::String, desired_order::Int, star::String, times::AbstractVector;
 	μ_min::Real=0, μ_max::Real=Inf, use_mean::Bool=true, stop_early::Bool=false,
 	remove_reciprocal_continuum::Bool=false, return_full_path::Bool=false,
 	max_n_tel::Int=5, max_n_star::Int=5, use_all_comps::Bool=false, kwargs...)
@@ -792,6 +792,10 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	test_n_comp_tel = -1:max_n_tel
 	test_n_comp_star = 0:max_n_star
 	aics = Inf .* ones(length(test_n_comp_tel), length(test_n_comp_star))
+	ℓs = -copy(aics)
+	bics = copy(aics)
+	rv_stds = copy(aics)
+	rv_stds_intra = copy(aics)
 	oms = Array{OrderModelWobble}(undef, length(test_n_comp_tel), length(test_n_comp_star))
 	logdet_Σ, n = ℓ_prereqs(d.var)
 	comp2ind(n_tel::Int, n_star::Int) = (n_tel+2, n_star+1)
@@ -879,7 +883,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		# copy_dict!(mws.om.reg_tel, default_reg_tel)
 		# copy_dict!(mws.om.reg_star, default_reg_star)
 	end
-	function get_aic(mws::ModelWorkspace)
+	function get_metrics!(_mws::ModelWorkspace, i::Int, j::Int)
 		# for (k, v) in mws.om.reg_tel
 		# 	mws.om.reg_tel[k] = min_reg
 		# end
@@ -887,23 +891,29 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		# 	mws.om.reg_star[k] = min_reg
 		# end
 		try
-			if mws.d != data
-				improve_model!(mws; iter=30)
-				mws2 = typeof(mws)(copy(mws.om), data)
-				improve_model!(mws2; iter=50)
-				_aic = aic(mws2, logdet_Σ, n)  # nicer_model!() shouldn't affect this but not taking any risks
-				nicer_model!(mws2)
-				return _aic, mws2.om
+			if _mws.d != data
+				improve_model!(_mws; iter=30)
+				mws = typeof(_mws)(copy(_mws.om), data)
 			else
-				improve_model!(mws; iter=50)
-				_aic = aic(mws, logdet_Σ, n)  # nicer_model!() shouldn't affect this but not taking any risks
-				nicer_model!(mws)
-				return _aic, mws.om
+				mws = _mws
 			end
+			improve_model!(mws; iter=50)
+			nicer_model!(mws)
+
+			k = total_length(mws)
+			ℓs[i,j] = ℓ(_loss(mws), logdet_Σ, n)
+			aics[i,j] = aic(k, ℓs[i,j])  # nicer_model!() shouldn't affect this but not taking any risks
+			bics[i,j] = bic(k, ℓs[i,j], n)
+
+			model_rvs = rvs(mws.om)
+			rv_stds[i,j] = std(model_rvs)
+			rv_stds_intra[i,j] = intra_night_std(model_rvs, times; show_warn=false)
+
+			return mws.om
 		catch err
 			if isa(err, DomainError)
-                nicer_model!(mws)
-				return Inf, mws.om
+                nicer_model!(_mws)
+				return _mws.om
             else
                 rethrow()
             end
@@ -926,11 +936,11 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	mask_low_pixels!(flux_star_no_tel, vars_star_no_tel)
 	mask_high_pixels!(flux_star_no_tel, vars_star_no_tel)
 	χ²_star = vec(sum(_χ²_loss(star_model(oms[1,1]), d); dims=2))  # TODO: could optimize before checking this
-	star_template_χ² = sum(χ²_star)
+	# star_template_χ² = sum(χ²_star)
 
 	# get aic for base, only stellar template model
 	mws = FrozenTelWorkspace(oms[1,1], d)
-	aics[1,1], om0 = get_aic(mws)
+	om0 = get_metrics!(mws, 1, 1)
 
 	# telluric template assuming no stellar (will be overwritten later)
 	_om = downsize(om, 0, 0)
@@ -938,7 +948,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	_spectra_interp_gp!(flux_tel, vars_tel, _om.tel.log_λ, d.flux, d.var .+ SOAP_gp_var, d.log_λ_obs; gp_mean=1.)
 	_om.tel.lm.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
 	χ²_tel = vec(sum(_χ²_loss(tel_model(_om), d); dims=2))  # TODO: could optimize before checking this
-	tel_template_χ² = sum(χ²_tel)
+	# tel_template_χ² = sum(χ²_tel)
 
 	# get aic for only n_star=1 model
 	# if search_new_star
@@ -1036,7 +1046,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		# flux_tel .= oms[2,1].tel.lm.μ
 		# interp_to_star!(; mask_extrema=false)
 		# mws.om.rv .= vec(project_doppler_comp(flux_star .- mws.om.star.lm.μ, calc_doppler_component_RVSKL(mws.om.star.λ, mws.om.star.lm.μ), 1 ./ vars_star))
-		aics[2,1], om1 = get_aic(mws)
+		om1 = get_metrics!(mws, 2, 1)
 
 	end
 
@@ -1084,7 +1094,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 			end
 			# remove_reciprocal_continuum!(oms[i...], flux_star, vars_star, flux_tel, vars_tel)
 			mws = TotalWorkspace(oms[i...], d)
-			aics[i...], om1 = get_aic(mws)
+			om1 = get_metrics!(mws, i...)
 
 
 		end
@@ -1108,7 +1118,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 				# remove_reciprocal_continuum!(oms[i...], flux_star, vars_star, flux_tel, vars_tel)
 				mws = TotalWorkspace(oms[i...], d)
 			end
-			aics[i...], om2 = get_aic(mws)
+			om2 = get_metrics!(mws, i...)
 		end
 
 		# TODO scatter(times_nu, om.bary_rvs)
@@ -1131,7 +1141,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	println("best possible aic (k=0, χ²=0) = $(logdet_Σ + n * _log2π)")
 
 	if return_full_path
-		return oms, aics, comp2ind
+		return oms, ℓs, aics, bics, rv_stds, rv_stds_intra, comp2ind
 	else
 		if use_all_comps
 			return oms[end,end]

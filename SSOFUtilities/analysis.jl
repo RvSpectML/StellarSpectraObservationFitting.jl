@@ -20,8 +20,8 @@ function get_data(data_fn::String; min_pix::Int=800, use_lsf::Bool=true)
 	if !use_lsf; data = SSOF.GenericData(data) end
 	return data, times_nu, airmasses
 end
-function calculate_initial_model(data::SSOF.Data, instrument::String, desired_order::Int, star::String;
-	n_comp_tel::Int=5, n_comp_star::Int=5, save_fn::String="",
+function calculate_initial_model(data::SSOF.Data, instrument::String, desired_order::Int, star::String, times::AbstractVector;
+	n_comp_tel::Int=5, n_comp_star::Int=5, save_fn::String="", plots_fn::String="",
 	recalc::Bool=false, use_custom_n_comp::Bool=false, use_reg::Bool=true, kwargs...)
 
 	save = save_fn!=""
@@ -29,8 +29,26 @@ function calculate_initial_model(data::SSOF.Data, instrument::String, desired_or
 		println("using saved model at $save_fn")
 		@load save_fn model
 	else
-		model = SSOF.calculate_initial_model(data, instrument, desired_order, star;
-			max_n_tel=n_comp_tel, max_n_star=n_comp_star, use_all_comps=use_custom_n_comp, kwargs...)
+		oms, ℓs, aics, bics, rv_stds, rv_stds_intra, _ = SSOF.calculate_initial_model(data, instrument, desired_order, star, times;
+			max_n_tel=n_comp_tel, max_n_star=n_comp_star, use_all_comps=use_custom_n_comp, return_full_path=true, kwargs...)
+
+		# plots
+		if plots_fn!=""
+			test_n_comp_tel = -1:n_comp_tel
+			test_n_comp_star = 0:n_comp_star
+			metrics = [ℓs, aics, bics, rv_stds, rv_stds_intra]
+			metrics_labels = ["ℓ", "AIC", "BIC", "RV std", "Intra-night RV std"]
+			metrics_fn = ["l", "aic", "bic", "rv", "rv_intra"]
+
+			for i in 1:length(metrics)
+				if any(isfinite.(metrics[i]))
+					plt = component_test_plot(metrics[i], test_n_comp_tel, test_n_comp_star, ylabel=metrics_labels[i]);
+					png(plt, plots_fn * metrics_fn[i] * "_choice.png")
+				end
+			end
+		end
+
+		model = oms[argmin(aics)]
 
 		if !use_reg
 			SSOF.rm_regularization!(model)
