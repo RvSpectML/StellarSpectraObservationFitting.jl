@@ -26,8 +26,8 @@ module NEIDLSF
 
     σs = read(FITS("NEID/sigma_arr.fits")[1])
     bhws = read(FITS("NEID/boxhalfwidth_arr.fits")[1]) ./ 2 # Sam's formula has an extra factor of 2
-    no_lsf_orders = [all(iszero.(view(bhws, :, i))) for i in 1:size(bhws,2)]
-    @assert all(no_lsf_orders .== [all(iszero.(view(σs, :, i))) for i in 1:size(σs,2)])
+    no_lsf_orders = [all(iszero.(view(bhws, :, i))) for i in axes(bhws,2)]
+    @assert all(no_lsf_orders .== [all(iszero.(view(σs, :, i))) for i in axes(σs,2)])
 
     # function conv_gauss_tophat_integral(σ::Real, bhw::Real, xmμ::Real)
     #     x1 = xmμ - 0.5

@@ -82,7 +82,7 @@ function StellarInterpolationHelper(
 end
 function (sih::StellarInterpolationHelper)(inds::AbstractVecOrMat, len_model::Int)
 	lower_inds = copy(sih.lower_inds)
-	for i in 1:length(inds)
+	for i in eachindex(inds)
 		j = inds[i]
 		lower_inds[:, j] .+= (i - j) * len_model
 	end
@@ -129,10 +129,10 @@ function Nabla.∇(::typeof(spectra_interp), ::Type{Arg{1}}, _, y, ȳ, model_fl
 	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_step
 	ȳnew = zeros(size(model_flux, 1), size(ȳ, 2))
 	# samp is λ_obs x λ_model
-	for k in 1:size(ȳ, 1)  # λ_obs
-		for j in 1:size(ȳnew, 2)  # time
+	for k in axes(ȳ, 1)  # λ_obs
+		for j in axes(ȳnew, 2)  # time
 			λ_model_lo = sih.lower_inds[k, j] - size(ȳnew, 1)*(j-1)
-			# for i in 1:size(ȳnew, 1)  # λ_model
+			# for i in axes(ȳnew, 1)  # λ_model
 			# for i in λ_model_lo:(λ_model_lo+1) # λ_model
 			# ȳnew[i, j] += sampt[i, k] * ȳ[k, j]
 			# ȳnew[i, j] += samp[k, i] * ȳ[k, j]
@@ -234,10 +234,10 @@ end
 
 function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=1.)
     log_min_wav, log_max_wav = extrema(log_λ_obs)
-	Δ_logλ_og = minimum(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :))  # minimum pixel sep
+	Δ_logλ_og = minimum(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, axes(log_λ_obs, 1)-1, :))  # minimum pixel sep
 	# Δ_logλ_og = minimum(view(log_λ_obs, size(log_λ_obs, 1), :) .- view(log_λ_obs, 1, :)) / size(log_λ_obs, 1)  # minimum avg pixel sep
-	# Δ_logλ_og = median(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :))  # median pixel sep
-	# Δ_logλ_og = maximum(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :))  # maximum pixel sep
+	# Δ_logλ_og = median(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, axes(log_λ_obs, 1)-1, :))  # median pixel sep
+	# Δ_logλ_og = maximum(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, axes(log_λ_obs, 1)-1, :))  # maximum pixel sep
 	Δ_logλ = Δ_logλ_og / upscale
     log_λ_template = (log_min_wav - 2 * Δ_logλ_og):Δ_logλ:(log_max_wav + 2 * Δ_logλ_og)
     λ_template = exp.(log_λ_template)
@@ -437,7 +437,7 @@ default_reg_star_full = Dict([(:GP_μ, 1e2), (:L2_μ, 1e-2), (:L1_μ, 1e1),
 function oversamp_interp_helper(to_bounds::AbstractVector, from_x::AbstractVector)
 	ans = spzeros(length(to_bounds)-1, length(from_x))
 	bounds_inds = searchsortednearest(from_x, to_bounds)
-	for i in 1:size(ans, 1)
+	for i in axes(ans, 1)
 		x_lo, x_hi = to_bounds[i], to_bounds[i+1]  # values of bounds
 		lo_ind, hi_ind = bounds_inds[i], bounds_inds[i+1]  # indices of points in model closest to the bounds
 
@@ -464,15 +464,15 @@ function oversamp_interp_helper(to_bounds::AbstractVector, from_x::AbstractVecto
 	return ans
 end
 oversamp_interp_helper(to_bounds::AbstractMatrix, from_x::AbstractVector) =
-	[oversamp_interp_helper(view(to_bounds, :, i), from_x) for i in 1:size(to_bounds, 2)]
+	[oversamp_interp_helper(view(to_bounds, :, i), from_x) for i in axes(to_bounds, 2)]
 oversamp_interp_helper(to_x::AbstractVector, from_x::AbstractMatrix) =
-	[oversamp_interp_helper(to_bounds, view(from_x, :, i)) for i in 1:size(from_x, 2)]
+	[oversamp_interp_helper(to_bounds, view(from_x, :, i)) for i in axes(from_x, 2)]
 
 function undersamp_interp_helper(to_x::AbstractVector, from_x::AbstractVector)
 	ans = spzeros(length(to_x), length(from_x))
 	# ans = sparse(Float64[],Float64[],Float64[],length(to_x),length(from_x))
 	to_inds = searchsortednearest(from_x, to_x; lower=true)
-	for i in 1:size(ans, 1)
+	for i in axes(ans, 1)
 		x_new = to_x[i]
 		ind = to_inds[i]  # index of point in model below to_x[i]
 		if ind < length(from_x)
@@ -487,9 +487,9 @@ function undersamp_interp_helper(to_x::AbstractVector, from_x::AbstractVector)
 	return ans
 end
 undersamp_interp_helper(to_x::AbstractMatrix, from_x::AbstractVector) =
-	[undersamp_interp_helper(view(to_x, :, i), from_x) for i in 1:size(to_x, 2)]
+	[undersamp_interp_helper(view(to_x, :, i), from_x) for i in axes(to_x, 2)]
 undersamp_interp_helper(to_x::AbstractVector, from_x::AbstractMatrix) =
-	[undersamp_interp_helper(to_x, view(from_x, :, i)) for i in 1:size(from_x, 2)]
+	[undersamp_interp_helper(to_x, view(from_x, :, i)) for i in axes(from_x, 2)]
 
 struct OrderModelDPCA{T<:Number} <: OrderModel
     tel::Submodel
@@ -666,14 +666,14 @@ downsize_view(m::OrderModelWobble, n_comp_tel::Int, n_comp_star::Int) =
 spectra_interp(model::AbstractVector, interp_helper::_current_matrix_modifier) =
 	interp_helper * model
 spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
-	hcat([spectra_interp(view(model, :, i), interp_helper[i]) for i in 1:size(model, 2)]...)
+	hcat([spectra_interp(view(model, :, i), interp_helper[i]) for i in axes(model, 2)]...)
 # spectra_interp_nabla(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
-# 	hcat([interp_helper[i] * model[:, i] for i in 1:size(model, 2)]...)
+# 	hcat([interp_helper[i] * model[:, i] for i in axes(model, 2)]...)
 # spectra_interp(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
 # 	spectra_interp_nabla(model, interp_helper)
 @explicit_intercepts spectra_interp Tuple{AbstractMatrix, AbstractVector{<:_current_matrix_modifier}} [true, false]
 Nabla.∇(::typeof(spectra_interp), ::Type{Arg{1}}, _, y, ȳ, model, interp_helper) =
-	hcat([interp_helper[i]' * view(ȳ, :, i) for i in 1:size(model, 2)]...)
+	hcat([interp_helper[i]' * view(ȳ, :, i) for i in axes(model, 2)]...)
 
 tel_model(om::OrderModel; lm=om.tel.lm::LinearModel) = spectra_interp(lm(), om.t2o)
 star_model(om::OrderModelDPCA; lm=om.star.lm::LinearModel) = spectra_interp(lm(), om.b2o)
@@ -683,7 +683,7 @@ star_model(om::OrderModelWobble; lm=om.star.lm::LinearModel) = spectra_interp(lm
 # function fix_FullLinearModel_s!(flm, min::Number, max::Number)
 # 	@assert all(min .< flm.μ .< max)
 # 	result = ones(typeof(flm.μ[1]), length(flm.μ))
-# 	for i in 1:size(flm.s, 2)
+# 	for i in axes(flm.s, 2)
 # 		result[:] = _eval_lm(flm.M, flm.s[:, i], flm.μ)
 # 		while any(result .> max) || any(result .< min)
 # 			# println("$i, old s: $(lm.s[:, i]), min: $(minimum(result)), max:  $(maximum(result))")
@@ -736,8 +736,8 @@ function _spectra_interp_gp!(fluxes::AbstractVector, vars, log_λ, flux_obs::Abs
 	vars[:] = var.(gp)
 	if keep_mask
 		inds = searchsortednearest(log_λ_obs, log_λ; lower=true)
-		# for i in 1:length(inds)
-		for i in 1:length(log_λ)
+		# for i in eachindex(inds)
+		for i in eachindex(log_λ)
 			if log_λ[i] <= log_λ_obs[1]
 				if isinf(var_obs[1]); vars[i] = Inf end
 			elseif log_λ[i] >= log_λ_obs[end]
@@ -750,18 +750,18 @@ function _spectra_interp_gp!(fluxes::AbstractVector, vars, log_λ, flux_obs::Abs
 	return gp
 end
 function _spectra_interp_gp!(fluxes::AbstractMatrix, log_λ, flux_obs, var_obs, log_λ_obs; kwargs...)
-	for i in 1:size(flux_obs, 2)
+	for i in axes(flux_obs, 2)
 		_spectra_interp_gp!(view(fluxes, :, i), log_λ, view(flux_obs, :, i), view(var_obs, :, i), view(log_λ_obs, :, i); kwargs...)
 	end
 end
 function _spectra_interp_gp!(fluxes::AbstractMatrix, vars, log_λ, flux_obs, var_obs, log_λ_obs; kwargs...)
-	for i in 1:size(flux_obs, 2)
+	for i in axes(flux_obs, 2)
 		_spectra_interp_gp!(view(fluxes, :, i), view(vars, :, i), log_λ, view(flux_obs, :, i), view(var_obs, :, i), view(log_λ_obs, :, i); kwargs...)
 	end
 end
 
 function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix, log_λ::AbstractVector, flux_obs::AbstractMatrix, var_obs::AbstractMatrix, log_λ_obs::AbstractMatrix, flux_other::AbstractMatrix, var_other::AbstractMatrix, log_λ_other::AbstractMatrix; gp_mean::Number=1., gp_base=SOAP_gp, gp_var=SOAP_gp_var, keep_mask::Bool=true, return_weights::Bool=false, ignore_model_uncertainty::Bool=false)
-	for i in 1:size(flux_obs, 2)
+	for i in axes(flux_obs, 2)
 		gpn = get_marginal_GP(gp_base(view(log_λ_obs, :, i), view(var_obs, :, i) .+ gp_var), view(flux_obs, :, i) .- gp_mean, log_λ)
 		gpd = get_marginal_GP(gp_base(view(log_λ_other, :, i), view(var_other, :, i) .+ gp_var), view(flux_other, :, i) .- gp_mean, log_λ)
 		gpn_μ = mean.(gpn) .+ gp_mean
@@ -774,7 +774,7 @@ function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix
 		end
 		if keep_mask
 			inds = searchsortednearest(view(log_λ_obs, :, i), log_λ; lower=true)
-			for j in 1:length(inds)
+			for j in eachindex(inds)
 				if log_λ[j] <= log_λ_obs[1, i]
 					if isinf(var_obs[1, i]); vars[j, i] = Inf end
 				elseif log_λ[j] >= log_λ_obs[end, i]
@@ -931,7 +931,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 		width = Int(floor(2.5e-5 / step))
 		lo = 0
 		inds = UnitRange[]
-		for i in 1:length(mask)
+		for i in eachindex(mask)
 			if mask[i] == 1
 				if lo == 0
 					lo = i
@@ -948,14 +948,14 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 		scaling(j, y1, y2, x_width) = y1 + (y2 - y1) / (x_width - 1) * (j - 1)
 		proposed_amps = zeros(length(inds))
 		proposed_χ²_per_pixel = zeros(length(inds))
-		for i in 1:length(inds)
+		for i in eachindex(inds)
 			ind = inds[i]
 			tel_μ_test = repeat(tel_μ_interp[ind], n_obs)
 			d_test_flux = collect(Iterators.flatten(d.flux[ind, :]))
 			d_test_var = collect(Iterators.flatten(d.var[ind, :]))
 			y1, y2 = χ²_reduce(ind[1]), χ²_reduce(ind[end])
 
-			scales = [scaling(j, y1, y2, length(ind)) for j in 1:length(ind)]
+			scales = [scaling(j, y1, y2, length(ind)) for j in eachindex(ind)]
 			for i in 1:n_obs
 				d_test_flux[(1+(i-1)*length(ind)):(i*length(ind))] ./= scales
 				d_test_var[(1+(i-1)*length(ind)):(i*length(ind))] ./= scales .* scales
@@ -1100,7 +1100,7 @@ end
 function remove_lm_score_means!(lm::FullLinearModel; prop::Real=0.)
 	if prop != 0.
 		mean_s = Array{Float64}(undef, size(lm.s, 1), 1)
-		for i in 1:size(lm.s, 1)
+		for i in axes(lm.s, 1)
 			mean_s[i, 1] = mean(winsor(view(lm.s, i, :); prop=prop))
 		end
 	else
@@ -1209,7 +1209,7 @@ function model_prior(lm, om::OrderModel, key::Symbol)
 		if haskey(reg, :L1_M); val += L1(lm[1]) * reg[:L1_M] end
 		# if haskey(reg, :GP_μ); val -= gp_ℓ_precalc(sm.Δℓ_coeff, view(lm[1], :, 1), sm.A_sde, sm.Σ_sde) * reg[:GP_μ] end
 		if haskey(reg, :GP_M)
-			for i in 1:size(lm[1], 2)
+			for i in axes(lm[1], 2)
 				val -= gp_ℓ_precalc(sm.Δℓ_coeff, lm[1][:, i], sm.A_sde, sm.Σ_sde) * reg[:GP_M]
 			end
 		end

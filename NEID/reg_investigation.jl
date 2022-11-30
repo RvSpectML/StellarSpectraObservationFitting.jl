@@ -76,7 +76,7 @@ function test_reg(reg_sym::Symbol, tel::Bool)
         s = "star"
     end
     reg_s = string(reg_sym)
-    for i in 1:length(regs)
+    for i in eachindex(regs)
         reg = regs[i]
         om, d = copy(mws.om), mws.d
         dic[reg_sym] = reg
@@ -139,9 +139,9 @@ png(plt, "figs/NEID_" * star * "_$(desired_order)_reg_investigation")
 #     title = ["no tels", "some tels"][plot_i]
 #     ind_f(x) = view(x, plot_i, :, 1, :)
 #     heatmap(string.(reg_syms), plot_stars, ind_f(Δχ²); annotationcolor=:white, title=title)
-#     annotate!(vec(tuple.((1:length(reg_syms))'.-0.5, (1:length(plot_stars)).-0.5, string.(round.(ind_f(Δχ²), digits=3)))))
+#     annotate!(vec(tuple.((eachindex(reg_syms))'.-0.5, (eachindex(plot_stars)).-0.5, string.(round.(ind_f(Δχ²), digits=3)))))
 #     png("heatmap_$plot_i")
 #     heatmap(string.(reg_syms), plot_stars, ind_f(regs_all); annotationcolor=:white, title=title)
-#     annotate!(vec(tuple.((1:length(reg_syms))'.-0.5, (1:length(plot_stars)).-0.5, ind_f(regs_all))))
+#     annotate!(vec(tuple.((eachindex(reg_syms))'.-0.5, (eachindex(plot_stars)).-0.5, ind_f(regs_all))))
 #     png("regs_$plot_i")
 # end

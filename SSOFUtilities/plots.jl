@@ -98,8 +98,8 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 	# plot the two templates if there is no time variation
 	if (!plot_stellar) && (!plot_telluric)
 		plt = plot_spectrum(; title="Constant Model", legend=:outerright, kwargs...)
-		plot_telluric_with_lsf!(plt, om, om.tel.lm.μ; d=d, color=plt_colors[1], label="μₜₑₗ")
-		plot_stellar_with_lsf!(plt, om, om.star.lm.μ .- 0.5; d=d, color=plt_colors[2], label="μₛₜₐᵣ")
+		plot_telluric_with_lsf!(plt, om, om.tel.lm.μ; d=d, color=plt_colors[1], label=L"\mu_\oplus")
+		plot_stellar_with_lsf!(plt, om, om.star.lm.μ .- 0.5; d=d, color=plt_colors[2], label=L"\mu_\star")
 		if display_plt; display(plt) end
 		return plt
 	end
@@ -116,14 +116,14 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 	end
 
 	if plot_telluric
-		inds = 1:size(om.tel.lm.M, 2)
+		inds = axes(om.tel.lm.M, 2)
 
 		# basis plot
-		plot_stellar_with_lsf!(plt[1, 1], om, om.star.lm.μ; d=d, color=base_color, alpha=0.3, label="μₛₜₐᵣ", title="Telluric Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
-		plot_telluric_with_lsf!(plt[1, 1], om, om.tel.lm.μ; d=d, color=plt_colors[1], label="μₜₑₗ")
+		plot_stellar_with_lsf!(plt[1, 1], om, om.star.lm.μ; d=d, color=base_color, alpha=0.3, label=L"\mu_\star", title="Telluric Model Feature Vectors", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
+		plot_telluric_with_lsf!(plt[1, 1], om, om.tel.lm.μ; d=d, color=plt_colors[1], label=L"\mu_\oplus")
 
 		norm_Ms = [norm(view(om.tel.lm.M, :, i)) for i in inds]
-		s_std = [std(view(om.tel.lm.s, inds[j], :) .* norm_Ms[j]) for j in 1:length(inds)]
+		s_std = [std(view(om.tel.lm.s, inds[j], :) .* norm_Ms[j]) for j in eachindex(inds)]
 		max_s_std = maximum(s_std)
 		shift_s = ceil(10 * max_s_std) / 2
 		_scatter!(plt[2, 1], times_nu, ((max_s_std / std(airmasses)) .* (airmasses .- mean(airmasses))) .+ shift_s; label="Airmasses (scaled)", color=base_color)
@@ -132,7 +132,7 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 		# half_shift_s = ceil(shift_s) / 2
 		if incl_χ²; holder = copy(om.tel.lm.s) end
 	    # for i in reverse(inds)
-		for j in 1:length(inds)
+		for j in eachindex(inds)
 			i = inds[j]
 	        c_ind = c_ind_f(i - inds[1])
 			norm_M = norm_Ms[j]
@@ -156,18 +156,18 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 	end
 	if plot_stellar
 		plot_telluric ? c_offset = inds[end] - 1 : c_offset = 1
-		inds = 1:size(om.star.lm.M, 2)
+		inds = axes(om.star.lm.M, 2)
 
 		# basis plot
-		plot_telluric_with_lsf!(plt[1, n_plots], om, om.tel.lm.μ; d=d, color=base_color, alpha=0.3, label="μₜₑₗ", title="Stellar Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
-		plot_stellar_with_lsf!(plt[1, n_plots], om, om.star.lm.μ; d=d, color=plt_colors[1], label="μₛₜₐᵣ")
+		plot_telluric_with_lsf!(plt[1, n_plots], om, om.tel.lm.μ; d=d, color=base_color, alpha=0.3, label=L"\mu_\oplus", title="Stellar Model Feature Vectors", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
+		plot_stellar_with_lsf!(plt[1, n_plots], om, om.star.lm.μ; d=d, color=plt_colors[1], label=L"\mu_\star")
 
 		norm_Ms = [norm(view(om.star.lm.M, :, i)) for i in inds]
-		s_std = [std(view(om.star.lm.s, inds[j], :) .* norm_Ms[j]) for j in 1:length(inds)]
+		s_std = [std(view(om.star.lm.s, inds[j], :) .* norm_Ms[j]) for j in eachindex(inds)]
 		max_s_std = maximum(s_std)
 		shift_s = ceil(10 * max_s_std) / 2
 		_keys = sort([key for key in keys(df_act)])[1:2:end]
-		for i in reverse(1:length(_keys))
+		for i in reverse(eachindex(_keys))
 			key = _keys[i]
 			y = df_act[key]
 			c = max_s_std / std(y)
@@ -178,7 +178,7 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 
 		if incl_χ²; holder = copy(om.star.lm.s) end
 		# for i in reverse(inds)
-		for j in 1:length(inds)
+		for j in eachindex(inds)
 			i = inds[j]
 			c_ind = c_ind_f(i + c_offset)
 			norm_M = norm_Ms[j]
@@ -206,10 +206,10 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 end
 plot_model(mws::SSOF.ModelWorkspace, airmasses::Vector, times_nu::Vector; kwargs...) =
 	plot_model(mws.om, airmasses, times_nu; d=mws.d, o=mws.o, kwargs...)
-function plot_model(lm::SSOF.FullLinearModel; λ=1:length(lm.μ), times=1:size(lm.s, 2), display_plt::Bool=true, kwargs...)
+function plot_model(lm::SSOF.FullLinearModel; λ=eachindex(lm.μ), times=axes(lm.s, 2), display_plt::Bool=true, kwargs...)
 	plt = _plot(; layout=grid(2, 1), size=(_plt_size[1],_plt_size[2]*1.5), kwargs...)
 	shift_M = 0.2
-	inds = 1:size(lm.M, 2)
+	inds = axes(lm.M, 2)
 
 	# basis plot
 	plot!(plt[1, 1], λ, lm.μ; label="μ", title="Model Bases", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
@@ -342,7 +342,7 @@ function data_usage_plot(d::SSOF.Data, bad_inst::Vector, bad_high::Vector, bad_s
 	sometimes_used = xor.(ever_used, always_used)
 	never_used = .!ever_used
 	mean_flux = vec(mean(d.flux; dims=2))
-	pixs = 1:size(d.flux, 1)
+	pixs = axes(d.flux, 1)
 
 	yli = (-.05, 1.5)
 	plt = _plot(; title="Data usage", xlabel="Pixel #", ylabel="Normalized Flux", legend=:outerright, ylims=yli)
@@ -351,7 +351,7 @@ function data_usage_plot(d::SSOF.Data, bad_inst::Vector, bad_high::Vector, bad_s
 	bads_str = ["Instrumental", "High", "Snappy", "Low SNR", "Isolated", "By Eye"]
 	bads = [bad_inst, bad_high, bad_snap, bad_edge, bad_isol, bad_byeye]
 	ss = [3, 3, 3, 2, 2, 2]
-	for i in 1:length(bads)
+	for i in eachindex(bads)
 		bad = bads[i]
 		bad_str = bads_str[i]
 		s = ss[i]

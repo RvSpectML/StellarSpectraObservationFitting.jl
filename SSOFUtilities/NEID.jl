@@ -21,7 +21,7 @@ function neid_extras(df_files::DataFrame, save_path_base::String)
 	inds = _df.INDEX
 	lcs = _df.LINE_CENTER
 	d_lcs = Dict()
-	for i in 1:length(lcs)
+	for i in eachindex(lcs)
 		_lcs = split(lcs[i], ", ")
 		for j in _lcs
 			if haskey(d_lcs, j)
@@ -60,10 +60,10 @@ function neid_extras(df_files::DataFrame, save_path_base::String)
 		neid_rv[i] = ccf_header["CCFRVMOD"] * 1000  # m/s
 		neid_rv_σ[i] = ccf_header["DVRMSMOD"] * 1000  # m/s
 		ccfs_exist = vec(.!all(iszero.(read(f[13])); dims=1))
-		# neid_rv_ords = [j for j in 1:length(ccfs_exist) if ccfs_exist[j]]
+		# neid_rv_ords = [j for j in eachindex(ccfs_exist) if ccfs_exist[j]]
 		# neid_rv_ords = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 72, 73, 74, 75, 76, 77, 78, 79, 81, 82, 83, 84, 85, 91, 92, 93, 95, 96]
 		# println(ccf_header)
-		for j in 1:length(ccfs_exist)
+		for j in eachindex(ccfs_exist)
 		    if ccfs_exist[j]
 				# neid_order_rv[i, j] = ccf_header["CCFRV"*n2s(j+51)] * 1000  # m/s
 				neid_order_rv[i, j] = ccf_header["CCFRV"*n2s(174-j)] * 1000  # m/s
@@ -162,6 +162,12 @@ function neid_neid_temporal_gp_lsf_λ(order::Int; fudge_factor::Real=1.01)
 		return neid_temporal_gp_lsf_λs_max * fudge_factor
 	end
 end
+
+
+174-7
+174-118
+
+length(7:118)
 
 # # expres_lsf_orders = 37:75
 # expres_temporal_gp_lsf_λs = [182676.53481102452, 182374.65263197446, 182092.35241142692, 181829.63414938204, 181586.49784583968, 181362.94350079997, 181158.9711142628, 180974.58068622823, 180809.77221669623, 180664.54570566685, 180538.90115314, 180432.8385591158, 180346.35792359413, 180279.45924657505, 180232.1425280586, 180204.4077680447, 180196.2549665334, 180207.68412352467, 180238.69523901856, 180289.288313015, 180359.46334551406, 180449.22033651566, 180558.55928601988, 180687.48019402666, 180835.98306053603, 181004.06788554802, 181191.73466906254, 181398.9834110797, 181625.8141115994, 181872.22677062172, 182138.2213881466, 182423.7979641741, 182728.95649870415, 183053.69699173683, 183398.01944327206, 183761.92385330988, 184145.41022185027, 184548.47854889327, 184971.12883443886]

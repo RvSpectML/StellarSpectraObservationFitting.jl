@@ -49,7 +49,7 @@ function make_template(matrix::Matrix, σ²::Matrix; default::Real=1., use_mean:
 		result = vec(weighted_mean(matrix, σ²; default=default, dims=2))
 	else
 		result = Array{Float64}(undef, size(matrix, 1))
-		for i in 1:length(result)
+		for i in eachindex(result)
 			mask = .!(isinf.(view(σ², i, :)))
 			any(mask) ?
 				result[i] = median(view(matrix, i, mask)) :
@@ -68,7 +68,7 @@ function observation_night_inds(times_in_days::AbstractVector{<:Real})
     difs = times_in_days[2:end] - times_in_days[1:end-1] .> 0.5
     obs_in_first_night = findfirst(difs)
     if isnothing(findfirst(difs))
-        return [1:length(times_in_days)]
+        return [eachindex(times_in_days)]
     else
         night_inds = [1:findfirst(difs)]
     end
@@ -158,12 +158,12 @@ fwhm_2_σ(fwhm::Real) = _fwhm_2_σ_factor * fwhm
 ordinary_lst_sq(
     data::AbstractVector,
     order::Int;
-	x::AbstractVector=1:length(data)) = ordinary_lst_sq(_vander(x, order), data)
+	x::AbstractVector=eachindex(data)) = ordinary_lst_sq(_vander(x, order), data)
 general_lst_sq(
     data::AbstractVector,
 	Σ,
     order::Int;
-	x::AbstractVector=1:length(data)) = general_lst_sq(_vander(x, order), data, Σ)
+	x::AbstractVector=eachindex(data)) = general_lst_sq(_vander(x, order), data, Σ)
 
 lst_sq_poly_f(w) = x -> LinearAlgebra.BLAS.dot([x ^ i for i in 0:(length(w)-1)], w)
 # fastest of the following
@@ -237,7 +237,7 @@ oversamp_interp(lo_x::Real, hi_x::Real, x::AbstractVector, y::AbstractVector) =
 # pixel_separation(xs::AbstractVector) = multiple_append!([xs[1] - xs[2]], (xs[1:end-2] - xs[3:end]) ./ 2, [xs[end-1] - xs[end]])
 function bounds_generator!(bounds::AbstractVector, xs::AbstractVector)
 	bounds[1] = (3*xs[1] - xs[2]) / 2
-	bounds[2:end-1] = (view(xs, 1:length(xs)-1) .+ view(xs, 2:length(xs))) ./ 2
+	bounds[2:end-1] = (view(xs, eachindex(xs)-1) .+ view(xs, 2:length(xs))) ./ 2
 	bounds[end] = (3*xs[end] - xs[end-1]) / 2
 	return bounds
 end
@@ -248,7 +248,7 @@ function bounds_generator(xs::AbstractVector)
 end
 function bounds_generator(xs::AbstractMatrix)
 	bounds = Array{Float64}(undef, size(xs, 1)+1, size(xs, 2))
-	for i in 1:size(xs, 2)
+	for i in axes(xs, 2)
 		bounds_generator!(view(bounds, :, i), view(xs, :, i))
 	end
 	return bounds
@@ -262,7 +262,7 @@ vector_zero(θ::AbstractVecOrMat) = zero(θ)
 vector_zero(θ::Vector{<:AbstractArray}) = [vector_zero(i) for i in θ]
 
 flatten_ranges(ranges::AbstractVector) = maximum([range[1] for range in ranges]):minimum([range[end] for range in ranges])
-flatten_ranges(ranges::AbstractMatrix) = [flatten_ranges(view(ranges, :, i)) for i in 1:size(ranges, 2)]
+flatten_ranges(ranges::AbstractMatrix) = [flatten_ranges(view(ranges, :, i)) for i in axes(ranges, 2)]
 
 function weighted_mean(x::AbstractMatrix, σ²::AbstractMatrix; default::Real=0., kwargs...)
 	result = sum(x ./ σ²; kwargs...) ./ sum(1 ./ σ²; kwargs...)
@@ -300,7 +300,7 @@ function est_∇(f::Function, inputs::Vector{<:Real}; dif::Real=1e-7, ignore_0_i
         grad = zeros(length(inputs))
     end
 
-    for i in 1:length(inputs)
+    for i in eachindex(inputs)
         if !ignore_0_inputs || inputs[i]!=0
             hold = inputs[i]
 			inputs[i] += dif

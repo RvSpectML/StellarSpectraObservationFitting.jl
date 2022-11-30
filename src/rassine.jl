@@ -154,7 +154,7 @@ function calc_continuum_anchors(λ::AV1, f::AV2; radius::AV3,
     while length(λ)-j>2
         par_R = radius[j]
         if j==1 par_R /= 1.5 end
-        map!(i->calc_dist(i,j),dist,1:length(λ))
+        map!(i->calc_dist(i,j),dist,eachindex(λ))
         #mask .= (0.0 .< distance[:,j].<2.0*par_R)
         mask .= (0.0 .< dist.<2.0*par_R)
         while sum(mask)==0
@@ -187,7 +187,7 @@ function calc_continuum_anchors(λ::AV1, f::AV2; radius::AV3,
         #theta = zeros(length(cy))
         mintheta = Inf
         argmintheta = 0
-        for i in 1:length(cy)
+        for i in eachindex(cy)
             if cy[i]-p1[2] >0
                 acos_arg = (cx[i]-p1[1])/par_R
                 if acos_arg > 1.0 acos_arg = 1.0
@@ -436,7 +436,7 @@ end
 
 function calc_continuum(λ::AA1, f_obs::AA2, var_obs::AA3; λout::AA4 = λ, fwhm::Real = fwhm_sol, ν::Real =1.0,
     stretch_factor::Real = 5.0, merging_threshold::Real = 0.25, smoothing_half_width::Integer = 6, min_R_factor::Real = 100.0, smoothing_half_width_no_anchors::Integer = 1000,
-                orders_to_use::AbstractVector{<:Integer} = 1:size(λ,2), verbose::Bool = false ) where {
+                orders_to_use::AbstractVector{<:Integer} = axes(λ,2), verbose::Bool = false ) where {
                 T1<:Real, T2<:Real, T3<:Real, T4<:Real, AA1<:AbstractArray{T1,2}, AA2<:AbstractArray{T2,2}, AA3<:AbstractArray{T3,2} , AA4<:AbstractArray{T4,2} }
     @assert size(λ) == size(f_obs) == size(var_obs)
     @assert size(λout,2) == size(λout,2)

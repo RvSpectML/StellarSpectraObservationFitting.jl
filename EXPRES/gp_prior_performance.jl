@@ -229,7 +229,7 @@ end
 Δℓ_precalc(Δℓ_coe, y, A_k, Σ_k, H_k, P∞; kwargs...) = Δℓ_coe * Δℓ_helper_γ(y, A_k, Σ_k, H_k, P∞; kwargs...)
 
 # testing how close we are to numerical estimates
-function est_∇(f::Function, inputs; dif::Real=1e-7, inds::UnitRange=1:length(inputs))
+function est_∇(f::Function, inputs; dif::Real=1e-7, inds::UnitRange=eachindex(inputs))
     val = f(inputs)
     grad = Array{Float64}(undef, length(inds))
     for i in inds
@@ -258,7 +258,7 @@ function plot_methods(n; n_zoom=30)
     auto = only(∇(f)(y_test))
     ∇_vec = [numer, auto, anal, anal_p, anal_p_s, anal_p_s2]
     plt = _plot(; layout=grid(2, 1))
-    for i in 1:length(method_strs)
+    for i in eachindex(method_strs)
         plot!(plt[1], ∇_vec[i], label=method_strs[i], title="N=$n", markershape=:circle)
         plot!(plt[2], ∇_vec[i][1:n_zoom], label=method_strs[i], title="Zoomed", markershape=:circle)
     end
@@ -288,7 +288,7 @@ plot_f!(plt, ts, label) =
     plot!(plt, ns[1:length(ts)], ts, xaxis=:log, yaxis=:log, label="~n^$(round(log(ts[end] / ts[3]) / log(ns[end]/ns[3]), digits=2)) " * label)
 t_vec = [t_numer, t_auto, t_anal, t_anal_p, t_anal_p_s]
 plt = _plot(;xlabel="N", ylabel="t (s)", title="Time to Δℓ", legend=:topleft)
-for i in 1:length(method_strs)
+for i in eachindex(method_strs)
     plot_f!(plt, t_vec[i], method_strs[i])
 end
 plt

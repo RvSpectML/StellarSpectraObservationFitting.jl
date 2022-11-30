@@ -76,7 +76,7 @@ function test_reg(reg_sym::Symbol, tel::Bool)
         s = "star"
     end
     reg_s = string(reg_sym)
-    for i in 1:length(regs)
+    for i in eachindex(regs)
         reg = regs[i]
         om, d = copy(mws.om), mws.d
         dic[reg_sym] = reg

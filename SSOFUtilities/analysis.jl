@@ -40,7 +40,7 @@ function calculate_initial_model(data::SSOF.Data, instrument::String, desired_or
 			metrics_labels = ["ℓ", "AIC", "BIC", "RV std", "Intra-night RV std"]
 			metrics_fn = ["l", "aic", "bic", "rv", "rv_intra"]
 
-			for i in 1:length(metrics)
+			for i in eachindex(metrics)
 				if any(isfinite.(metrics[i]))
 					plt = component_test_plot(metrics[i], test_n_comp_tel, test_n_comp_star, ylabel=metrics_labels[i]);
 					png(plt, plots_fn * metrics_fn[i] * "_choice.png")
@@ -181,7 +181,7 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 		save_plots = plots_fn!=""
 
 	    SSOF.is_time_variable(model.tel.lm) ?
-			test_n_comp_tel = (-1:size(model.tel.lm.M, 2)) :
+			test_n_comp_tel = (-axes(model.tel.lm.M, 2)) :
 			test_n_comp_tel = (-1:0)
 		SSOF.is_time_variable(model.star.lm) ?
 			test_n_comp_star = (0:size(model.star.lm.M, 2)) :
@@ -192,12 +192,12 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 	    comp_intra_stds = zeros(length(test_n_comp_tel), length(test_n_comp_star))
 		better_models = zeros(Int, length(test_n_comp_tel), length(test_n_comp_star))
 		if multithread
-			# @threads for p_i in collect(Iterators.product(1:length(test_n_comp_tel), 1:length(test_n_comp_star)))
+			# @threads for p_i in collect(Iterators.product(eachindex(test_n_comp_tel), eachindex(test_n_comp_star)))
 			# 	i, j = p_i
 			# 	comp_ls[i, j], ks[i, j], comp_stds[i, j], comp_intra_stds[i, j], better_models[i, j] = SSOF.test_ℓ_for_n_comps([test_n_comp_tel[i], test_n_comp_star[j]], mws, times, lm_tel, lm_star; iter=iter, ignore_regularization=ignore_regularization)
 		    # end
 			# using ThreadsX  # tiny bit better performance
-			ThreadsX.foreach(collect(Iterators.product(1:length(test_n_comp_tel), 1:length(test_n_comp_star)))) do (i, j)
+			ThreadsX.foreach(collect(Iterators.product(eachindex(test_n_comp_tel), eachindex(test_n_comp_star)))) do (i, j)
 			   comp_ls[i, j], ks[i, j], comp_stds[i, j], comp_intra_stds[i, j], better_models[i, j] = SSOF.test_ℓ_for_n_comps([test_n_comp_tel[i], test_n_comp_star[j]], mws, times, lm_tel, lm_star; iter=iter, ignore_regularization=ignore_regularization)
 			end
 		else
@@ -217,7 +217,7 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 			diagnostics = [ℓ, aics, bics, comp_stds, comp_intra_stds]
 			diagnostics_labels = ["ℓ", "AIC", "BIC", "RV std", "Intra-night RV std"]
 			diagnostics_fn = ["l", "aic", "bic", "rv", "rv_intra"]
-			for i in 1:length(diagnostics)
+			for i in eachindex(diagnostics)
 				if !all(isinf.(diagnostics[i]))
 					plt = component_test_plot(diagnostics[i], test_n_comp_tel, test_n_comp_star, ylabel=diagnostics_labels[i]);
 					png(plt, plots_fn * diagnostics_fn[i] * "_choice.png")
@@ -317,7 +317,7 @@ function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int
 	_std = std(x)
 	if multithread
 		nchains = nthreads()
-		schedule = collect(Iterators.partition(1:length(x), Int(ceil(length(x)/nchains))))
+		schedule = collect(Iterators.partition(eachindex(x), Int(ceil(length(x)/nchains))))
 		# Threads.@threads for i in 1:nchains
 		ThreadsX.foreach(1:nchains) do i
 			local _todo = copy(schedule[i])
@@ -325,7 +325,7 @@ function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int
 			local _x = copy(x)
 			local _x_test = Array{Float64}(undef, n)
 			local _ℓs = Array{Float64}(undef, n)
-			for ii in 1:length(_todo)
+			for ii in eachindex(_todo)
 				k = _todo[ii]
 				_x_test .= _x[k] .+ LinRange(-_std, _std, n)
 				for j in 1:n
@@ -341,7 +341,7 @@ function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int
 			σs[_todo] .= _σs
 		end
 	else
-		for i in 1:length(x)
+		for i in eachindex(x)
 			hold = x[i]
 			# x_test[:] = x[i] .+ LinRange(-_std/1e3, _std/1e3, n)
 			x_test[:] = x[i] .+ LinRange(-_std, _std, n)
@@ -385,7 +385,7 @@ end
 
 function estimate_σ_bootstrap_reducer(shaper::AbstractArray, holder::AbstractArray, reducer::Function)
 	result = Array{Float64}(undef, size(shaper, 1), size(shaper, 2))
-	for i in 1:size(shaper, 1)
+	for i in axes(shaper, 1)
 		result[i, :] .= vec(reducer(view(holder, :, i, :); dims=1))
 	end
 	return result
@@ -530,7 +530,7 @@ end
 # 			# samples = reduce(hcat,samples)
 # 		end
 # 		samples = reduce(hcat, samples)
-# 		samples = [unflatten(view(samples, :, i)) for i in 1:size(samples, 2)]
+# 		samples = [unflatten(view(samples, :, i)) for i in axes(samples, 2)]
 # 		typeof(mws.om) <: SSOF.OrderModelWobble ?
 # 			rv_holder = Array{Float64}(undef, n, length(mws.om.rv)) :
 # 			rv_holder = Array{Float64}(undef, n, length(mws.om.rv.lm.s))
@@ -544,7 +544,7 @@ end
 # 			star_holder = Array{Float64}(undef, n, size(mws.om.star.lm.s, 1), size(mws.om.star.lm.s, 2)) :
 # 			star_holder = nothing
 #
-# 		for i in 1:length(samples)
+# 		for i in eachindex(samples)
 # 			rv_holder[i, :] .= samples[i][end]
 # 		end
 # 		if time_var_tel

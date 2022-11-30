@@ -247,7 +247,7 @@ Nabla.∇(::typeof(gp_ℓ_precalc), ::Type{Arg{2}}, _, y, ȳ, Δℓ_coeff, x, A
 
 # n_test=1000
 # using Nabla
-# f1(y) = SSOF.SOAP_gp_ℓ_precalc(sm.Δℓ_coeff[1:length(y), 1:length(y)], y, sm.A_sde, sm.Σ_sde)
+# f1(y) = SSOF.SOAP_gp_ℓ_precalc(sm.Δℓ_coeff[eachindex(y), eachindex(y)], y, sm.A_sde, sm.Σ_sde)
 # f2(y) = SSOF.SOAP_gp_ℓ_nabla(y, sm.A_sde, sm.Σ_sde)
 # only(∇(f1)(μ_mod[1:n_test]))
 # only(∇(f2)(μ_mod[1:n_test]))

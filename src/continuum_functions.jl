@@ -74,7 +74,7 @@ end
 function continuum_normalize!(d::Data; order::Int=6, kwargs...)
 	continuum = ones(size(d.log_λ_obs, 1))
 	w = Array{Float64}(undef, order + 1, size(d.flux, 2))
-	for i in 1:size(d.log_λ_obs, 2)
+	for i in axes(d.log_λ_obs, 2)
 		continuum[:], w[:, i] = fit_continuum(view(d.log_λ_obs, :, i), view(d.flux, :, i), view(d.var, :, i); order=order, kwargs...)
 		d.flux[:, i] ./= continuum
 		d.var[:, i] ./= continuum .* continuum
@@ -102,7 +102,7 @@ _max_flux_default = 2.
 # function mask_infinite_pixels!(y::AbstractMatrix, σ²::AbstractMatrix; kwargs...)
 # 	affected = Int64[]
 # 	bad = Array{Bool}(undef, size(y, 1))
-# 	for i in 1:size(y, 2)
+# 	for i in axes(y, 2)
 # 		affected2 = mask_infinite_pixels!(bad, view(y, :, i), view(σ², :, i); kwargs...)
 # 		affected_pixels!(affected, affected2)
 # 	end
@@ -143,7 +143,7 @@ end
 function mask_low_pixels!(y::AbstractMatrix, σ²::AbstractMatrix; kwargs...)
 	affected = Int64[]
 	bad = Array{Bool}(undef, size(y, 1))
-	for i in 1:size(y, 2)
+	for i in axes(y, 2)
 		affected2 = mask_low_pixels!(view(y, :, i), view(σ², :, i); kwargs...)
 		affected_pixels!(affected, affected2)
 	end
@@ -191,7 +191,7 @@ end
 function mask_high_pixels!(y::AbstractMatrix, σ²::AbstractMatrix; kwargs...)
 	affected = Int64[]
 	bad = Array{Bool}(undef, size(y, 1))
-	for i in 1:size(y, 2)
+	for i in axes(y, 2)
 		affected2 = mask_high_pixels!(bad, view(y, :, i), view(σ², :, i); kwargs...)
 		affected_pixels!(affected, affected2)
 	end
@@ -226,7 +226,7 @@ function mask_bad_edges!(y::AbstractMatrix, σ²::AbstractMatrix, log_λ_star::A
 		n_pix = size(y, 1)
 		window_start_tot = 0
 		window_end_tot = n_pix + 1
-		for i in 1:size(y, 2)
+		for i in axes(y, 2)
 			for window_start in 1:Int(floor(window_width/10)):(n_pix - window_width)
 				window_end = window_start + window_width
 				mean_snr = sqrt(mean((y[window_start:window_end, i] .^2) ./ abs.(σ²[window_start:window_end, i])))
@@ -236,7 +236,7 @@ function mask_bad_edges!(y::AbstractMatrix, σ²::AbstractMatrix, log_λ_star::A
 				end
 			end
 		end
-		for i in 1:size(y,2)
+		for i in axes(y,2)
 			for window_end in n_pix:-Int(floor(window_width/10)):(window_width + 1)
 				window_start = window_end - window_width
 				mean_snr = sqrt(mean((y[window_start:window_end] .^2) ./ abs.(σ²[window_start:window_end])))
@@ -276,7 +276,7 @@ function mask_bad_edges!(d::Data; kwargs...)
 end
 
 function flat_normalize!(d::Data; kwargs...)
-	for i in 1:size(d.log_λ_obs, 2)
+	for i in axes(d.log_λ_obs, 2)
 		continuum = quantile(view(d.flux, .!(isnan.(view(d.flux, :, i))), i), _high_quantile_default)
 		d.flux[:, i] ./= continuum
 		d.var[:, i] ./= continuum * continuum
@@ -303,8 +303,8 @@ function outlier_mask(v::AbstractVecOrMat; thres::Real=10, prop::Real=0.2, retur
 end
 
 # function recognize_bad_normalization!(d::Data; kwargs...)
-# 	mask = outlier_mask([mean(view(d.var, isfinite.(view(d.var, :, i)), i)) for i in 1:size(d.var, 2)]; kwargs...) .|| outlier_mask(vec(std(d.flux; dims=1)); kwargs...)
-# 	for i in 1:size(d.log_λ_obs, 2)
+# 	mask = outlier_mask([mean(view(d.var, isfinite.(view(d.var, :, i)), i)) for i in axes(d.var, 2)]; kwargs...) .|| outlier_mask(vec(std(d.flux; dims=1)); kwargs...)
+# 	for i in axes(d.log_λ_obs, 2)
 # 		if !mask[i]
 # 			# d.var[:, i] .= Inf
 # 			println("spectrum $i has a weird continuum normalization, consider removing it from your analysis")
@@ -314,7 +314,7 @@ end
 
 # function recognize_bad_drift!(d::Data; kwargs...)
 # 	mask = outlier_mask(d.log_λ_obs[1, :]; kwargs...)
-# 	for i in 1:size(d.log_λ_obs, 2)
+# 	for i in axes(d.log_λ_obs, 2)
 # 		if !mask[i]
 # 			# d.var[:, i] .= Inf
 # 			println("spectrum $i has a weird drift, consider removing it from your analysis")

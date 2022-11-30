@@ -54,7 +54,7 @@ sort!(_eo, ["wavenumber [1/cm]"])
 # has orders 37:76, (neid's 50-89), 41-76 is the intersection
 lsf_orders = 37:75
 lsf_λs = Array{Float64}(undef, length(lsf_orders))
-for i in 1:length(lsf_orders)
+for i in eachindex(lsf_orders)
 	order = lsf_orders[i]
 	eo = copy(_eo)
 	filter!(:order => ==(order), eo)
@@ -96,7 +96,7 @@ npix = 30
 lsf_λs = Array{Float64}(undef, length(lsf_orders))
 middle = Int(round(size(nlsf.σs,1)/2))
 pix = RegularSpacing(-1. * npix, 2npix/n, n)
-for i in 1:length(lsf_orders)
+for i in eachindex(lsf_orders)
 # i = 1  # 1:59
 	order = lsf_orders[i] # has orders 54:112, (expres's 41-99), 54-89 is the intersection (index 1 and 36)
 	λs = RegularSpacing(-npix * spacing[i], 2*npix*spacing[i]/n, n)

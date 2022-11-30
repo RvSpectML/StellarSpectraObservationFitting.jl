@@ -34,7 +34,7 @@ module EXPRESLSF
         _w_intra = Array{Float64}(undef, 3, length(orders))
         min_wns = Array{Float64}(undef, length(orders))
         min_σs = Array{Float64}(undef, length(orders))
-        for i in 1:length(orders)
+        for i in eachindex(orders)
             ord = orders[i]
             df = filter(:order => ==(ord), eo)
             _dm = ones(nrow(df), 1 + poly_order)
@@ -99,7 +99,7 @@ module EXPRESLSF
             # else
             #     geo_mean = sqrt.(view(wn, lo-1:hi).*view(wn,lo:hi+1)) .- wn[i]
             # end
-            # holder[i, lo:hi] = gaussian_integral.(σs[i], view(geo_mean, 1:length(geo_mean)-1), view(geo_mean, 2:length(geo_mean)))
+            # holder[i, lo:hi] = gaussian_integral.(σs[i], view(geo_mean, eachindex(geo_mean)-1), view(geo_mean, 2:length(geo_mean)))
             holder[i, lo:hi] ./= sum(view(holder, i, lo:hi))
             # max_w = max(max_w, max(hi-i, i-lo))
         end
@@ -109,7 +109,7 @@ module EXPRESLSF
         # return BandedMatrix(holder, (max_w, max_w))
     end
     # EXPRES_lsfs(λ::AbstractMatrix; kwargs...) =
-    #     [lsf(view(λ, :, i); kwargs...) for i in 1:size(λ, 2)]
+    #     [lsf(view(λ, :, i); kwargs...) for i in axes(λ, 2)]
     expres_lsf(λ::AbstractMatrix, order::Int; kwargs...) =
         expres_lsf(vec(median(λ; dims=2)), order; kwargs...)
 end

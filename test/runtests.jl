@@ -7,7 +7,7 @@ using LinearAlgebra
 
 println("Testing...")
 
-function est_∇(f::Function, inputs; dif::Real=1e-7, inds::UnitRange=1:length(inputs))
+function est_∇(f::Function, inputs; dif::Real=1e-7, inds::UnitRange=eachindex(inputs))
     val = f(inputs)
     grad = Array{Float64}(undef, length(inds))
     for i in inds
@@ -53,7 +53,7 @@ end
 @testset "custom spectra_interp() sensitivity" begin
 
     B = rand(3,5)
-    As = [sparse(rand(2,3)) for i in 1:size(B, 2)]
+    As = [sparse(rand(2,3)) for i in axes(B, 2)]
     C = rand(5,6)
 
     f_custom_sensitivity(x) = sum(SSOF.spectra_interp(x.^2, As) * C)

@@ -20,7 +20,7 @@ function mask2range(mask::AbstractVector)
 		end
 	end
 end
-mask2range(masks::AbstractMatrix) = [mask2range(view(masks, :, i)) for i in 1:size(masks, 2)]
+mask2range(masks::AbstractMatrix) = [mask2range(view(masks, :, i)) for i in axes(masks, 2)]
 
 function reformat_spectra(
 		df_files::DataFrame,
@@ -165,7 +165,7 @@ function reformat_spectra(
 		var_obs = Array{Float64}(undef, len_obs, n_obs)
 		log_λ_obs = Array{Float64}(undef, len_obs, n_obs)
 		log_λ_star = Array{Float64}(undef, len_obs, n_obs)
-		for i in 1:length(times_to_use) # 13s
+		for i in eachindex(times_to_use) # 13s
 			j = times_to_use[i]
 			flux_obs[:, i] .= all_spectra[j].flux[mask_inds, order_ind]
 			var_obs[:, i] .= all_spectra[j].var[mask_inds, order_ind]
@@ -176,7 +176,7 @@ function reformat_spectra(
 		@assert all(nan_mask .== isnan.(flux_obs))
 		flux_obs[nan_mask] .= 1
 		var_obs[nan_mask] .= Inf
-		if lsf_f != nothing
+		if !isnothing(lsf_f)
 			is_NEID ?
 				data = SSOF.LSFData(flux_obs, var_obs, copy(var_obs), log_λ_obs, log_λ_star, lsf_f(order)) :
 				data = SSOF.LSFData(flux_obs, var_obs, copy(var_obs), log_λ_obs, log_λ_star, lsf_f(exp.(log_λ_obs), order))
@@ -194,7 +194,7 @@ function reformat_spectra(
 		data_usage_plot(data, bad_inst, bad_high, bad_snap, bad_edge, bad_isol, bad_byeye; save_path=save_path)
 		# data_usage_plot(data, bad_inst, bad_high, bad_snap, bad_edge, bad_isol, bad_byeye; save_path=save_path * "_", use_var_s=false)
 		# plt = _plot(;size=(2 * _plt_size[1],_plt_size[2]), legend=:bottom)
-		# for j in 1:size(data_backup.flux, 2)
+		# for j in axes(data_backup.flux, 2)
 		# 	ys = data_backup.flux[:, j]
 		# 	nanmask = .!(isnan.(ys))
 		# 	ys ./= median(ys[nanmask])

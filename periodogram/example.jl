@@ -48,7 +48,7 @@ function fit_kep_hold_P(P::Unitful.Time; fast::Bool=false, kwargs...)
         ks = GLOM_RV.fit_kepler(rvs_red, times, Σ_obs, GLOM_RV.kep_signal_wright(0u"m/s", P, ks.M0, minimum([ks.e, 0.3]), 0, 0u"m/s"); hold_P=true, avoid_saddle=false, print_stuff=false, kwargs...)
         return ks
     end
-    if ks == nothing
+    if isnothing(ks)
         ks = GLOM_RV.fit_kepler(rvs_red, times, Σ_obs, GLOM_RV.kep_signal_wright(0u"m/s", P, 2 * π * rand(), 0.1, 0, 0u"m/s"); hold_P=true, avoid_saddle=false, print_stuff=false, kwargs...)
         return ks
     end
@@ -58,7 +58,7 @@ end
 function kep_unnormalized_posterior_distributed(P::Unitful.Time; kwargs...)
     ks = fit_kep_hold_P(P; kwargs...)
     nlogprior_kernel = 0
-    if ks == nothing
+    if isnothing(ks)
         return [-Inf, -Inf]
     else
         val = GLOM.nlogL(Σ_obs, GLOM_RV.remove_kepler(rvs_red, times, ks))

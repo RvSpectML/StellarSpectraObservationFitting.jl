@@ -12,7 +12,7 @@ include(SSOF_path * "/SSOFUtilities/SSOFUtilities.jl")
 SSOFU = SSOFUtilities
 
 stars = ["10700", "26965", "22049", "3651", "95735", "2021/12/19", "2021/12/20", "2021/12/23"]
-star_choice = SSOF.parse_args(1, Int, 5)
+star_choice = SSOF.parse_args(1, Int, 4)
 star = stars[star_choice]
 solar = star_choice > 5
 if length(ARGS) != 0; ENV["GKSwstype"] = "100" end

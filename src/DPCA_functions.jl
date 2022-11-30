@@ -60,7 +60,7 @@ end
 # function project_doppler_comp!(M::AbstractMatrix, scores::AbstractVector, Xtmp::AbstractMatrix, fixed_comp::AbstractVector)
 # 	M[:, 1] = fixed_comp  # Force fixed (i.e., Doppler) component to replace first PCA component
 # 	fixed_comp_norm2 = sum(abs2, fixed_comp)
-# 	for i in 1:size(Xtmp, 2)
+# 	for i in axes(Xtmp, 2)
 # 		scores[i] = dot(view(Xtmp, :, i), fixed_comp) / fixed_comp_norm2  # Normalize differently, so scores are z (i.e., doppler shift)
 # 		Xtmp[:, i] -= scores[i] * fixed_comp
 # 	end
@@ -112,9 +112,9 @@ _fracvar(X::AbstractVecOrMat, Y::AbstractVecOrMat, weights::AbstractVecOrMat; va
 	sum(abs2, (X - Y) .* weights) / var_tot
 function fracvar(X::AbstractVecOrMat, M::AbstractVecOrMat, s::AbstractVecOrMat)
 	var_tot = sum(abs2, X)
-	return [_fracvar(X, view(M, :, 1:i) * view(s, 1:i, :); var_tot=var_tot) for i in 1:size(M, 2)]
+	return [_fracvar(X, view(M, :, 1:i) * view(s, 1:i, :); var_tot=var_tot) for i in axes(M, 2)]
 end
 function fracvar(X::AbstractVecOrMat, M::AbstractVecOrMat, s::AbstractVecOrMat, weights::AbstractVecOrMat)
 	var_tot = sum(abs2, X .* weights)
-	return [_fracvar(X, view(M, :, 1:i) * view(s, 1:i, :), weights; var_tot=var_tot) for i in 1:size(M, 2)]
+	return [_fracvar(X, view(M, :, 1:i) * view(s, 1:i, :), weights; var_tot=var_tot) for i in axes(M, 2)]
 end

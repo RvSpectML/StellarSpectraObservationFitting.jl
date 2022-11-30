@@ -82,7 +82,7 @@ for desired_order in 60:85
         vars_model = ones(length(log_λ), n_obs)
         SSOF._spectra_interp_gp!(flux_model, vars_model, log_λ, data.flux, data.var .+ SSOF.SOAP_gp_var, data.log_λ_obs, gp_mean=1.)
         # init = SSOF.make_template(flux_model; use_mean=true)
-        init = [mean(view(flux_model, i, :), AnalyticWeights(1 ./ view(vars_model, i, :))) for i in 1:size(flux_model, 1)]
+        init = [mean(view(flux_model, i, :), AnalyticWeights(1 ./ view(vars_model, i, :))) for i in axes(flux_model, 1)]
 
         # optimize to get daily_flux
         # interps = SSOF.oversamp_interp_helper(data.log_λ_obs_bounds, log_λ)

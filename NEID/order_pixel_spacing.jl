@@ -17,10 +17,10 @@ include("../NEID/lsf.jl")  # defines NEIDLSF.NEID_lsf()
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
 nlsf = NEIDLSF
 npix = 30
-lsf_orders = [i for i in 1:length(nlsf.no_lsf_orders) if !nlsf.no_lsf_orders[i]]
+lsf_orders = [i for i in eachindex(nlsf.no_lsf_orders) if !nlsf.no_lsf_orders[i]]
 spacing = Array{Float64}(undef, length(lsf_orders))
 # for desired_order in lsf_orders
-for i in 1:length(lsf_orders)
+for i in eachindex(lsf_orders)
 	desired_order = lsf_orders[i]
 	base_path = neid_save_path * star * "/$(desired_order)/"
 	data_path = base_path * "data.jld2"

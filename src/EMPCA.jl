@@ -18,7 +18,7 @@ end
 EMPCA!(lm::FullLinearModel, Xtmp::AbstractMatrix, weights::AbstractMatrix; kwargs...) =
 	EMPCA!(lm.M, lm.s, lm.μ, Xtmp, weights; log_lm=log_lm(lm), kwargs...)
 
-function _empca!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(M, 2), vec_by_vec::Bool=true, kwargs...)
+function _empca!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=axes(M, 2), vec_by_vec::Bool=true, kwargs...)
 	if length(inds) > 0
 		@assert inds[1] > 0
 		vec_by_vec ?
@@ -28,18 +28,18 @@ function _empca!(M::AbstractMatrix, scores::AbstractMatrix, Xtmp::AbstractMatrix
 end
 
 function _solve_coeffs!(eigvec::AbstractVector, coeff::AbstractVector, data::AbstractMatrix, weights::AbstractMatrix)
-	for i in 1:size(data, 2)
+	for i in axes(data, 2)
 		coeff[i] = _solve(eigvec, view(data, :, i), view(weights, :, i))
 	end
 end
-function _solve_coeffs!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(eigvec, 2))
-	for i in 1:size(data, 2)
+function _solve_coeffs!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=axes(eigvec, 2))
+	for i in axes(data, 2)
 		coeff[inds, i] .= _solve(view(eigvec, :, inds), view(data, :, i), view(weights, :, i))
 	end
 	# solve_model!(model, eigvec, coeff)
 end
 
-function _solve_eigenvectors!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=1:size(eigvec, 2))
+function _solve_eigenvectors!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; inds::UnitRange{<:Int}=axes(eigvec, 2))
 	nvar = size(eigvec, 1)
 	cw = Array{Float64}(undef, size(data, 2))
 	for i in inds
@@ -90,12 +90,12 @@ function _reorthogonalize_no_renorm!(eigvec1::AbstractVector, eigvec2::AbstractV
 	eigvec1 .-=  dot(eigvec1, eigvec2) .* eigvec2 / sum(abs2, eigvec2)
 end
 
-function _random_orthonormal!(A::AbstractMatrix, nvar::Int; log_λ::Union{Nothing, AbstractVector}=nothing, inds::UnitRange{<:Int}=1:size(A, 2))
+function _random_orthonormal!(A::AbstractMatrix, nvar::Int; log_λ::Union{Nothing, AbstractVector}=nothing, inds::UnitRange{<:Int}=axes(A, 2))
 	keep_going = true
 	i = 0
 	while keep_going
 		i += 1
-		if log_λ != nothing
+		if !isnothing(log_λ)
 			fx = SOAP_gp(log_λ, SOAP_gp_var)
 			for i in inds
 				A[:, i] = rand(fx)
@@ -122,7 +122,7 @@ function _solve(
     return (dm' * (w .* dm)) \ (dm' * (w .* data))
 end
 
-function _empca_all_at_once!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; niter::Int=100, inds::UnitRange{<:Int}=1:size(eigvec, 2), kwargs...)
+function _empca_all_at_once!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; niter::Int=100, inds::UnitRange{<:Int}=axes(eigvec, 2), kwargs...)
 
     #- Basic dimensions
     nvar, nobs = size(data)
@@ -146,7 +146,7 @@ function _empca_all_at_once!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data
 end
 
 
-function _empca_vec_by_vec!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; niter::Int=100, inds::UnitRange{<:Int}=1:size(eigvec, 2), kwargs...)
+function _empca_vec_by_vec!(eigvec::AbstractMatrix, coeff::AbstractMatrix, data::AbstractMatrix, weights::AbstractMatrix; niter::Int=100, inds::UnitRange{<:Int}=axes(eigvec, 2), kwargs...)
 
     #- Basic dimensions
     nvar, nobs = size(data)

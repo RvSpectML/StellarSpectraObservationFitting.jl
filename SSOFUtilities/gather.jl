@@ -95,7 +95,7 @@ end
 
 function retrieve(save_fns::Vector{String}, rv_fns::Vector{Vector{String}}, model_fns::Vector{Vector{String}}, data_fns::Vector{Vector{String}})
     @assert length(rv_fns) == length(save_fns) == length(data_fns) == length(model_fns)
-    for i in 1:length(save_fns)
+    for i in eachindex(save_fns)
         @load data_fns[i][1] n_obs times_nu airmasses
         n_ord = length(rv_fns[i])
         rvs, rvs_σ, constant, no_tel, wavelength_range, all_star_s, all_tel_s = retrieve(n_obs, rv_fns[i], model_fns[i], data_fns[i])

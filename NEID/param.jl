@@ -84,7 +84,7 @@ else
 		DataFrame
 
 	bad_drift = df_files_use.driftfun .== "dailymodel0"
-	for i in 1:length(bad_drift)
+	for i in eachindex(bad_drift)
 		if !bad_drift[i]
 			println("ignoring $(df_files_use.Filename[i]) because of bad drift model")
 		end
