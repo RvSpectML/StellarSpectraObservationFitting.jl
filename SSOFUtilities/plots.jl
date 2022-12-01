@@ -33,15 +33,15 @@ function rv_legend(label, rvs, times)
 	isinf(intra_night) ? appen = "" : appen = ", intra night std: $(round(intra_night, digits=3))"
 	return label * " RVs, std: $(round(std(rvs), digits=3))" * appen
 end
-plot_model_rvs!(plt, times, rvs, rvs_σ; label="", xlabel="", kwargs...) = scatter!(plt, times, rvs; markerstrokewidth=0.5, yerror=rvs_σ, label=rv_legend(label, rvs, times), xlabel=xlabel, kwargs...)
-function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat{T}, model_rvs_σ::AbstractVecOrMat{T}, inst_times::AbstractVector{T}, inst_rvs::AbstractVector{T}, inst_rvs_σ::AbstractVector{T}; display_plt::Bool=true, kwargs...) where {T<:Real}
-    plt = plot_rv(; legend=:bottomleft, layout=grid(2, 1, heights=[0.7, 0.3]))
+function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat{T}, model_rvs_σ::AbstractVecOrMat{T}, inst_times::AbstractVector{T}, inst_rvs::AbstractVector{T}, inst_rvs_σ::AbstractVector{T}; display_plt::Bool=true, inst_str::String="Instrument", msw::Real=0.5, alpha=0.7, kwargs...) where {T<:Real}
+    plt = plot_rv(; legend=:bottomright, layout=grid(2, 1, heights=[0.7, 0.3]))
     ervs = inst_rvs .- median(inst_rvs)
     mrvs = model_rvs .- median(model_rvs)
-    plot_model_rvs!(plt[1], inst_times, ervs, inst_rvs_σ; label="Instrument", kwargs...)
-    plot_model_rvs!(plt[1], times_nu, mrvs, model_rvs_σ; label="SSOF", kwargs...)
+	scatter!(plt[1], inst_times, ervs; yerror=inst_rvs_σ, msc=0.4*plt_colors[2], label=inst_str * " (std: $(round(std(ervs), digits=3)), σ: $(round(mean(inst_rvs_σ), digits=3)))", alpha = alpha, msw=msw, kwargs...)
+	scatter!(plt[1], times_nu, mrvs; yerror=model_rvs_σ, msc=0.4*plt_colors[1], label="SSOF (std: $(round(std(mrvs), digits=3)), σ: $(round(mean(model_rvs_σ), digits=3)))", alpha = alpha, msw=msw, kwargs...)
+
     resids = mrvs - ervs
-    scatter!(plt[2], times_nu, resids, ylabel="SSOF - Instrument (m/s)", yerror=sqrt.(model_rvs_σ .^ 2 + inst_rvs_σ .^ 2), alpha = 0.5, label="std: $(round(std(resids), digits=3))", markerstrokewidth=0.5)
+    scatter!(plt[2], times_nu, resids; c=:black, ylabel="SSOF - " * inst_str * " (m/s)", yerror=sqrt.(model_rvs_σ .^ 2 + inst_rvs_σ .^ 2), alpha = alpha, msw=msw, label="std: $(round(std(resids), digits=3))")
     if display_plt; display(plt) end
     return plt
 end

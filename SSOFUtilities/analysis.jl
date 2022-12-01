@@ -181,7 +181,7 @@ function downsize_model(mws::SSOF.ModelWorkspace, times::AbstractVector, lm_tel:
 		save_plots = plots_fn!=""
 
 	    SSOF.is_time_variable(model.tel.lm) ?
-			test_n_comp_tel = (-axes(model.tel.lm.M, 2)) :
+			test_n_comp_tel = (-1:size(model.tel.lm.M, 2)) :
 			test_n_comp_tel = (-1:0)
 		SSOF.is_time_variable(model.star.lm) ?
 			test_n_comp_star = (0:size(model.star.lm.M, 2)) :

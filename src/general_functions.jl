@@ -237,7 +237,7 @@ oversamp_interp(lo_x::Real, hi_x::Real, x::AbstractVector, y::AbstractVector) =
 # pixel_separation(xs::AbstractVector) = multiple_append!([xs[1] - xs[2]], (xs[1:end-2] - xs[3:end]) ./ 2, [xs[end-1] - xs[end]])
 function bounds_generator!(bounds::AbstractVector, xs::AbstractVector)
 	bounds[1] = (3*xs[1] - xs[2]) / 2
-	bounds[2:end-1] = (view(xs, eachindex(xs)-1) .+ view(xs, 2:length(xs))) ./ 2
+	bounds[2:end-1] = (view(xs, 1:(length(xs)-1)) .+ view(xs, 2:length(xs))) ./ 2
 	bounds[end] = (3*xs[end] - xs[end-1]) / 2
 	return bounds
 end
