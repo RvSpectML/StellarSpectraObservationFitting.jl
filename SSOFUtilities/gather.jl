@@ -41,6 +41,7 @@ function retrieve(n_obs::Int, rv_fns::Vector{String}, model_fns::Vector{String},
     constant = trues(n_ord)
     no_tel = trues(n_ord)
     wavelength_range = Array{Float64}(undef, n_ord, 2)
+    wavelength_range_star = Array{Float64}(undef, n_ord, 2)
     all_star_s = []
     all_tel_s = []
 
@@ -85,12 +86,13 @@ function retrieve(n_obs::Int, rv_fns::Vector{String}, model_fns::Vector{String},
         end
         try
             @load data_fns[i] data
-            wavelength_range[i, :] .= exp.(extrema(data.log_λ_star[.!(isinf.(data.var_s))]))
+            wavelength_range[i, :] .= exp.(extrema(data.log_λ_obs[.!(isinf.(data.var_s))]))
+            wavelength_range_star[i, :] .= exp.(extrema(data.log_λ_star[.!(isinf.(data.var_s))]))
         catch err
             catch_f(err, data_fns, i)
         end
     end
-    return all_rvs, all_rvs_σ, constant, no_tel, wavelength_range, all_star_s, all_tel_s
+    return all_rvs, all_rvs_σ, constant, no_tel, wavelength_range, wavelength_range_star, all_star_s, all_tel_s
 end
 
 function retrieve(save_fns::Vector{String}, rv_fns::Vector{Vector{String}}, model_fns::Vector{Vector{String}}, data_fns::Vector{Vector{String}})
@@ -98,7 +100,7 @@ function retrieve(save_fns::Vector{String}, rv_fns::Vector{Vector{String}}, mode
     for i in eachindex(save_fns)
         @load data_fns[i][1] n_obs times_nu airmasses
         n_ord = length(rv_fns[i])
-        rvs, rvs_σ, constant, no_tel, wavelength_range, all_star_s, all_tel_s = retrieve(n_obs, rv_fns[i], model_fns[i], data_fns[i])
-        @save save_fns[i] n_obs times_nu airmasses n_ord rvs rvs_σ constant no_tel wavelength_range all_star_s all_tel_s
+        rvs, rvs_σ, constant, no_tel, wavelength_range, wavelength_range_star, all_star_s, all_tel_s = retrieve(n_obs, rv_fns[i], model_fns[i], data_fns[i])
+        @save save_fns[i] n_obs times_nu airmasses n_ord rvs rvs_σ constant no_tel wavelength_range wavelength_range_star all_star_s all_tel_s
     end
 end
