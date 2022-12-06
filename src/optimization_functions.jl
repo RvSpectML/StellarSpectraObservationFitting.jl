@@ -902,6 +902,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 
 			k = total_length(mws)
 			ℓs[i,j] = ℓ(_loss(mws), logdet_Σ, n)
+			if isnan(ℓs[i,j]); ℓs[i,j] = -Inf end
 			aics[i,j] = aic(k, ℓs[i,j])  # nicer_model!() shouldn't affect this but not taking any risks
 			bics[i,j] = bic(k, ℓs[i,j], n)
 
@@ -1136,6 +1137,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 
 	end
 	println("stopped at ($n_tel_cur,$n_star_cur)")
+	# aics[isnan.(aics)] .= Inf
 	best_aic = argmin(aics)
 	println("($(test_n_comp_tel[best_aic[1]]),$(test_n_comp_star[best_aic[2]])) was the best at aic = $(aics[best_aic])")
 	println("best possible aic (k=0, χ²=0) = $(logdet_Σ + n * _log2π)")

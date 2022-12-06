@@ -37,8 +37,8 @@ function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat
     plt = plot_rv(; legend=:bottomright, layout=grid(2, 1, heights=[0.7, 0.3]))
     ervs = inst_rvs .- median(inst_rvs)
     mrvs = model_rvs .- median(model_rvs)
-	scatter!(plt[1], inst_times, ervs; yerror=inst_rvs_σ, msc=0.4*plt_colors[2], label=inst_str * " (std: $(round(std(ervs), digits=3)), σ: $(round(mean(inst_rvs_σ), digits=3)))", alpha = alpha, msw=msw, kwargs...)
-	scatter!(plt[1], times_nu, mrvs; yerror=model_rvs_σ, msc=0.4*plt_colors[1], label="SSOF (std: $(round(std(mrvs), digits=3)), σ: $(round(mean(model_rvs_σ), digits=3)))", alpha = alpha, msw=msw, kwargs...)
+	scatter!(plt[1], inst_times, ervs; yerror=inst_rvs_σ, msc=0.4*plt_colors[1], label=inst_str * " (std: $(round(std(ervs), digits=3)), σ: $(round(mean(inst_rvs_σ), digits=3)))", alpha = alpha, msw=msw, kwargs...)
+	scatter!(plt[1], times_nu, mrvs; yerror=model_rvs_σ, msc=0.4*plt_colors[2], label="SSOF (std: $(round(std(mrvs), digits=3)), σ: $(round(mean(model_rvs_σ), digits=3)))", alpha = alpha, msw=msw, kwargs...)
 
     resids = mrvs - ervs
     scatter!(plt[2], times_nu, resids; c=:black, ylabel="SSOF - " * inst_str * " (m/s)", yerror=sqrt.(model_rvs_σ .^ 2 + inst_rvs_σ .^ 2), alpha = alpha, msw=msw, label="std: $(round(std(resids), digits=3))")
