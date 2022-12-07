@@ -16,7 +16,7 @@ function get_data(data_fn::String; min_pix::Int=800, use_lsf::Bool=true)
 	if sum(all(.!(isinf.(data.var)); dims=2)) < min_pix
 		@error "quitting analysis as there is not enough useful data (<$min_pix pixels used at all times)"
 	end
-	data.var[data.var .== 0] .= Inf
+	data.var[data.var .<= 0] .= Inf
 	if !use_lsf; data = SSOF.GenericData(data) end
 	return data, times_nu, airmasses
 end
