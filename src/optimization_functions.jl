@@ -883,7 +883,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		# copy_dict!(mws.om.reg_tel, default_reg_tel)
 		# copy_dict!(mws.om.reg_star, default_reg_star)
 	end
-	function get_metrics!(_mws::ModelWorkspace, i::Int, j::Int)
+	function get_metrics!(mws::ModelWorkspace, i::Int, j::Int)
 		# for (k, v) in mws.om.reg_tel
 		# 	mws.om.reg_tel[k] = min_reg
 		# end
@@ -891,15 +891,12 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		# 	mws.om.reg_star[k] = min_reg
 		# end
 		try
-			if _mws.d != data
-				improve_model!(_mws; iter=30)
-				mws = typeof(_mws)(copy(_mws.om), data)
-			else
-				mws = _mws
-			end
 			improve_model!(mws; iter=50)
+			if mws.d != data
+				mws = typeof(mws)(copy(mws.om), data)
+				improve_model!(mws; iter=30)
+			end
 			nicer_model!(mws)
-
 			k = total_length(mws)
 			ℓs[i,j] = ℓ(_loss(mws), logdet_Σ, n)
 			if isnan(ℓs[i,j]); ℓs[i,j] = -Inf end
@@ -913,8 +910,8 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 			return mws.om
 		catch err
 			if isa(err, DomainError)
-                nicer_model!(_mws)
-				return _mws.om
+				nicer_model!(mws)
+				return mws.om
             else
                 rethrow()
             end
@@ -1049,14 +1046,18 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		# mws.om.rv .= vec(project_doppler_comp(flux_star .- mws.om.star.lm.μ, calc_doppler_component_RVSKL(mws.om.star.λ, mws.om.star.lm.μ), 1 ./ vars_star))
 		om1 = get_metrics!(mws, 2, 1)
 
+	else
+	
+		om1 = om0
+	
 	end
 
 	j = comp2ind(n_tel_cur, n_star_cur)
-	oms[j...] = om0
 	search_new_tel ? aic_tel = aics[comp2ind(n_tel_cur+1, n_star_cur)...] : aic_tel = Inf
 	# search_new_star ? aic_star = aics[comp2ind(n_tel_cur, n_star_cur+1)...] : aic_star = Inf
 	# println("tel: $aic_tel, star: $aics[j...]")
 	added_tel_better = aic_tel < aics[j...]
+	if added_tel_better; oms[j...] = om0 end
 	n_star_next = n_star_cur
 	n_tel_next = n_tel_cur+added_tel_better
 	added_tel_better ? aic_next = aic_tel : aic_next = aics[j...]

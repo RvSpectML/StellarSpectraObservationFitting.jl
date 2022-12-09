@@ -327,11 +327,30 @@ function snap(y::AbstractMatrix, σ²::AbstractMatrix)
 	snp = Array{Float64}(undef, size(y, 1), size(y, 2))
 	m = isfinite.(σ²)
 	l = size(m, 1)
+	# snp[1, :] = abs.(view(y, 3, :) - 4view(y, 2, :) + 6view(y, 1, :))
+	# snp[2, :] = abs.(view(y, 4, :) - 4view(y, 3, :) + 6view(y, 2, :) - 4view(y, 1, :))
+	# snp[end-1, :] = abs.(-4view(y, l, :) + 6view(y, l-1, :) - 4view(y, l-2, :) + view(y, l-3, :))
+	# snp[end, :] = abs.(6view(y, l, :) - 4view(y, l-1, :) + view(y, l-2, :))
 	snp[1:2, :] .= 0
 	snp[end-1:end, :] .= 0
 	snp[3:end-2, :] .= abs.(view(y, 5:l, :) - 4view(y, 4:(l-1), :) + 6view(y, 3:(l-2), :) - 4view(y, 2:(l-3), :) + view(y, 1:(l-4), :)) .* view(m, 5:l, :) .* view(m, 4:(l-1), :) .* view(m, 2:(l-3), :) .* view(m, 1:(l-4), :)
 	# snp[.!m] .= 0
 	snp[all(.!m; dims=2), :] .= 0
+	return snp
+end
+function _snap!(snp::AbstractVector, y::AbstractVector; def_val::Real=1.)
+	l = length(snp)
+	@assert length(y) == l
+	snp[1] = abs.(y[3] - 4y[2] + 6y[1] - 4def_val + def_val)
+	snp[2] = abs.(y[4] - 4y[3] + 6y[2] - 4y[1] + def_val)
+	snp[end-1] = abs.(def_val - 4y[l] + 6y[l-1] - 4y[l-2] + y[l-3])
+	snp[end] = abs.(def_val - 4def_val + 6y[l] - 4y[l-1] + y[l-2])
+	snp[3:end-2] .= abs.(view(y, 5:l) - 4view(y, 4:(l-1)) + 6view(y, 3:(l-2)) - 4view(y, 2:(l-3)) + view(y, 1:(l-4)))
+	return snp
+end
+function _snap(y::AbstractVector; kwargs...)
+	snp = Array{Float64}(undef, length(y))
+	_snap!(snp, y; kwargs...)
 	return snp
 end
 function bad_pixel_flagger(y::AbstractMatrix, σ²::AbstractMatrix; prop::Real=.001, thres::Real=8)

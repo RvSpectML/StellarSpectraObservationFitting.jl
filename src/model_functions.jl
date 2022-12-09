@@ -767,7 +767,7 @@ function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix
 		gpn_μ = mean.(gpn) .+ gp_mean
 		gpd_μ = mean.(gpd) .+ gp_mean
 		fluxes[:, i] .= gpn_μ ./ gpd_μ
-		if ignore_model_uncertainty
+		if !ignore_model_uncertainty
 			vars[:, i] .= (var.(gpn) ./ (gpd_μ .^2)) + (var.(gpd) .* (gpn_μ .^ 2) ./ (gpd_μ .^4))
 		else
 			vars[:, i] .= var.(gpn) ./ (gpd_μ .^2)
