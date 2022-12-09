@@ -56,7 +56,7 @@ model = SSOFU.calculate_initial_model(data, "NEID", desired_order, star, times_n
 	dpca=dpca, log_lm=log_lm, log_λ_gp_star=1/SSOF.SOAP_gp_params.λ,
 	# log_λ_gp_tel=1/110000,
 	log_λ_gp_tel=1/SSOFU.neid_neid_temporal_gp_lsf_λ(desired_order),
-	careful_first_step=true, speed_up=true)
+	careful_first_step=true, speed_up=false)
 if all(isone.(model.tel.lm.μ)) && !SSOF.is_time_variable(model.tel); opt = "frozen-tel" end
 mws = SSOFU.create_workspace(model, data, opt)
 mkpath(base_path*"noreg/")
@@ -66,8 +66,8 @@ if !mws.om.metadata[:todo][:reg_improved]
 		display_plt=interactive, df_act=df_act);
 end
 
-SSOFU.improve_regularization!(mws; save_fn=save_path, careful_first_step=true, speed_up=true)
-if !mws.om.metadata[:todo][:err_estimated]; SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path, iter=500, verbose=true, careful_first_step=true, speed_up=true) end
+SSOFU.improve_regularization!(mws; save_fn=save_path, careful_first_step=true, speed_up=false)
+if !mws.om.metadata[:todo][:err_estimated]; SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path, iter=500, verbose=true, careful_first_step=true, speed_up=false) end
 rvs, rv_errors, tel_errors, star_errors = SSOFU.estimate_σ_curvature(mws; save_fn=base_path * "results_curv.jld2", save_model_fn=save_path, recalc=recalc, multithread=false)
 mws.om.metadata[:todo][:err_estimated] = false
 rvs_b, rv_errors_b, tel_s_b, tel_errors_b, star_s_b, star_errors_b, rv_holder, tel_holder, star_holder = SSOFU.estimate_σ_bootstrap(mws; save_fn=base_path * "results_boot.jld2", save_model_fn=save_path, recalc_mean=true, recalc=recalc, return_holders=true)
