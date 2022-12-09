@@ -474,8 +474,9 @@ FrozenTelWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
 FrozenTelWorkspace(om::OrderModel, d::Data; kwargs...) =
 	FrozenTelWorkspace(Output(om, d), om, d; kwargs...)
 
-function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, verbose::Bool=_verbose_def, shift_scores::Bool=true, μ_positive::Bool=true, winsor::Bool=true, kwargs...)
+function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, verbose::Bool=_verbose_def, shift_scores::Bool=true, μ_positive::Bool=true, winsor::Bool=true, rm_doppler::Bool=true, kwargs...)
 
+	if rm_doppler; dop_comp_holder = Array{Float64}(undef, length(mws.om.star.lm.μ)) end
 	update_interpolation_locations!(mws)
 
     if ignore_regularization
@@ -496,6 +497,12 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
 		if μ_positive
 			mws.om.tel.lm.μ[mws.om.tel.lm.μ .< 1e-10] .= 1e-10
 			mws.om.star.lm.μ[mws.om.star.lm.μ .< 1e-10] .= 1e-10
+		end
+		if rm_doppler && is_time_variable(mws.om.star.lm)  
+			dop_comp_holder[:] = calc_doppler_component_RVSKL(mws.om.star.λ, mws.om.star.lm.μ)
+			for i in axes(mws.om.star.lm.M, 2)
+				_reorthogonalize_no_renorm!(view(mws.om.star.lm.M, :, i), dop_comp_holder)
+			end
 		end
 
 		if as.iter % 10 == 9
