@@ -61,14 +61,16 @@ if all(isone.(model.tel.lm.μ)) && !SSOF.is_time_variable(model.tel); opt = "fro
 mws = SSOFU.create_workspace(model, data, opt)
 mkpath(base_path*"noreg/")
 df_act = SSOFU.neid_activity_indicators(pipeline_path, data)
+if !mws.om.metadata[:todo][:reg_improved]
 SSOFU.neid_plots(mws, airmasses, times_nu, SSOF.rvs(mws.om), zeros(length(times_nu)), star, base_path*"noreg/", pipeline_path, desired_order;
 	display_plt=interactive, df_act=df_act);
+end
 
 SSOFU.improve_regularization!(mws; save_fn=save_path, careful_first_step=false)
 if !mws.om.metadata[:todo][:err_estimated]; SSOFU.improve_model!(mws, airmasses, times_nu; show_plot=interactive, save_fn=save_path, iter=500, verbose=true, careful_first_step=false) end
-rvs, rv_errors, tel_errors, star_errors = SSOFU.estimate_σ_curvature(mws; save_fn=base_path * "results_curv.jld2", recalc=recalc, multithread=false)
+rvs, rv_errors, tel_errors, star_errors = SSOFU.estimate_σ_curvature(mws; save_fn=base_path * "results_curv.jld2", save_model_fn=save_path, recalc=recalc, multithread=false)
 mws.om.metadata[:todo][:err_estimated] = false
-rvs_b, rv_errors_b, tel_s_b, tel_errors_b, star_s_b, star_errors_b, rv_holder, tel_holder, star_holder = SSOFU.estimate_σ_bootstrap(mws; save_fn=base_path * "results_boot.jld2", recalc_mean=true, recalc=recalc, return_holders=true)
+rvs_b, rv_errors_b, tel_s_b, tel_errors_b, star_s_b, star_errors_b, rv_holder, tel_holder, star_holder = SSOFU.estimate_σ_bootstrap(mws; save_fn=base_path * "results_boot.jld2", save_model_fn=save_path, recalc_mean=true, recalc=recalc, return_holders=true)
 
 ## Plots
 SSOFU.neid_plots(mws, airmasses, times_nu, rvs_b, rv_errors_b, star, base_path, pipeline_path, desired_order;

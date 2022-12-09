@@ -263,10 +263,11 @@ function _downsize_model(mws::SSOF.ModelWorkspace, n_comps::Vector{<:Int}; kwarg
 end
 
 
-function estimate_σ_curvature(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", kwargs...)
+function estimate_σ_curvature(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", save_model_fn::String="", kwargs...)
 	save = save_fn!=""
+	save_model = save_model_fn==""
 	model = mws.om
-	if recalc || !model.metadata[:todo][:err_estimated] # 25 mins
+	if recalc || !model.metadata[:todo][:err_estimated] #|| !isfile(save_fn)
 	    mws.d.var[mws.d.var.==Inf] .= 0
 	    data_noise = sqrt.(mws.d.var)
 	    mws.d.var[mws.d.var.==0] .= Inf
@@ -299,6 +300,7 @@ function estimate_σ_curvature(mws::SSOF.ModelWorkspace; recalc::Bool=false, sav
 
 		model.metadata[:todo][:err_estimated] = true
 	    if save; @save save_fn rvs rvs_σ tel_s_σ star_s_σ end
+		if save_model; @save save_model_fn model end
 		return rvs, rvs_σ, tel_s_σ, star_s_σ
 	else
 		println("loading σs")
@@ -408,9 +410,10 @@ function estimate_σ_bootstrap_helper!(rv_holder::AbstractMatrix, tel_holder, st
 	if (verbose && i%10==0); println("done with $i/$n bootstraps") end
 end
 
-function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", n::Int=50, return_holders::Bool=false, recalc_mean::Bool=false, multithread::Bool=nthreads() > 3, verbose::Bool=true)
+function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, save_fn::String="", save_model_fn::String="", n::Int=50, return_holders::Bool=false, recalc_mean::Bool=false, multithread::Bool=nthreads() > 3, verbose::Bool=true)
 	save = save_fn!=""
-	if recalc || !mws.om.metadata[:todo][:err_estimated] # 25 mins
+	save_model = save_model_fn==""
+	if recalc || !mws.om.metadata[:todo][:err_estimated] #|| !isfile(save_fn)
 	    mws.d.var[mws.d.var.==Inf] .= 0
 	    data_noise = sqrt.(mws.d.var)
 	    mws.d.var[mws.d.var.==0] .= Inf
@@ -462,6 +465,7 @@ function estimate_σ_bootstrap(mws::SSOF.ModelWorkspace; recalc::Bool=false, sav
 			star_s_σ = nothing
 		end
 		mws.om.metadata[:todo][:err_estimated] = true
+		if save_model; @save save_model_fn model end
 	    if save; @save save_fn rvs rvs_σ tel_s tel_s_σ star_s star_s_σ end
 		if return_holders
 			return rvs, rvs_σ, tel_s, tel_s_σ, star_s, star_s_σ, rv_holder, tel_holder, star_holder
@@ -636,7 +640,7 @@ function how_many_comps(str::String, recalc::Bool, desired_order::Int)
 		println("using $n_comp_tel telluric components and $n_comp_star stellar components from " * str)
 
 	# they passed a proposed amount of parameters
-elseif length(str) > 0 && str[1] == '[' && str[end] == ']'
+	elseif length(str) > 0 && str[1] == '[' && str[end] == ']'
 		matches = [parse(Int64, t.match) for t in eachmatch(r"-?[0-9]+", str)]
 		@assert length(matches) == 2 "should only pass things of the form [n_comps_tel::Int, n_comps_star::Int]"
 		n_comp_tel = matches[1]
@@ -644,7 +648,7 @@ elseif length(str) > 0 && str[1] == '[' && str[end] == ']'
 		# length(matches) < 3 ? better_model = 1 : better_model = matches[3]
 		# @assert 0 < better_model < 3
 		use_custom_n_comp = true
-		recalc = true
+		# recalc = true
 		println("using $n_comp_tel telluric components and $n_comp_star stellar components")
 
 	# using the defaults

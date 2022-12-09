@@ -1133,6 +1133,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		if (n_tel_cur != n_tel_next) || (n_star_cur != n_star_next)
 			println("n_comp: ($n_tel_cur,$n_star_cur) -> ($n_tel_next,$n_star_next)")
 			println("aic   : $(aics[comp2ind(n_tel_cur, n_star_cur)...]) -> $(aics[comp2ind(n_tel_next, n_star_next)...])")
+			println("rv std: $(rv_stds[comp2ind(n_tel_cur, n_star_cur)...]) -> $(rv_stds[comp2ind(n_tel_next, n_star_next)...])")
 		end
 		n_tel_cur, n_star_cur = n_tel_next, n_star_next
 		search_new_tel = n_tel_cur+1 <= max_n_tel
