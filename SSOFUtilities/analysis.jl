@@ -139,7 +139,7 @@ function create_workspace(model, data, opt::String)
 	return mws
 end
 
-function improve_regularization!(mws::SSOF.ModelWorkspace; redo::Bool=false, verbose::Bool=true, testing_ratio::Real=0.33, save_fn::String="", kwargs...)
+function improve_regularization!(mws::SSOF.ModelWorkspace; redo::Bool=false, verbose::Bool=true, testing_ratio::Real=0.33, save_fn::String="", careful_first_step::Bool=false, kwargs...)
 
 	save = save_fn!=""
 
@@ -148,7 +148,7 @@ function improve_regularization!(mws::SSOF.ModelWorkspace; redo::Bool=false, ver
 		@assert 0 < testing_ratio < 1
 		n_obs = size(mws.d.flux, 2)
 
-	    SSOF.train_OrderModel!(mws; verbose=verbose, ignore_regularization=true)  # 45s
+	    SSOF.train_OrderModel!(mws; verbose=verbose, ignore_regularization=true, careful_first_step=careful_first_step)  # 45s
 	    n_obs_test = Int(round(testing_ratio * n_obs))
 	    test_start_ind = max(1, Int(round(rand() * (n_obs - n_obs_test))))
 	    testing_inds = test_start_ind:test_start_ind+n_obs_test-1

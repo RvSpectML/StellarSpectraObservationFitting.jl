@@ -261,12 +261,16 @@ function iterate!(θs::Vector{<:AbstractArray}, ∇θs::Vector{<:AbstractArray},
 end
 function iterate!(θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt::Adam)
 	α=opt.α; β1=opt.β1; β2=opt.β2; ϵ=opt.ϵ; β1_acc=opt.β1_acc; β2_acc=opt.β2_acc; m=opt.m; v=opt.v
+    one_minus_β1 = 1.0 - β1
+	one_minus_β2 = 1.0 - β2
+	one_minus_β1_acc = 1 - β1_acc
+	one_minus_β2_acc = 1 - β2_acc
     # the matrix and dotted version is slower
     @inbounds for n in eachindex(θ)
-        m[n] = β1 * m[n] + (1.0 - β1) * ∇θ[n]
-        v[n] = β2 * v[n] + (1.0 - β2) * ∇θ[n]^2
-        m̂ = m[n] / (1 - β1_acc)
-        v̂ = v[n] / (1 - β2_acc)
+        m[n] = β1 * m[n] + one_minus_β1 * ∇θ[n]
+        v[n] = β2 * v[n] + one_minus_β2 * ∇θ[n]^2
+        m̂ = m[n] / one_minus_β1_acc
+        v̂ = v[n] / one_minus_β2_acc
         θ[n] -= α * m̂ / (sqrt(v̂) + ϵ)
     end
 	β1_acc *= β1
@@ -311,22 +315,61 @@ function AdamSubWorkspace(θ, l::Function)
 	return AdamSubWorkspace(θ, Adams(θ), AdamState(), l, gl)
 end
 
-function update!(aws::AdamSubWorkspace)
+function update!(aws::AdamSubWorkspace; careful_first_step::Bool=false)
     val, Δ = aws.gl(aws.θ)
 	Δ = only(Δ)
 	AdamState!(aws.as, val.val, Δ)
+	if careful_first_step && aws.as.iter==1
+		first_iterate!(aws.l, val.val, aws.θ, aws.θ, Δ, aws.opt)
+	else
     iterate!(aws.θ, Δ, aws.opt)
 end
+end
+
+
+function first_iterate!(l::Function, l0::Real, θs_unchanging::Vector{<:AbstractArray}, θs::Vector{<:AbstractArray}, ∇θs::Vector{<:AbstractArray}, opts::Vector)
+    @assert length(θs) == length(∇θs) == length(opts)
+	@inbounds for i in eachindex(θs)
+		first_iterate!(l, l0, θs_unchanging, θs[i], ∇θs[i], opts[i])
+    end
+end
+function first_iterate!(l::Function, l0::Real, θs::Vector{<:AbstractArray}, θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt::Adam)
+	β1=opt.β1; β2=opt.β2; ϵ=opt.ϵ; β1_acc=opt.β1_acc; β2_acc=opt.β2_acc; m=opt.m; v=opt.v
+	one_minus_β1 = 1.0 - β1
+	one_minus_β2 = 1.0 - β2
+	one_minus_β1_acc = 1 - β1_acc
+	one_minus_β2_acc = 1 - β2_acc
+    # the matrix and dotted version is slower
+	θ_step = Array{Float64}(undef, size(m))
+    @inbounds for n in eachindex(θ)
+        m[n] = β1 * m[n] + one_minus_β1 * ∇θ[n]
+        v[n] = β2 * v[n] + one_minus_β2 * ∇θ[n]^2
+        m̂ = m[n] / one_minus_β1_acc
+        v̂ = v[n] / one_minus_β2_acc
+        θ_step[n] = m̂ / (sqrt(v̂) + ϵ)
+    end
+	β1_acc *= β1
+	β2_acc *= β2
+	θ .-= opt.α .* θ_step
+	l1 = l(θs)
+	while l1 > l0
+		opt.α /= 2
+		θ .+= opt.α * θ_step
+		l1 = l(θs)
+	end
+	# TODO: add a way to revert back to the original α afterwards? Basically I'm worried that we are consigning ourselves to whatever minimum we started closest too
+end
+
 
 function check_converged(as::AdamState, f_reltol::Real, g_reltol::Real, g_L∞tol::Real)
 	as.ℓ > 0 ? δ_ℓ = as.δ_ℓ : δ_ℓ = 1 / as.δ_ℓ  # further reductions in negative cost functions are good!
 	return ((δ_ℓ > (1 - f_reltol)) && (max(as.δ_L2_Δ,1/as.δ_L2_Δ) < (1+abs(g_reltol)))) || (as.L∞_Δ < g_L∞tol)
 end
 check_converged(as::AdamState, iter::Int, f_reltol::Real, g_reltol::Real, g_L∞tol::Real) = (as.iter > iter) || check_converged(as, f_reltol, g_reltol, g_L∞tol)
-function train_SubModel!(aws::AdamSubWorkspace; iter=_iter_def, f_reltol = _f_reltol_def, g_reltol = _g_reltol_def, g_L∞tol = _g_L∞tol_def, cb::Function=(as::AdamState)->(), kwargs...)
+function train_SubModel!(aws::AdamSubWorkspace; iter=_iter_def, f_reltol = _f_reltol_def, g_reltol = _g_reltol_def, g_L∞tol = _g_L∞tol_def, cb::Function=(as::AdamState)->(), careful_first_step::Bool=false, kwargs...)
 	converged = false  # check_converged(aws.as, iter, f_tol, g_tol)
 	while !converged
-		update!(aws)
+		update!(aws; careful_first_step=careful_first_step)
 		cb(aws.as)
 		converged = check_converged(aws.as, iter, f_reltol, g_reltol, g_L∞tol)
 	end
@@ -610,7 +653,7 @@ function optim_cb_f(; verbose::Bool=true)
     end
 end
 
-function train_OrderModel!(ow::OptimTelStarWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, train_telstar::Bool=true, ignore_regularization::Bool=false, kwargs...)
+function train_OrderModel!(ow::OptimTelStarWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, train_telstar::Bool=true, ignore_regularization::Bool=false, μ_positive::Bool=false, careful_first_step::Bool=false, kwargs...)
     optim_cb = optim_cb_f(; verbose=verbose)
 
     if ignore_regularization
@@ -656,7 +699,7 @@ function train_OrderModel!(ow::OptimTelStarWorkspace; verbose::Bool=_verbose_def
     end
     return result_telstar, result_rv
 end
-function train_OrderModel!(ow::OptimTotalWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, ignore_regularization::Bool=false, μ_positive::Bool=false, kwargs...)
+function train_OrderModel!(ow::OptimTotalWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, ignore_regularization::Bool=false, μ_positive::Bool=false, careful_first_step::Bool=false,  kwargs...)
     optim_cb = optim_cb_f(; verbose=verbose)
 
     if ignore_regularization
@@ -725,7 +768,7 @@ train_rvs_optim!(ow::OptimTelStarWorkspace, optim_cb::Function; kwargs...) =
 		train_rvs_optim!(ow.rv, ow.om.rv, ow.om.star, optim_cb; kwargs...) :
 		train_rvs_optim!(ow.rv, ow.om.rv, optim_cb; kwargs...)
 
-function finalize_scores_setup(mws::ModelWorkspace; verbose::Bool=_verbose_def, f_tol::Real=_f_reltol_def_s, g_tol::Real=_g_L∞tol_def_s, kwargs...)
+function finalize_scores_setup(mws::ModelWorkspace; verbose::Bool=_verbose_def, f_tol::Real=_f_reltol_def_s, g_tol::Real=_g_L∞tol_def_s, careful_first_step::Bool=false, kwargs...)
 	if is_time_variable(mws.om.tel) || is_time_variable(mws.om.star)
 		mws_s = OptimTotalWorkspace(mws.om, mws.d; only_s=true)  # does not converge reliably
 		# mws_s = OptimTelStarWorkspace(mws.om, mws.d; only_s=true)
@@ -783,7 +826,7 @@ update_interpolation_locations!(mws::ModelWorkspace) = update_interpolation_loca
 function calculate_initial_model(data::Data, instrument::String, desired_order::Int, star::String, times::AbstractVector;
 	μ_min::Real=0, μ_max::Real=Inf, use_mean::Bool=true, stop_early::Bool=false,
 	remove_reciprocal_continuum::Bool=false, return_full_path::Bool=false,
-	max_n_tel::Int=5, max_n_star::Int=5, use_all_comps::Bool=false, kwargs...)
+	max_n_tel::Int=5, max_n_star::Int=5, use_all_comps::Bool=false, careful_first_step::Bool=false, kwargs...)
 
 	d = GenericData(data)
 
@@ -872,7 +915,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	end
 
 	function improve_model!(mws::ModelWorkspace; kwargs...)
-		train_OrderModel!(mws; verbose=false, ignore_regularization=true, μ_positive=true, kwargs...)  # 120s
+		train_OrderModel!(mws; verbose=false, ignore_regularization=true, μ_positive=true, careful_first_step=careful_first_step, kwargs...)  # 120s
 		finalize_scores!(mws; verbose=false, ignore_regularization=true, μ_positive=true, kwargs...)
 	end
 	function nicer_model!(mws::ModelWorkspace)
