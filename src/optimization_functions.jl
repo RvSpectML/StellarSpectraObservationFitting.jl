@@ -265,7 +265,7 @@ function iterate!(θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt
 	one_minus_β2 = 1.0 - β2
 	one_minus_β1_acc = 1 - β1_acc
 	one_minus_β2_acc = 1 - β2_acc
-    # the matrix and dotted version is slower
+	# the matrix and dotted version is slower
     @inbounds for n in eachindex(θ)
         m[n] = β1 * m[n] + one_minus_β1 * ∇θ[n]
         v[n] = β2 * v[n] + one_minus_β2 * ∇θ[n]^2
@@ -322,8 +322,8 @@ function update!(aws::AdamSubWorkspace; careful_first_step::Bool=false)
 	if careful_first_step && aws.as.iter==1
 		first_iterate!(aws.l, val.val, aws.θ, aws.θ, Δ, aws.opt)
 	else
-    iterate!(aws.θ, Δ, aws.opt)
-end
+    	iterate!(aws.θ, Δ, aws.opt)
+	end
 end
 
 
@@ -955,9 +955,9 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 			if isa(err, DomainError)
 				nicer_model!(mws)
 				return mws.om
-            else
-                rethrow()
-            end
+			else
+				rethrow()
+			end
 		end
 	end
 
@@ -1004,21 +1004,36 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	# end
 	om2 = om0
 
-	function interp_helper!(flux_to::AbstractMatrix, vars_to::AbstractMatrix, log_λ_to::AbstractVector,
-		flux_from::AbstractMatrix, vars_from::AbstractMatrix, log_λ_from::AbstractMatrix,
-		log_λ_data::AbstractMatrix; mask_extrema::Bool=true, keep_data_mask::Bool=true, data_var::AbstractMatrix=d.var)
-		vars_from .= SOAP_gp_var
-		_spectra_interp_gp_div_gp!(flux_to, vars_to, log_λ_to, d.flux, data_var, log_λ_data, flux_from, vars_from, log_λ_from; keep_mask=keep_data_mask, ignore_model_uncertainty=true)
+	# function interp_helper!(flux_to::AbstractMatrix, vars_to::AbstractMatrix, log_λ_to::AbstractVector,
+	# 	flux_from::AbstractMatrix, vars_from::AbstractMatrix, log_λ_from::AbstractMatrix,
+	# 	log_λ_data::AbstractMatrix; mask_extrema::Bool=true, keep_data_mask::Bool=true)
+	# 	vars_from .= SOAP_gp_var
+	# 	_spectra_interp_gp_div_gp!(flux_to, vars_to, log_λ_to, d.flux, d.var, log_λ_data, flux_from, vars_from, log_λ_from; keep_mask=keep_data_mask, ignore_model_uncertainty=true)
+	# 	if mask_extrema
+	# 		mask_low_pixels!(flux_to, vars_to)
+	# 		mask_high_pixels!(flux_to, vars_to)
+	# 	end
+	# end
+	# interp_to_star!(; kwargs...) = interp_helper!(flux_star, vars_star, om.star.log_λ,
+	# 	flux_tel, vars_tel, tel_log_λ_star,
+	# 	d.log_λ_star; kwargs...)
+	# interp_to_tel!(; kwargs...) = interp_helper!(flux_tel, vars_tel, om.tel.log_λ,
+	# 	flux_star, vars_star, star_log_λ_tel,
+	# 	d.log_λ_obs; kwargs...)
+	function interp_helper2!(flux_to::AbstractMatrix, vars_to::AbstractMatrix, log_λ_to::AbstractVector,
+		flux_from::AbstractMatrix,
+		log_λ_data::AbstractMatrix; mask_extrema::Bool=true, keep_data_mask::Bool=true)
+		_spectra_interp_gp!(flux_to, vars_to, log_λ_to, d.flux ./ flux_from, d.var ./ (flux_from .^ 2), log_λ_data; gp_mean=1., keep_mask=keep_data_mask)
 		if mask_extrema
 			mask_low_pixels!(flux_to, vars_to)
 			mask_high_pixels!(flux_to, vars_to)
 		end
 	end
-	interp_to_star!(; kwargs...) = interp_helper!(flux_star, vars_star, om.star.log_λ,
-		flux_tel, vars_tel, tel_log_λ_star,
+	interp_to_star!(om::OrderModel; kwargs...) = interp_helper2!(flux_star, vars_star, om.star.log_λ,
+		tel_model(om),
 		d.log_λ_star; kwargs...)
-	interp_to_tel!(x; kwargs...) = interp_helper!(flux_tel, vars_tel, om.tel.log_λ,
-		flux_star, vars_star, x,
+	interp_to_tel!(om::OrderModel; kwargs...) = interp_helper2!(flux_tel, vars_tel, om.tel.log_λ,
+		star_model(om),
 		d.log_λ_obs; kwargs...)
 
 	if search_new_tel
@@ -1059,21 +1074,21 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 			oms[2,1].star.lm.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
 
 			# get telluric template after dividing out the partial stellar template
-			flux_star .= oms[2,1].star.lm.μ
-			interp_to_tel!(star_log_λ_tel; mask_extrema=false)
+			# flux_star .= oms[2,1].star.lm.μ
+			interp_to_tel!(oms[2,1]; mask_extrema=false)
 			oms[2,1].tel.lm.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
 
 			# get stellar template after dividing out full telluric template
-			flux_tel .= oms[2,1].tel.lm.μ
-			interp_to_star!(; mask_extrema=false)
+			# flux_tel .= oms[2,1].tel.lm.μ
+			interp_to_star!(oms[2,1]; mask_extrema=false)
 			oms[2,1].star.lm.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
 
 		else
 
 			# get telluric template after diving out full stellar template we already found
 			fill_OrderModel!(oms[2,1], oms[1,1], 0:0, 0:0)
-			flux_star .= oms[2,1].star.lm.μ
-			interp_to_tel!(star_log_λ_tel; mask_extrema=false)
+			# flux_star .= oms[2,1].star.lm.μ
+			interp_to_tel!(oms[2,1]; mask_extrema=false)
 			oms[2,1].tel.lm.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
 
 		end
@@ -1130,8 +1145,8 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 			oms[i...] = downsize(om, n_tel_cur+1, n_star_cur)
 			fill_OrderModel!(oms[i...], oms[j...], 1:n_tel_cur, 1:n_star_cur)
 			oms[i...].rv .= 0  # the rv is a small effect that we could just be getting wrong
-			flux_star .= _eval_lm(oms[i...].star.lm)
-			interp_to_tel!(star_log_λ_tel)# .+ rv_to_D(oms[i...].rv)')  # the rv is a small effect that we could just be getting wrong
+			# flux_star .= _eval_lm(oms[i...].star.lm)
+			interp_to_tel!(oms[i...])# .+ rv_to_D(oms[i...].rv)')  # the rv is a small effect that we could just be getting wrong
 			if n_tel_cur + 1 > 0
 				EMPCA!(oms[i...].tel.lm, flux_tel, 1 ./ vars_tel; inds=(n_tel_cur+1):(n_tel_cur+1))
 			else
@@ -1156,8 +1171,8 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 				# remove_reciprocal_continuum!(oms[i...], flux_star, vars_star, flux_tel, vars_tel)
 				mws = FrozenTelWorkspace(oms[i...], d)
 			else
-				flux_tel .= _eval_lm(oms[i...].tel.lm)
-				interp_to_star!()
+				# flux_tel .= _eval_lm(oms[i...].tel.lm)
+				interp_to_star!(oms[i...])
 				# oms[i...].rv .=
 				DEMPCA!(oms[i...].star.lm, flux_star, 1 ./ vars_star, dop_comp; save_doppler_in_M1=false, inds=(n_star_cur+1):(n_star_cur+1), extra_vec=dop_comp)
 				# remove_reciprocal_continuum!(oms[i...], flux_star, vars_star, flux_tel, vars_tel)
@@ -1178,7 +1193,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		n_tel_next = n_tel_cur+added_tel_better
 		n_star_next = n_star_cur+1-added_tel_better
 		add_comp = (isfinite(aic_tel) || isfinite(aic_star)) && (!stop_early || aic_next < aics[j...]) && (search_new_tel || search_new_star)
-
+	
 	end
 	println("stopped at ($n_tel_cur,$n_star_cur)")
 	# aics[isnan.(aics)] .= Inf
