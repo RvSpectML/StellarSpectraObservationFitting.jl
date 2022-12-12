@@ -345,7 +345,7 @@ function data_usage_plot(d::SSOF.Data, bad_inst::Vector, bad_high::Vector, bad_s
 	pixs = axes(d.flux, 1)
 
 	yli = (-.05, 1.5)
-	plt = _plot(; title="Data usage", xlabel="Pixel #", ylabel="Normalized Flux", legend=:outerright, ylims=yli)
+	plt = _plot(; title="Data Usage", xlabel="Pixel #", ylabel="Normalized Flux", legend=:outerright, ylims=yli)
 	if sum(always_used) > 0; gated_plot!(plt, scatter!, view(pixs, always_used), view(mean_flux, always_used), yli, base_color, 1, "Used at all times", 1) end
 
 	bads_str = ["Instrumental", "High", "Snappy", "Low SNR", "Isolated", "By Eye"]
@@ -358,7 +358,7 @@ function data_usage_plot(d::SSOF.Data, bad_inst::Vector, bad_high::Vector, bad_s
 		if length(bad) > 0; gated_plot!(plt, scatter!, bad, view(mean_flux, bad), yli, plt_colors[i+1], 0.4, bad_str, s) end
 	end
 
-	if sum(sometimes_used) > 0; gated_plot!(plt, scatter!, view(pixs, sometimes_used), view(mean_flux, sometimes_used), yli, plt_colors[1], 0.6, "Used sometimes", 1) end
+	if sum(sometimes_used) > 0; gated_plot!(plt, scatter!, view(pixs, sometimes_used), view(mean_flux, sometimes_used), yli, plt_colors[1], 0.6, "Sometimes Used", 1) end
 	if sum(never_used) > 0; gated_plot!(plt, scatter!, view(pixs, never_used), view(mean_flux, never_used), yli, :red, 1, "Never used", 1) end
 	if save_path != ""; png(plt, save_path * "data_usage.png") end
 	return plt
