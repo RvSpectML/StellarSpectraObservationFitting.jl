@@ -543,7 +543,11 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
 			mws.om.star.lm.μ[mws.om.star.lm.μ .< 1e-10] .= 1e-10
 		end
 		if rm_doppler && is_time_variable(mws.om.star.lm)  
+			if mws.om.star.lm.log
+				dop_comp_holder[:] = calc_doppler_component_RVSKL_log(mws.om.star.λ, mws.om.star.lm.μ)
+			else
 			dop_comp_holder[:] = calc_doppler_component_RVSKL(mws.om.star.λ, mws.om.star.lm.μ)
+			end
 			for i in axes(mws.om.star.lm.M, 2)
 				_reorthogonalize_no_renorm!(view(mws.om.star.lm.M, :, i), dop_comp_holder)
 			end

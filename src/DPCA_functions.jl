@@ -5,7 +5,7 @@ using LinearAlgebra
 modified code shamelessly stolen from RvSpectraKitLearn.jl/src/deriv_spectra_simple.jl
 Estimate the derivatives of a vector
 """
-function calc_deriv_RVSKL(x::Vector{<:Real})
+function calc_deriv_RVSKL(x::AbstractVector{<:Real})
     @assert length(x)>=3
     dx = similar(x)
     dx[1] = x[2]-x[1]
@@ -37,15 +37,17 @@ modified code shamelessly stolen from RvSpectraKitLearn.jl/src/deriv_spectra_sim
 Function to estimate the derivative(s) of the mean spectrum
 doppler_comp = λ * dF/dλ -> units of flux
 """
-function calc_doppler_component_RVSKL(lambda::Vector{T}, flux::Vector{T}) where {T<:Real}
+function calc_doppler_component_RVSKL(lambda::AbstractVector{T}, flux::Vector{T}) where {T<:Real}
     @assert length(lambda) == length(flux)
 	dlambdadpix = calc_deriv_RVSKL(lambda)
     dfluxdpix = calc_deriv_RVSKL(flux)
     return dfluxdpix .* (lambda ./ dlambdadpix)  # doppler basis
 end
-function calc_doppler_component_RVSKL(lambda::Vector{T}, flux::Matrix{T}, kwargs...) where {T<:Real}
+function calc_doppler_component_RVSKL(lambda::AbstractVector{T}, flux::Matrix{T}, kwargs...) where {T<:Real}
     return calc_doppler_component_RVSKL(lambda, vec(mean(flux, dims=2)), kwargs...)
 end
+calc_doppler_component_RVSKL_log(lambda::AbstractVector{T}, flux::Vector{T}) where {T<:Real} = 
+	calc_doppler_component_RVSKL(lambda, flux) ./ flux
 
 function calc_doppler_component_RVSKL_Flux(lambda::Vector{T}, flux::Vector{T}) where {T<:Real}
     @assert length(lambda) == length(flux)
