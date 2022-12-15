@@ -48,7 +48,11 @@ function calculate_initial_model(data::SSOF.Data, instrument::String, desired_or
 			end
 		end
 
+		if use_custom_n_comp
+			model = oms[end,end]
+		else
 		model = oms[argmin(aics)]
+		end
 
 		if !use_reg
 			SSOF.rm_regularization!(model)

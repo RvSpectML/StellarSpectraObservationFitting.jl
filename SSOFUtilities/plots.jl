@@ -22,7 +22,7 @@ plot_spectrum(; xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux
     _plot(; xlabel=xlabel, ylabel=ylabel, kwargs...)
 plot_rv(; xlabel = "Time (d)", ylabel = "RV (m/s)", kwargs...) =
     _plot(; xlabel=xlabel, ylabel=ylabel, kwargs...)
-plot_scores(; xlabel = "Time (d)", ylabel = "Weights + Const", kwargs...) =
+plot_scores(; xlabel = "Time (d)", ylabel = "Scores + Const", kwargs...) =
     _plot(; xlabel=xlabel, ylabel=ylabel, kwargs...)
 theme(_theme)
 _scatter!(plt::Union{Plots.AbstractPlot,Plots.AbstractLayout}, x::AbstractVecOrMat, y::AbstractVecOrMat; markerstrokewidth::Real=0, kwargs...) = scatter!(plt, x, y; markerstrokewidth=markerstrokewidth, kwargs...)
@@ -30,18 +30,18 @@ _theme == :default ? plt_colors = palette(_theme).colors.colors : plt_colors = P
 
 function rv_legend(label, rvs, times)
 	intra_night = SSOF.intra_night_std(rvs, times; show_warn=false)
-	isinf(intra_night) ? appen = "" : appen = ", intra night std: $(round(intra_night, digits=3))"
-	return label * " RVs, std: $(round(std(rvs), digits=3))" * appen
+	isinf(intra_night) ? appen = "" : appen = ", intra night RMS: $(round(intra_night, digits=3))"
+	return label * " RVs, RMS: $(round(std(rvs), digits=3))" * appen
 end
-function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat{T}, model_rvs_σ::AbstractVecOrMat{T}, inst_times::AbstractVector{T}, inst_rvs::AbstractVector{T}, inst_rvs_σ::AbstractVector{T}; display_plt::Bool=true, inst_str::String="Instrument", msw::Real=0.5, alpha=0.7, kwargs...) where {T<:Real}
-    plt = plot_rv(; legend=:bottomright, layout=grid(2, 1, heights=[0.7, 0.3]))
+function plot_model_rvs(times_nu::AbstractVector{T}, model_rvs::AbstractVecOrMat{T}, model_rvs_σ::AbstractVecOrMat{T}, inst_times::AbstractVector{T}, inst_rvs::AbstractVector{T}, inst_rvs_σ::AbstractVector{T}; display_plt::Bool=true, inst_str::String="Instrument", msw::Real=0.5, alpha=0.7, upper_legend=:bottomright, lower_legend=:bottomright, kwargs...) where {T<:Real}
+    plt = plot_rv(; legend=upper_legend, layout=grid(2, 1, heights=[0.7, 0.3]))
     ervs = inst_rvs .- median(inst_rvs)
     mrvs = model_rvs .- median(model_rvs)
-	scatter!(plt[1], inst_times, ervs; yerror=inst_rvs_σ, msc=0.4*plt_colors[1], label=inst_str * " (std: $(round(std(ervs), digits=3)), σ: $(round(mean(inst_rvs_σ), digits=3)))", alpha = alpha, msw=msw, kwargs...)
-	scatter!(plt[1], times_nu, mrvs; yerror=model_rvs_σ, msc=0.4*plt_colors[2], label="SSOF (std: $(round(std(mrvs), digits=3)), σ: $(round(mean(model_rvs_σ), digits=3)))", alpha = alpha, msw=msw, kwargs...)
+	scatter!(plt[1], inst_times, ervs; yerror=inst_rvs_σ, msc=0.4*plt_colors[1], label=inst_str * " (RMS: $(round(std(ervs), digits=3)), σ: $(round(mean(inst_rvs_σ), digits=3)))", alpha = alpha, msw=msw, kwargs...)
+	scatter!(plt[1], times_nu, mrvs; yerror=model_rvs_σ, msc=0.4*plt_colors[2], label="SSOF (RMS: $(round(std(mrvs), digits=3)), σ: $(round(mean(model_rvs_σ), digits=3)))", alpha = alpha, msw=msw, kwargs...)
 
     resids = mrvs - ervs
-    scatter!(plt[2], times_nu, resids; c=:black, ylabel="SSOF - " * inst_str * " (m/s)", yerror=sqrt.(model_rvs_σ .^ 2 + inst_rvs_σ .^ 2), alpha = alpha, msw=msw, label="std: $(round(std(resids), digits=3))")
+    scatter!(plt[2], times_nu, resids; c=:black, ylabel="SSOF - " * inst_str * " (m/s)", yerror=sqrt.(model_rvs_σ .^ 2 + inst_rvs_σ .^ 2), alpha = alpha, msw=msw, label="RMS: $(round(std(resids), digits=3))", legend=lower_legend)
     if display_plt; display(plt) end
     return plt
 end
@@ -141,7 +141,7 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 			plot_telluric_with_lsf!(plt[1, 1], om, (view(om.tel.lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); d=d, label="Basis $i", color=plt_colors[c_ind])
 
 			scaler = max_s_std / std(view(om.tel.lm.s, i, :) .* norm_M)
-			_label = "Weights $i" * scaler_string(scaler)
+			_label = "Scores $i" * scaler_string(scaler)
 			# weights plot
 			if incl_χ²
 				om.tel.lm.s[i, :] .= 0
@@ -150,7 +150,7 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 				_label *= " (Δχ² = $(round(Δχ²; digits=3)))"
 			end
 			isnothing(tel_errors) ? tel_σ = nothing : tel_σ = view(tel_errors, i, :)
-			scatter!(plt[2, 1], times_nu, (view(om.tel.lm.s, i, :) .* (norm_M * scaler)) .- (shift_s * (i - 1)); yerror=tel_σ, label=_label, color=plt_colors[c_ind], title="Telluric Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, markerstrokewidth=Int(!isnothing(tel_errors))/2, kwargs...)
+			scatter!(plt[2, 1], times_nu, (view(om.tel.lm.s, i, :) .* (norm_M * scaler)) .- (shift_s * (i - 1)); yerror=tel_σ, label=_label, color=plt_colors[c_ind], title="Telluric Model Scores", xlabel = "Time (d)", ylabel = "Scores + Const", legend=:outerright, markerstrokewidth=Int(!isnothing(tel_errors))/2, kwargs...)
 			hline!(plt[2, 1], [-(shift_s * (i - 1))]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
 	    end
 	end
@@ -187,7 +187,7 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 			plot_stellar_with_lsf!(plt[1, n_plots], om, (view(om.star.lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); d=d, label="Basis $i", color=plt_colors[c_ind])
 
 			scaler = max_s_std / std(view(om.star.lm.s, i, :) .* norm_M)
-			_label = "Weights $i" * scaler_string(scaler)
+			_label = "Scores $i" * scaler_string(scaler)
 			# weights plot
 			if incl_χ²
 				om.star.lm.s[i, :] .= 0
@@ -196,7 +196,7 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 				_label *= " (Δχ² = $(round(Δχ²; digits=3)))"
 			end
 			isnothing(star_errors) ? star_σ = nothing : star_σ = view(star_errors, i, :)
-			scatter!(plt[2, n_plots], times_nu, (view(om.star.lm.s, i, :) .* (norm_M * scaler)) .- (shift_s * (i - 1)); yerror=star_σ, label=_label, color=plt_colors[c_ind], title="Stellar Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, markerstrokewidth=Int(!isnothing(star_errors))/2, kwargs...)
+			scatter!(plt[2, n_plots], times_nu, (view(om.star.lm.s, i, :) .* (norm_M * scaler)) .- (shift_s * (i - 1)); yerror=star_σ, label=_label, color=plt_colors[c_ind], title="Stellar Model Scores", xlabel = "Time (d)", ylabel = "Scores + Const", legend=:outerright, markerstrokewidth=Int(!isnothing(star_errors))/2, kwargs...)
 			hline!(plt[2, n_plots], [-shift_s * (i - 1)]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
 		end
 	end
@@ -223,7 +223,7 @@ function plot_model(lm::SSOF.FullLinearModel; λ=eachindex(lm.μ), times=axes(lm
 		plot!(plt[1, 1], λ, (view(lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); label="Basis $i", color=plt_colors[c_ind])
 
 		# weights plot
-		_scatter!(plt[2, 1], times, (view(lm.s, i, :) .* norm_M) .- (shift_s * (i - 1)); label="Weights $i", color=plt_colors[c_ind], title="Model Weights", xlabel = "Time (d)", ylabel = "Weights + Const", legend=:outerright, kwargs...)
+		_scatter!(plt[2, 1], times, (view(lm.s, i, :) .* norm_M) .- (shift_s * (i - 1)); label="Scores $i", color=plt_colors[c_ind], title="Model Scores", xlabel = "Time (d)", ylabel = "Scores + Const", legend=:outerright, kwargs...)
 		hline!(plt[2, 1], [-shift_s * (i - 1)]; label="", color=plt_colors[c_ind], lw=3, alpha=0.4)
 	end
 	if display_plt; display(plt) end
