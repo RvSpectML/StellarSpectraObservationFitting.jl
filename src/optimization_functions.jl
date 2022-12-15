@@ -3,6 +3,7 @@ using ParameterHandling
 using Optim
 using Nabla
 import Base.println
+using DataInterpolations
 
 abstract type ModelWorkspace end
 abstract type AdamWorkspace<:ModelWorkspace end
@@ -1008,6 +1009,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 			return mws.om
 		catch err
 			if isa(err, DomainError)
+				println("hit a domain error while optimizing")
 				nicer_model!(mws)
 				return mws.om
 			else
@@ -1078,7 +1080,23 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	function interp_helper2!(flux_to::AbstractMatrix, vars_to::AbstractMatrix, log_λ_to::AbstractVector,
 		flux_from::AbstractMatrix,
 		log_λ_data::AbstractMatrix; mask_extrema::Bool=true, keep_data_mask::Bool=true)
-		_spectra_interp_gp!(flux_to, vars_to, log_λ_to, d.flux ./ flux_from, d.var ./ (flux_from .^ 2), log_λ_data; gp_mean=1., keep_mask=keep_data_mask)
+		try
+			_spectra_interp_gp!(flux_to, vars_to, log_λ_to, d.flux ./ flux_from, d.var ./ (flux_from .^ 2), log_λ_data; gp_mean=1., keep_mask=keep_data_mask)
+		catch err
+			if isa(err, DomainError)
+				println("was unable to interpolate using a GP from one frame to another, using linear interpolation instead")
+				y = d.flux ./ flux_from
+				v = d.var ./ (flux_from .^ 2)
+				for i in axes(y,2)
+					interpolator1 = LinearInterpolation(view(y, :, i), view(log_λ_data, :, i))
+					flux_to[:, i] = interpolator1.(log_λ_to)
+					interpolator2 = LinearInterpolation(view(v, :, i), view(log_λ_data, :, i))
+					vars_to[:, i] = interpolator2.(log_λ_to)
+				end
+			else
+				rethrow()
+			end
+		end
 		if mask_extrema
 			mask_low_pixels!(flux_to, vars_to)
 			mask_high_pixels!(flux_to, vars_to)
@@ -1258,10 +1276,10 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	println("best possible aic (k=0, χ²=0) = $(logdet_Σ + n * _log2π)")
 
 	if return_full_path
-		return oms, ℓs, aics, bics, rv_stds, rv_stds_intra, comp2ind
+		return oms, ℓs, aics, bics, rv_stds, rv_stds_intra, comp2ind, n_tel_cur, n_star_cur
 	else
 		if use_all_comps
-			return oms[end,end]
+			return oms[comp2ind(n_tel_cur, n_star_cur)...]
 		else
 			return oms[best_aic]
 		end

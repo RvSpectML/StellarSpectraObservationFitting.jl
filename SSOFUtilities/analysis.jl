@@ -29,7 +29,7 @@ function calculate_initial_model(data::SSOF.Data, instrument::String, desired_or
 		println("using saved model at $save_fn")
 		@load save_fn model
 	else
-		oms, ℓs, aics, bics, rv_stds, rv_stds_intra, comp2ind = SSOF.calculate_initial_model(data, instrument, desired_order, star, times;
+		oms, ℓs, aics, bics, rv_stds, rv_stds_intra, comp2ind, n_tel_cur, n_star_cur = SSOF.calculate_initial_model(data, instrument, desired_order, star, times;
 			max_n_tel=n_comp_tel, max_n_star=n_comp_star, use_all_comps=use_custom_n_comp, return_full_path=true, kwargs...)
 
 		# plots
@@ -49,9 +49,9 @@ function calculate_initial_model(data::SSOF.Data, instrument::String, desired_or
 		end
 
 		if use_custom_n_comp
-			model = oms[end,end]
+			model = oms[comp2ind(n_tel_cur, n_star_cur)...]
 		else
-		model = oms[argmin(aics)]
+			model = oms[argmin(aics)]
 		end
 
 		if !use_reg
@@ -61,7 +61,7 @@ function calculate_initial_model(data::SSOF.Data, instrument::String, desired_or
 		if save
 			@save save_fn model
 		end
-		if return_full_path; return oms, ℓs, aics, bics, rv_stds, rv_stds_intra, comp2ind end
+		if return_full_path; return oms, ℓs, aics, bics, rv_stds, rv_stds_intra, comp2ind, n_tel_cur, n_star_cur end
 	end
 	return model
 end
