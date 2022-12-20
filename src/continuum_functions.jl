@@ -353,11 +353,11 @@ function _snap(y::AbstractVector; kwargs...)
 	_snap!(snp, y; kwargs...)
 	return snp
 end
-function bad_pixel_flagger(y::AbstractMatrix, σ²::AbstractMatrix; prop::Real=.001, thres::Real=8)
+function bad_pixel_flagger(y::AbstractMatrix, σ²::AbstractMatrix; prop::Real=.005, thres::Real=8)
 	snp = snap(y, σ²)
 	snp = vec(mean(snp; dims=2))
 	high_snap_pixels = find_modes(snp)
-	return high_snap_pixels[.!outlier_mask(snp[high_snap_pixels]; prop=prop*length(snp)/length(high_snap_pixels), thres=thres)]
+	return high_snap_pixels[.!outlier_mask(snp[high_snap_pixels]; prop=prop, thres=thres)]
 end
 # bad_pixel_flagger(d::Data; kwargs...) = bad_pixel_flagger(d.flux, d.var; kwargs...)
 function mask_bad_pixel!(y::AbstractMatrix, σ²::AbstractMatrix, log_λ_star::AbstractMatrix, log_λ_star_bounds::AbstractMatrix; padding::Int=2, include_bary_shifts::Bool=false, verbose::Bool=true, bad_pixels=nothing, kwargs...)
