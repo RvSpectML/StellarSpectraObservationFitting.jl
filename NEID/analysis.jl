@@ -13,9 +13,11 @@ using DataFrames, CSV
 
 ## Setting up necessary variables
 
-stars = ["10700", "26965", "22049", "3651", "95735", "2021/12/19", "2021/12/20", "2021/12/23"]
+stars = ["26965", "3651", "Barnard"]
+stars_str = ["HD 26965", "HD 3651", "Barnard's Star"]
 star_choice = SSOF.parse_args(1, Int, 2)
 star = stars[star_choice]
+star_str = stars_str[star_ind]
 solar = star_choice > 5
 interactive = length(ARGS) == 0
 if !interactive; ENV["GKSwstype"] = "100" end
@@ -62,8 +64,8 @@ mws = SSOFU.create_workspace(model, data, opt)
 mkpath(base_path*"noreg/")
 df_act = SSOFU.neid_activity_indicators(pipeline_path, data)
 if !mws.om.metadata[:todo][:reg_improved]
-	SSOFU.neid_plots(mws, airmasses, times_nu, SSOF.rvs(mws.om), zeros(length(times_nu)), star, base_path*"noreg/", pipeline_path, desired_order;
-		display_plt=interactive, df_act=df_act);
+	SSOFU.neid_plots(mws, airmasses, times_nu, SSOF.rvs(mws.om), zeros(length(times_nu)), base_path*"noreg/", pipeline_path, desired_order;
+		display_plt=interactive, df_act=df_act, title=star_str);
 end
 
 SSOFU.improve_regularization!(mws; save_fn=save_path, careful_first_step=true, speed_up=false)
@@ -73,5 +75,5 @@ mws.om.metadata[:todo][:err_estimated] = false
 rvs_b, rv_errors_b, tel_s_b, tel_errors_b, star_s_b, star_errors_b, rv_holder, tel_holder, star_holder = SSOFU.estimate_σ_bootstrap(mws; save_fn=base_path * "results_boot.jld2", save_model_fn=save_path, recalc_mean=true, recalc=recalc, return_holders=true)
 
 ## Plots
-SSOFU.neid_plots(mws, airmasses, times_nu, rvs_b, rv_errors_b, star, base_path, pipeline_path, desired_order;
-	display_plt=interactive, df_act=df_act, tel_errors=tel_errors_b, star_errors=star_errors_b);
+SSOFU.neid_plots(mws, airmasses, times_nu, rvs_b, rv_errors_b, base_path, pipeline_path, desired_order;
+	display_plt=interactive, df_act=df_act, tel_errors=tel_errors_b, star_errors=star_errors_b, title=star_str);

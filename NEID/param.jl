@@ -80,9 +80,10 @@ else
 
 	# is the right star
 	global df_files_use = df_files |>
-		@filter( _.target == fits_target_str ) |>
+		@filter( _.target in fits_target_str ) |>
 		DataFrame
 
+	# has a good daily drift model
 	bad_drift = df_files_use.driftfun .== "dailymodel0"
 	for i in eachindex(bad_drift)
 		if !bad_drift[i]
@@ -93,6 +94,16 @@ else
 		@filter( _.driftfun == "dailymodel0" ) |>
 		DataFrame
 
+	# has a high enough pipeline version
+	df_files_use = df_files_use |>
+		@filter(match(r"v1\.[1-9]\.[2-9]", string(_.drpversion)) != nothing || match(r"v[2-9]", string(_.drpversion)) != nothing) |>
+		DataFrame
+	
+	# is observed in HR mode
+	df_files_use = df_files_use |>
+		@filter(read_header(FITS(_.Filename)[1])["OBS-MODE"] == "HR") |>
+		DataFrame
+	
 	df_files_use = df_files_use |>
 		@orderby(_.bjd) |>
 		@take(max_spectra_to_use) |>

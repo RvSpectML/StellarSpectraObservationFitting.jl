@@ -98,7 +98,6 @@ function neid_plots(mws::SSOF.ModelWorkspace,
 	times_nu::AbstractVector,
 	rvs::AbstractVector,
 	rv_errors::AbstractVector,
-	star::String,
 	base_path::String,
 	pipeline_path::String,
 	desired_order::Int;
@@ -107,19 +106,20 @@ function neid_plots(mws::SSOF.ModelWorkspace,
 	tel_errors::Union{AbstractMatrix, Nothing}=nothing,
 	star_errors::Union{AbstractMatrix, Nothing}=nothing,
 	df_act::Dict=Dict(),
+	title="",
 	kwargs...)
 
 	@load pipeline_path neid_time neid_rv neid_rv_σ neid_order_rv
 	neid_time .-= 2400000.5
 
 	# Compare RV differences to actual RVs from activity
-	plt = plot_model_rvs(view(times_nu, mask), view(rvs, mask), view(rv_errors, mask), view(neid_time, mask), view(neid_rv, mask), view(neid_rv_σ, mask); display_plt=display_plt, title="HD $star", inst_str="NEID");
+	plt = plot_model_rvs(view(times_nu, mask), view(rvs, mask), view(rv_errors, mask), view(neid_time, mask), view(neid_rv, mask), view(neid_rv_σ, mask); display_plt=display_plt, title=title, inst_str="NEID");
 	png(plt, base_path * "model_rvs.png")
 
 	save_model_plots(mws, airmasses, times_nu, base_path; display_plt=display_plt, tel_errors=tel_errors, star_errors=star_errors, df_act=df_act, kwargs...);
 
 	if all(.!iszero.(view(neid_order_rv, :, desired_order)))
-	    plt = plot_model_rvs(view(times_nu, mask), view(rvs, mask), view(rv_errors, mask), view(neid_time, mask), view(neid_order_rv, mask, desired_order), zeros(length(view(neid_time, mask))); display_plt=display_plt, title="HD $star", inst_str="NEID (single order)");
+	    plt = plot_model_rvs(view(times_nu, mask), view(rvs, mask), view(rv_errors, mask), view(neid_time, mask), view(neid_order_rv, mask, desired_order), zeros(length(view(neid_time, mask))); display_plt=display_plt, title=title, inst_str="NEID (single order)");
 	    png(plt, base_path * "model_rvs_order.png")
 	end
 end

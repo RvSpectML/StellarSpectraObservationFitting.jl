@@ -8,7 +8,7 @@ import StellarSpectraObservationFitting as SSOF
 using Dates
 ## Setting up necessary variables
 
-stars = ["10700", "26965", "22049", "3651", "95735", "2021/12/19", "2021/12/20", "2021/12/23"]
+stars = ["26965", "3651", "Barnard"]
 orders_list = repeat([7:118], length(stars))
 include("data_locs.jl")  # defines expres_data_path and expres_save_path
 cutoff = now() - Week(1)

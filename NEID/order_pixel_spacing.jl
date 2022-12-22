@@ -10,7 +10,7 @@ using JLD2
 
 ## Setting up necessary variables
 
-stars = ["10700", "26965", "22049", "3651", "95735", "2021/12/19", "2021/12/20", "2021/12/23"]
+stars = ["26965", "3651", "Barnard"]
 star_choice = SSOF.parse_args(1, Int, 2)
 star = stars[star_choice]
 include("../NEID/lsf.jl")  # defines NEIDLSF.NEID_lsf()

@@ -7,22 +7,24 @@ Pkg.instantiate()
 import StellarSpectraObservationFitting as SSOF
 using EchelleInstruments, EchelleInstruments.NEID
 using CSV, DataFrames, Query
+using FITSIO
 SSOF_path = dirname(dirname(pathof(SSOF)))
 include(SSOF_path * "/SSOFUtilities/SSOFUtilities.jl")
 SSOFU = SSOFUtilities
 
-stars = ["10700", "26965", "22049", "3651", "95735", "2021/12/19", "2021/12/20", "2021/12/23"]
-star_choice = SSOF.parse_args(1, Int, 4)
+stars = ["26965", "3651", "Barnard"]
+fits_target_strs = [["HD 26965"], ["HD 3651"], ["GJ699", "TIC 325554331"]]
+star_choice = SSOF.parse_args(1, Int, 3)
 star = stars[star_choice]
-solar = star_choice > 5
+solar = star_choice > 3
 if length(ARGS) != 0; ENV["GKSwstype"] = "100" end
 include("data_locs.jl")  # defines neid_data_path and neid_save_path
 target_subdir = star * "/"  # needed for param.jl
 if solar
-	fits_target_str = "Sun"  # needed for param.jl
+	fits_target_str = ["Sun"]  # needed for param.jl
 	df_files = make_manifest(neid_solar_data_path * target_subdir, NEID)
 else
-	fits_target_str = "HD " * star  # needed for param.jl
+	fits_target_str = fits_target_strs[star_choice]
 	df_files = make_manifest(neid_data_path * target_subdir, NEID)
 end
 include("param.jl")  # filters df_files -> df_files_use
