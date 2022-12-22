@@ -17,7 +17,7 @@ stars = ["26965", "3651", "Barnard"]
 stars_str = ["HD 26965", "HD 3651", "Barnard's Star"]
 star_choice = SSOF.parse_args(1, Int, 2)
 star = stars[star_choice]
-star_str = stars_str[star_ind]
+star_str = stars_str[star_choice]
 solar = star_choice > 5
 interactive = length(ARGS) == 0
 if !interactive; ENV["GKSwstype"] = "100" end
