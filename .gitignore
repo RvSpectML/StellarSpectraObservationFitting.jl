@@ -26,3 +26,6 @@ NEID/testing.jl
 *init_testing.jl
 *model_functions0.jl
 *.pptx
+*.xlsx
+EXPRES/
+*_backup.jl
