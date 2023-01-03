@@ -29,3 +29,4 @@ NEID/testing.jl
 *.xlsx
 EXPRES/
 *_backup.jl
+periodogram/
