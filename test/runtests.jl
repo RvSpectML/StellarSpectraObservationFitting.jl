@@ -70,25 +70,25 @@ end
     flux_star = rand(100, 20)
     weights = sqrt.(flux_star)
     μ = make_template(flux_star, weights; min=0, max=1.2, use_mean=true)
-    doppler_comp = calc_doppler_component_RVSKL(LinRange(5000,6000,100), μ)
+    doppler_comp = doppler_component(LinRange(5000,6000,100), μ)
     M = zeros(100, 3)
     s = zeros(3, 20)
 
-    Xtmp = copy(flux_star)
-    Xtmp .-= μ
-    rvs1 = SSOF.project_doppler_comp!(M, s, Xtmp, doppler_comp)
+    data_tmp = copy(flux_star)
+    data_tmp .-= μ
+    rvs1 = SSOF.project_doppler_comp!(M, s, data_tmp, doppler_comp)
     s1 = s[1, :]
     M1 = M[:, 1]
 
-    Xtmp = copy(flux_star)
-    Xtmp .-= μ
-    rvs2 = SSOF.project_doppler_comp!(M, s, Xtmp, doppler_comp, ones(size(Xtmp)))
+    data_tmp = copy(flux_star)
+    data_tmp .-= μ
+    rvs2 = SSOF.project_doppler_comp!(M, s, data_tmp, doppler_comp, ones(size(data_tmp)))
     s2 = s[1, :]
     M2 = M[:, 1]
 
-    Xtmp = copy(flux_star)
-    Xtmp .-= μ
-    rvs3 = SSOF.project_doppler_comp!(M, s, Xtmp, doppler_comp, weights)
+    data_tmp = copy(flux_star)
+    data_tmp .-= μ
+    rvs3 = SSOF.project_doppler_comp!(M, s, data_tmp, doppler_comp, weights)
     s3 = s[1, :]
     M3 = M[:, 1]
 

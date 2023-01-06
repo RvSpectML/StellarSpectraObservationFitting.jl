@@ -4,6 +4,7 @@ using Optim
 using Nabla
 import Base.println
 using DataInterpolations
+import ExpectationMaximizationPCA as EMPCA
 
 abstract type ModelWorkspace end
 abstract type AdamWorkspace<:ModelWorkspace end
@@ -72,7 +73,7 @@ _loss(mws::ModelWorkspace; kwargs...) = _loss(mws.o, mws.om, mws.d; kwargs...)
 # end
 # _loss(mws::ModelWorkspace; kwargs...) = _loss(mws.o, mws.om, mws.d; kwargs...)
 function _loss_recalc_rv_basis(o::Output, om::OrderModel, d::Data; kwargs...)
-	om.rv.lm.M .= calc_doppler_component_RVSKL_Flux(om.star.λ, om.star.lm.μ)
+	om.rv.lm.M .= doppler_component_AD(om.star.λ, om.star.lm.μ)
 	return _loss(o, om, d; kwargs...)
 end
 _loss_recalc_rv_basis(mws::ModelWorkspace; kwargs...) = _loss_recalc_rv_basis(mws.o, mws.om, mws.d; kwargs...)
@@ -545,12 +546,12 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
 		end
 		if rm_doppler && is_time_variable(mws.om.star.lm)  
 			if mws.om.star.lm.log
-				dop_comp_holder[:] = calc_doppler_component_RVSKL_log(mws.om.star.λ, mws.om.star.lm.μ)
+				dop_comp_holder[:] = doppler_component_log(mws.om.star.λ, mws.om.star.lm.μ)
 			else
-			dop_comp_holder[:] = calc_doppler_component_RVSKL(mws.om.star.λ, mws.om.star.lm.μ)
+			dop_comp_holder[:] = doppler_component(mws.om.star.λ, mws.om.star.lm.μ)
 			end
 			for i in axes(mws.om.star.lm.M, 2)
-				_reorthogonalize_no_renorm!(view(mws.om.star.lm.M, :, i), dop_comp_holder)
+				EMPCA._reorthogonalize_no_renorm!(view(mws.om.star.lm.M, :, i), dop_comp_holder)
 			end
 		end
 
@@ -808,7 +809,7 @@ end
 
 function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::Submodel, star::Submodel, optim_cb::Function; g_tol::Real=_g_L∞tol_def_s, f_tol::Real=_f_reltol_def_s, iter::Int=_iter_def, kwargs...)
 	options = Optim.Options(; callback=optim_cb, g_tol=g_tol, f_tol=f_tol, iterations=iter, kwargs...)
-	rv.lm.M .= calc_doppler_component_RVSKL(star.λ, star.lm.μ)
+	rv.lm.M .= doppler_component(star.λ, star.lm.μ)
 	result_rv = _OSW_optimize!(rv_ws, options)
 	rv.lm.s[:] = rv_ws.unflatten(rv_ws.p0)
 	return result_rv
@@ -1029,7 +1030,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	flux_star_no_tel = copy(flux_star)
 	vars_star_no_tel = copy(vars_star)
 	oms[1,1].star.lm.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
-	dop_comp = calc_doppler_component_RVSKL(oms[1,1].star.λ, oms[1,1].star.lm.μ)
+	dop_comp = doppler_component(oms[1,1].star.λ, oms[1,1].star.lm.μ)
 	# project_doppler_comp!(mws.om.rv, flux_star_no_tel .- mws.om.star.lm.μ, dop_comp, 1 ./ vars_star)
 	mask_low_pixels!(flux_star_no_tel, vars_star_no_tel)
 	mask_high_pixels!(flux_star_no_tel, vars_star_no_tel)
@@ -1052,7 +1053,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	# if search_new_star
 	# 	oms[1,2] = downsize(om, 0, 1)
 	# 	fill_OrderModel!(oms[1,2], oms[1,1], 0:0, 0:0)
-	# 	dop_comp .= calc_doppler_component_RVSKL(oms[1,2].star.λ, oms[1,2].star.lm.μ)
+	# 	dop_comp .= doppler_component(oms[1,2].star.λ, oms[1,2].star.lm.μ)
 	# 	oms[1,2].tel.lm.μ .= 1
 	# 	# oms[1,2].rv .=
 	# 	DEMPCA!(oms[1,2].star.lm, copy(flux_star_no_tel), 1 ./ vars_star_no_tel, dop_comp; log_lm=log_lm(oms[1,2].star.lm), save_doppler_in_M1=false, inds=1:1, extra_vec=dop_comp)
@@ -1174,7 +1175,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		mws = TotalWorkspace(oms[2,1], d)
 		# flux_tel .= oms[2,1].tel.lm.μ
 		# interp_to_star!(; mask_extrema=false)
-		# mws.om.rv .= vec(project_doppler_comp(flux_star .- mws.om.star.lm.μ, calc_doppler_component_RVSKL(mws.om.star.λ, mws.om.star.lm.μ), 1 ./ vars_star))
+		# mws.om.rv .= vec(project_doppler_comp(flux_star .- mws.om.star.lm.μ, doppler_component(mws.om.star.λ, mws.om.star.lm.μ), 1 ./ vars_star))
 		om1 = get_metrics!(mws, 2, 1)
 
 	else
@@ -1222,7 +1223,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 			# flux_star .= _eval_lm(oms[i...].star.lm)
 			interp_to_tel!(oms[i...])# .+ rv_to_D(oms[i...].rv)')  # the rv is a small effect that we could just be getting wrong
 			if n_tel_cur + 1 > 0
-				EMPCA!(oms[i...].tel.lm, flux_tel, 1 ./ vars_tel; inds=(n_tel_cur+1):(n_tel_cur+1))
+				EMPCA.EMPCA!(oms[i...].tel.lm, flux_tel, 1 ./ vars_tel; inds=(n_tel_cur+1):(n_tel_cur+1))
 			else
 				oms[i...].tel.lm.μ .= make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
 			end
@@ -1237,7 +1238,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 			i = comp2ind(n_tel_cur, n_star_cur+1)
 			oms[i...] = downsize(om, max(0, n_tel_cur), n_star_cur+1)
 			fill_OrderModel!(oms[i...], oms[j...], 1:n_tel_cur, 1:n_star_cur)
-			dop_comp .= calc_doppler_component_RVSKL(oms[i...].star.λ, oms[i...].star.lm.μ)
+			dop_comp .= doppler_component(oms[i...].star.λ, oms[i...].star.lm.μ)
 			if n_tel_cur < 0
 				oms[i...].tel.lm.μ .= 1
 				# oms[i...].rv .=

@@ -322,6 +322,14 @@ end
 # 	end
 # end
 
+function snap(y::AbstractMatrix)
+	snp = Array{Float64}(undef, size(y, 1), size(y, 2))
+	l = size(snp, 1)
+	snp[1:2, :] .= 0
+	snp[end-1:end, :] .= 0
+	snp[3:end-2, :] .= abs.(view(y, 5:l, :) - 4view(y, 4:(l-1), :) + 6view(y, 3:(l-2), :) - 4view(y, 2:(l-3), :) + view(y, 1:(l-4), :))
+	return snp
+end
 function snap(y::AbstractMatrix, σ²::AbstractMatrix)
 	@assert size(y) == size(σ²)
 	snp = Array{Float64}(undef, size(y, 1), size(y, 2))

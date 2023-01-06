@@ -62,7 +62,7 @@ model = SSOFU.calculate_initial_model(data, "NEID", desired_order, star, times_n
 if all(isone.(model.tel.lm.μ)) && !SSOF.is_time_variable(model.tel); opt = "frozen-tel" end
 mws = SSOFU.create_workspace(model, data, opt)
 mkpath(base_path*"noreg/")
-df_act = SSOFU.neid_activity_indicators(pipeline_path, data)
+df_act = SSOFU.neid_activity_indicators(pipeline_path, data)  # fix this so it doesn't rely on what is in folder only
 if !mws.om.metadata[:todo][:reg_improved]
 	SSOFU.neid_plots(mws, airmasses, times_nu, SSOF.rvs(mws.om), zeros(length(times_nu)), base_path*"noreg/", pipeline_path, desired_order;
 		display_plt=interactive, df_act=df_act, title=star_str);

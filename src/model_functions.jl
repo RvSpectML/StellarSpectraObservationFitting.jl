@@ -16,6 +16,7 @@ using Nabla
 import StatsBase: winsor
 using Base.Threads
 using ThreadsX
+import ExpectationMaximizationPCA as EMPCA
 
 abstract type OrderModel end
 abstract type Output end
@@ -449,12 +450,14 @@ function oversamp_interp_helper(to_bounds::AbstractVector, from_x::AbstractVecto
 		edge_term_hi = (x_hi - from_x[hi_ind]) ^ 2 / (from_x[hi_ind+1] - from_x[hi_ind])
 
 		ans[i, lo_ind-1] = edge_term_lo
-		ans[i, lo_ind] = from_x[lo_ind+1] + from_x[lo_ind] - 2 * x_lo - edge_term_lo
-
-		ans[i, lo_ind+1:hi_ind-1] .= view(from_x, lo_ind+2:hi_ind) .- view(from_x, lo_ind:hi_ind-2)
-
-		ans[i, hi_ind] = 2 * x_hi - from_x[hi_ind] - from_x[hi_ind-1] - edge_term_hi
 		ans[i, hi_ind+1] = edge_term_hi
+		if lo_ind==hi_ind
+			ans[i, lo_ind] = from_x[lo_ind+1] + from_x[lo_ind] - 2 * x_lo - edge_term_lo - edge_term_hi
+		else
+			ans[i, lo_ind] = from_x[lo_ind+1] + from_x[lo_ind] - 2 * x_lo - edge_term_lo
+			ans[i, lo_ind+1:hi_ind-1] .= view(from_x, lo_ind+2:hi_ind) .- view(from_x, lo_ind:hi_ind-2)
+			ans[i, hi_ind] = 2 * x_hi - from_x[hi_ind] - from_x[hi_ind-1] - edge_term_hi
+		end
 		# println(sum(view(ans, i, lo_ind-1:hi_ind+1))," vs ", 2 * (x_hi - x_lo))
 		# @assert isapprox(sum(view(ans, i, lo_ind-1:hi_ind+1)), 2 * (x_hi - x_lo); rtol=1e-3)
 		ans[i, lo_ind-1:hi_ind+1] ./= sum(view(ans, i, lo_ind-1:hi_ind+1))
@@ -895,7 +898,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 		mask_low_pixels!(flux_tel, vars_tel)
 		mask_high_pixels!(flux_tel, vars_tel)
 		if is_time_variable(om.tel)
-			EMPCA!(lm_tel.M, lm_tel.s, lm_tel.μ, flux_tel, 1 ./ vars_tel; log_lm=log_lm(lm_tel))
+			EMPCA.EMPCA!(lm_tel.M, lm_tel.s, lm_tel.μ, flux_tel, 1 ./ vars_tel; log_lm=log_lm(lm_tel))
 		end
 	end
 
@@ -914,7 +917,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 		end
 		mask_low_pixels!(flux_star, vars_star)
 		mask_high_pixels!(flux_star, vars_star)
-		DEMPCA!(lm_star.M, lm_star.s, lm_star.μ, flux_star, 1 ./ vars_star, calc_doppler_component_RVSKL(om.star.λ, lm_star.μ); log_lm=log_lm(lm_star))
+		DEMPCA!(lm_star.M, lm_star.s, lm_star.μ, flux_star, 1 ./ vars_star, doppler_component(om.star.λ, lm_star.μ); log_lm=log_lm(lm_star))
 	end
 
 	# if we have a seed model to get tellurics from
@@ -1027,7 +1030,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 					lm_star[i+1].μ[:] = make_template(_flux_star, _vars_star; min=μ_min, max=μ_max, use_mean=true)
 					mask_low_pixels!(_flux_star, _vars_star)
 					mask_high_pixels!(_flux_star, _vars_star)
-					DEMPCA!(lm_star[i+1].M, lm_star[i+1].s, lm_star[i+1].μ, _flux_star, 1 ./ _vars_star, calc_doppler_component_RVSKL(om.star.λ, lm_star[i+1].μ); log_lm=log_lm(lm_star[i+1]))
+					DEMPCA!(lm_star[i+1].M, lm_star[i+1].s, lm_star[i+1].μ, _flux_star, 1 ./ _vars_star, doppler_component(om.star.λ, lm_star[i+1].μ); log_lm=log_lm(lm_star[i+1]))
 				end
 			else
 				for i in 1:n_comp_tel
@@ -1060,7 +1063,7 @@ function initializations!(om::OrderModel, d::Data; μ_min::Number=0, μ_max::Num
 					lm_tel[i+1].μ[:] = make_template(_flux_tel, _vars_tel; min=μ_min, max=μ_max, use_mean=true)
 					mask_low_pixels!(_flux_tel, _vars_tel)
 					mask_high_pixels!(_flux_tel, _vars_tel)
-					EMPCA!(lm_tel[i+1].M, lm_tel[i+1].s, lm_tel[i+1].μ, _flux_tel, 1 ./ _vars_tel; log_lm=log_lm(lm_tel[i+1]))
+					EMPCA.EMPCA!(lm_tel[i+1].M, lm_tel[i+1].s, lm_tel[i+1].μ, _flux_tel, 1 ./ _vars_tel; log_lm=log_lm(lm_tel[i+1]))
 				end
 			else
 				for i in 1:n_comp_star
@@ -1159,7 +1162,7 @@ end
 function fill_StarModel!(om::OrderModel, lm::LinearModel, rvs::Vector, inds)
 	copy_to_LinearModel!(om.star.lm, lm, inds)
 	if typeof(om) <: OrderModelDPCA
-		om.rv.lm.M .= calc_doppler_component_RVSKL(om.star.λ, om.star.lm.μ)
+		om.rv.lm.M .= doppler_component(om.star.λ, om.star.lm.μ)
 		om.rv.lm.s[:] .= rvs ./ -light_speed_nu #TODO check if this is correct
 	else
 		om.rv .= rvs
