@@ -1,15 +1,21 @@
 using Documenter
 using StellarSpectraObservationFitting
 
+# DocMeta.setdocmeta!(StellarSpectraObservationFitting, :DocTestSetup, :(using StellarSpectraObservationFitting); recursive=true)
+
 makedocs(
-    sitename = "StellarSpectraObservationFitting",
+    sitename = "StellarSpectraObservationFitting.jl",
     format = Documenter.HTML(),
-    modules = [StellarSpectraObservationFitting]
+    modules = [StellarSpectraObservationFitting],
+    authors = "Christian Gilbertson",
+    pages = [
+        "Home" => "index.md",
+        hide("Indices" => "indices.md"),
+        "LICENSE.md",
+    ]
 )
 
-# Documenter can also automatically deploy documentation to gh-pages.
-# See "Hosting Documentation" and deploydocs() in the Documenter manual
-# for more information.
-#=deploydocs(
-    repo = "<repository url>"
-)=#
+deploydocs(
+    repo = "github.com/christiangil/StellarSpectraObservationFitting.jl.git",
+    deploy_config = Documenter.GitHubActions(),
+)
