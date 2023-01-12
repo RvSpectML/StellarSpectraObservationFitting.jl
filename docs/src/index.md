@@ -1,0 +1,3 @@
+# StellarSpectraObservationFitting.jl
+
+Documentation for StellarSpectraObservationFitting.jl
