@@ -3,6 +3,7 @@ module NEIDLSF
     using FITSIO
     using SpecialFunctions
     using SparseArrays
+    using Interpolations
     
     function conv_gauss_tophat(x::Real, σ::Real, boxhalfwidth::Real; amp::Real=1)
         scale = 1 / (sqrt(2) * σ)
@@ -52,6 +53,32 @@ module NEIDLSF
             hi = min(n, Int(round(i + threeish_sigma(σs[i, order], bhws[i, order]))))
             holder[i, lo:hi] = conv_gauss_tophat.((lo-i):(hi-i), σs[i, order], bhws[i, order])
             # holder[i, lo:hi] = conv_gauss_tophat_integral.(σs[i, order], bhws[i, order], (lo-i):(hi-i))
+            holder[i, lo:hi] ./= sum(view(holder, i, lo:hi))
+        end
+        ans = sparse(holder)
+        dropzeros!(ans)
+        return ans
+    end
+
+    function neid_lsf(order::Int, log_λ_neid_order::AbstractVector, log_λ_obs::AbstractVector)
+        @assert 1 <= order <= length(no_lsf_orders)
+        if no_lsf_orders[order]; return nothing end
+        n = length(log_λ_obs)
+
+        # need to convert σs, bhws, and threeish_sigma (in units of neid pixels) to units of log_λ_obs pixels
+        pixel_separation_log_λ_obs = linear_interpolation(log_λ_obs, SSOF.simple_derivative(log_λ_obs); extrapolation_bc=Line())
+        pixel_separation_ratio = SSOF.simple_derivative(log_λ_neid_order) ./ pixel_separation_log_λ_obs.(log_λ_neid_order)
+        # make the linear_interpolation object and evaluate it
+        converter(vals) = linear_interpolation(log_λ_neid_order, pixel_separation_ratio .* vals; extrapolation_bc=Line())(log_λ_obs)
+        σs_converted = converter(σs[:, order])
+        bhws_converted = converter(bhws[:, order])
+        threeish_sigma_converted = converter(threeish_sigma.(σs[:, order], bhws[:, order]))
+
+        holder = zeros(n, n)
+        for i in 1:n
+            lo = max(1, Int(round(i - threeish_sigma_converted[i])))
+            hi = min(n, Int(round(i + threeish_sigma_converted[i])))
+            holder[i, lo:hi] = conv_gauss_tophat.((lo-i):(hi-i), σs_converted[i], bhws_converted[i])
             holder[i, lo:hi] ./= sum(view(holder, i, lo:hi))
         end
         ans = sparse(holder)

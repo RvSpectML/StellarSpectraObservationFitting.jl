@@ -57,8 +57,9 @@ model = SSOFU.calculate_initial_model(data, "NEID", desired_order, star, times_n
 	recalc=recalc, use_reg=use_reg, use_custom_n_comp=use_custom_n_comp,
 	dpca=dpca, log_lm=log_lm, log_λ_gp_star=1/SSOF.SOAP_gp_params.λ,
 	# log_λ_gp_tel=1/110000,
-	log_λ_gp_tel=1/SSOFU.neid_neid_temporal_gp_lsf_λ(desired_order),
+	log_λ_gp_tel=1/SSOFU.neid_temporal_gp_lsf_λ(desired_order),
 	careful_first_step=true, speed_up=false)
+
 if all(isone.(model.tel.lm.μ)) && !SSOF.is_time_variable(model.tel); opt = "frozen-tel" end
 mws = SSOFU.create_workspace(model, data, opt)
 mkpath(base_path*"noreg/")

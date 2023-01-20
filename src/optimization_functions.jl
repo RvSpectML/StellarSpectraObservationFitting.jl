@@ -317,7 +317,7 @@ function AdamSubWorkspace(θ, l::Function)
 	return AdamSubWorkspace(θ, Adams(θ), AdamState(), l, gl)
 end
 
-function update!(aws::AdamSubWorkspace; careful_first_step::Bool=false, speed_up::Bool=false)
+function update!(aws::AdamSubWorkspace; careful_first_step::Bool=true, speed_up::Bool=false)
     val, Δ = aws.gl(aws.θ)
 	Δ = only(Δ)
 	AdamState!(aws.as, val.val, Δ)
@@ -412,7 +412,7 @@ function check_converged(as::AdamState, f_reltol::Real, g_reltol::Real, g_L∞to
 	return ((δ_ℓ > (1 - f_reltol)) && (max(as.δ_L2_Δ,1/as.δ_L2_Δ) < (1+abs(g_reltol)))) || (as.L∞_Δ < g_L∞tol)
 end
 check_converged(as::AdamState, iter::Int, f_reltol::Real, g_reltol::Real, g_L∞tol::Real) = (as.iter > iter) || check_converged(as, f_reltol, g_reltol, g_L∞tol)
-function train_SubModel!(aws::AdamSubWorkspace; iter=_iter_def, f_reltol = _f_reltol_def, g_reltol = _g_reltol_def, g_L∞tol = _g_L∞tol_def, cb::Function=(as::AdamState)->(), careful_first_step::Bool=false, speed_up::Bool=false, kwargs...)
+function train_SubModel!(aws::AdamSubWorkspace; iter=_iter_def, f_reltol = _f_reltol_def, g_reltol = _g_reltol_def, g_L∞tol = _g_L∞tol_def, cb::Function=(as::AdamState)->(), careful_first_step::Bool=true, speed_up::Bool=false, kwargs...)
 	converged = false  # check_converged(aws.as, iter, f_tol, g_tol)
 	while !converged
 		update!(aws; careful_first_step=careful_first_step, speed_up=speed_up)
@@ -710,7 +710,7 @@ function optim_cb_f(; verbose::Bool=true)
     end
 end
 
-function train_OrderModel!(ow::OptimTelStarWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, train_telstar::Bool=true, ignore_regularization::Bool=false, μ_positive::Bool=false, careful_first_step::Bool=false, speed_up::Bool=false, kwargs...)
+function train_OrderModel!(ow::OptimTelStarWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, train_telstar::Bool=true, ignore_regularization::Bool=false, μ_positive::Bool=false, careful_first_step::Bool=true, speed_up::Bool=false, kwargs...)
     optim_cb = optim_cb_f(; verbose=verbose)
 
     if ignore_regularization
@@ -756,7 +756,7 @@ function train_OrderModel!(ow::OptimTelStarWorkspace; verbose::Bool=_verbose_def
     end
     return result_telstar, result_rv
 end
-function train_OrderModel!(ow::OptimTotalWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, ignore_regularization::Bool=false, μ_positive::Bool=false, careful_first_step::Bool=false, speed_up::Bool=false, kwargs...)
+function train_OrderModel!(ow::OptimTotalWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, ignore_regularization::Bool=false, μ_positive::Bool=false, careful_first_step::Bool=true, speed_up::Bool=false, kwargs...)
     optim_cb = optim_cb_f(; verbose=verbose)
 
     if ignore_regularization
@@ -825,7 +825,7 @@ train_rvs_optim!(ow::OptimTelStarWorkspace, optim_cb::Function; kwargs...) =
 		train_rvs_optim!(ow.rv, ow.om.rv, ow.om.star, optim_cb; kwargs...) :
 		train_rvs_optim!(ow.rv, ow.om.rv, optim_cb; kwargs...)
 
-function finalize_scores_setup(mws::ModelWorkspace; verbose::Bool=_verbose_def, f_tol::Real=_f_reltol_def_s, g_tol::Real=_g_L∞tol_def_s, careful_first_step::Bool=false, speed_up::Bool=false, kwargs...)
+function finalize_scores_setup(mws::ModelWorkspace; verbose::Bool=_verbose_def, f_tol::Real=_f_reltol_def_s, g_tol::Real=_g_L∞tol_def_s, careful_first_step::Bool=true, speed_up::Bool=false, kwargs...)
 	if is_time_variable(mws.om.tel) || is_time_variable(mws.om.star)
 		mws_s = OptimTotalWorkspace(mws.om, mws.d; only_s=true)  # does not converge reliably
 		# mws_s = OptimTelStarWorkspace(mws.om, mws.d; only_s=true)
@@ -883,7 +883,7 @@ update_interpolation_locations!(mws::ModelWorkspace) = update_interpolation_loca
 function calculate_initial_model(data::Data, instrument::String, desired_order::Int, star::String, times::AbstractVector;
 	μ_min::Real=0, μ_max::Real=Inf, use_mean::Bool=true, stop_early::Bool=false,
 	remove_reciprocal_continuum::Bool=false, return_full_path::Bool=false,
-	max_n_tel::Int=5, max_n_star::Int=5, use_all_comps::Bool=false, careful_first_step::Bool=false, speed_up::Bool=false, kwargs...)
+	max_n_tel::Int=5, max_n_star::Int=5, use_all_comps::Bool=false, careful_first_step::Bool=true, speed_up::Bool=false, kwargs...)
 
 	d = GenericData(data)
 
