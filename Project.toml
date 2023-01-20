@@ -33,5 +33,10 @@ UnitfulAstro = "6112ee07-acf9-5e0f-b108-d242c714bf9f"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
+DSP = "0.7"
+ExpectationMaximizationPCA = "0.2"
 Nabla = "< 0.13"
+StatsBase = "0.33"
+SortFilters = "0.1"
 TemporalGPs = "≥ 0.5"
+Unitful = "1"
