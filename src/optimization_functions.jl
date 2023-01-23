@@ -520,7 +520,7 @@ FrozenTelWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
 FrozenTelWorkspace(om::OrderModel, d::Data; kwargs...) =
 	FrozenTelWorkspace(Output(om, d), om, d; kwargs...)
 
-function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, verbose::Bool=_verbose_def, shift_scores::Bool=true, μ_positive::Bool=true, winsor::Bool=true, rm_doppler::Bool=true, kwargs...)
+function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, verbose::Bool=_verbose_def, shift_scores::Bool=true, μ_positive::Bool=true, tel_μ_lt1::Bool=false, winsor::Bool=true, rm_doppler::Bool=true, kwargs...)
 
 	if rm_doppler; dop_comp_holder = Array{Float64}(undef, length(mws.om.star.lm.μ)) end
 	update_interpolation_locations!(mws)
@@ -543,6 +543,9 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
 		if μ_positive
 			mws.om.tel.lm.μ[mws.om.tel.lm.μ .< 1e-10] .= 1e-10
 			mws.om.star.lm.μ[mws.om.star.lm.μ .< 1e-10] .= 1e-10
+		end
+		if tel_μ_lt1
+			mws.om.tel.lm.μ[mws.om.tel.lm.μ .> 1] .= 1
 		end
 		if rm_doppler && is_time_variable(mws.om.star.lm)  
 			if mws.om.star.lm.log
@@ -883,7 +886,8 @@ update_interpolation_locations!(mws::ModelWorkspace) = update_interpolation_loca
 function calculate_initial_model(data::Data, instrument::String, desired_order::Int, star::String, times::AbstractVector;
 	μ_min::Real=0, μ_max::Real=Inf, use_mean::Bool=true, stop_early::Bool=false,
 	remove_reciprocal_continuum::Bool=false, return_full_path::Bool=false,
-	max_n_tel::Int=5, max_n_star::Int=5, use_all_comps::Bool=false, careful_first_step::Bool=true, speed_up::Bool=false, kwargs...)
+	max_n_tel::Int=5, max_n_star::Int=5, use_all_comps::Bool=false, careful_first_step::Bool=true, speed_up::Bool=false, 
+	log_λ_gp_star::Real=1/SOAP_gp_params.λ, log_λ_gp_tel::Real=1/LSF_gp_params.λ, kwargs...)
 
 	d = GenericData(data)
 
@@ -901,8 +905,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	comp2ind(n_tel::Int, n_star::Int) = (n_tel+2, n_star+1)
 	n_obs = size(d.flux, 2)
 
-	om = OrderModel(d, instrument, desired_order, star; n_comp_tel=max_n_tel, n_comp_star=max_n_star, kwargs...)
-
+	om = OrderModel(d, instrument, desired_order, star; n_comp_tel=max_n_tel, n_comp_star=max_n_star, log_λ_gp_star=log_λ_gp_star, log_λ_gp_tel=log_λ_gp_tel, kwargs...)
 	star_log_λ_tel = _shift_log_λ_model(d.log_λ_obs, d.log_λ_star, om.star.log_λ)
 	tel_log_λ_star = _shift_log_λ_model(d.log_λ_star, d.log_λ_obs, om.tel.log_λ)
 	flux_star = ones(length(om.star.log_λ), n_obs)
@@ -953,7 +956,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 
 		flux_star_holder .= c_s
 		vars_star_holder .= SOAP_gp_var
-		_spectra_interp_gp!(flux_tel_holder, vars_tel_holder, om.tel.log_λ, flux_star_holder, vars_star_holder, star_log_λ_tel; gp_mean=1.)
+		_spectra_interp_gp!(flux_tel_holder, vars_tel_holder, om.tel.log_λ, flux_star_holder, vars_star_holder, star_log_λ_tel; gp_mean=1., λ_kernel=1/log_λ_gp_star)
 		m, cc = reciprocal_continuum_mask(c_t, flux_tel_holder; return_cc=true, kwargs...)
 		use_stellar_continuum ?
 			lm_tel.μ[m] .*= vec(mean(flux_tel_holder[m, :]; dims=2)) :
@@ -962,7 +965,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 
 		flux_tel .= c_t
 		vars_tel .= SOAP_gp_var
-		_spectra_interp_gp!(flux_star_holder, vars_star_holder, om.star.log_λ, flux_tel_holder, vars_tel_holder, tel_log_λ_star; gp_mean=1.)
+		_spectra_interp_gp!(flux_star_holder, vars_star_holder, om.star.log_λ, flux_tel_holder, vars_tel_holder, tel_log_λ_star; gp_mean=1., λ_kernel=1/log_λ_gp_star)
 		m, cc = reciprocal_continuum_mask(c_s, flux_star_holder; return_cc=true, kwargs...)
 		use_stellar_continuum ?
 			lm_star.μ[m] ./= c_s[m] :
@@ -1026,7 +1029,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	search_new_star = n_star_cur+1 <= max_n_star
 	oms[1,1] = downsize(om, 0, 0)
 	oms[1,1].tel.lm.μ .= 1
-	_spectra_interp_gp!(flux_star, vars_star, oms[1,1].star.log_λ, d.flux, d.var .+ SOAP_gp_var, d.log_λ_star; gp_mean=1.)
+	_spectra_interp_gp!(flux_star, vars_star, oms[1,1].star.log_λ, d.flux, d.var .+ SOAP_gp_var, d.log_λ_star; gp_mean=1., λ_kernel=1/log_λ_gp_star)
 	flux_star_no_tel = copy(flux_star)
 	vars_star_no_tel = copy(vars_star)
 	oms[1,1].star.lm.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
@@ -1044,7 +1047,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	# telluric template assuming no stellar (will be overwritten later)
 	_om = downsize(om, 0, 0)
 	_om.star.lm.μ .= 1
-	_spectra_interp_gp!(flux_tel, vars_tel, _om.tel.log_λ, d.flux, d.var .+ SOAP_gp_var, d.log_λ_obs; gp_mean=1.)
+	_spectra_interp_gp!(flux_tel, vars_tel, _om.tel.log_λ, d.flux, d.var .+ SOAP_gp_var, d.log_λ_obs; gp_mean=1., λ_kernel=1/log_λ_gp_star)
 	_om.tel.lm.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
 	χ²_tel = vec(sum(_χ²_loss(tel_model(_om), d); dims=2))  # TODO: could optimize before checking this
 	# tel_template_χ² = sum(χ²_tel)
@@ -1082,7 +1085,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		flux_from::AbstractMatrix,
 		log_λ_data::AbstractMatrix; mask_extrema::Bool=true, keep_data_mask::Bool=true)
 		try
-			_spectra_interp_gp!(flux_to, vars_to, log_λ_to, d.flux ./ flux_from, d.var ./ (flux_from .^ 2), log_λ_data; gp_mean=1., keep_mask=keep_data_mask)
+			_spectra_interp_gp!(flux_to, vars_to, log_λ_to, d.flux ./ flux_from, d.var ./ (flux_from .^ 2), log_λ_data; gp_mean=1., keep_mask=keep_data_mask, λ_kernel=1/log_λ_gp_star)
 		catch err
 			if isa(err, DomainError)
 				println("was unable to interpolate using a GP from one frame to another, using linear interpolation instead")
@@ -1144,7 +1147,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 			_var[use_tel, :] .= Inf
 
 			# get stellar template in portions of spectra where it is dominant
-			_spectra_interp_gp!(flux_star, vars_star, oms[2,1].star.log_λ, d.flux, _var .+ SOAP_gp_var, d.log_λ_star; gp_mean=1.)
+			_spectra_interp_gp!(flux_star, vars_star, oms[2,1].star.log_λ, d.flux, _var .+ SOAP_gp_var, d.log_λ_star; gp_mean=1., λ_kernel=1/log_λ_gp_star)
 			oms[2,1].star.lm.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
 
 			# get telluric template after dividing out the partial stellar template

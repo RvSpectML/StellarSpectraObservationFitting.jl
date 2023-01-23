@@ -24,12 +24,14 @@ abstract type Data end
 
 _current_matrix_modifier = SparseMatrixCSC
 
-function D_to_rv(D)
-	x = exp.(2 .* D)
-	return light_speed_nu .* ((1 .- x) ./ (1 .+ x))
-end
+D_to_rv(D) = light_speed_nu .* (1-exp.(D))
+# function D_to_rv(D)
+# 	x = exp.(2 .* D)
+# 	return light_speed_nu .* ((1 .- x) ./ (1 .+ x))
+# end
 
-rv_to_D(v) = (log1p.((-v ./ light_speed_nu)) - log1p.((v ./ light_speed_nu))) ./ 2
+rv_to_D(v) = log1p.(-v ./ light_speed_nu)  # a simple approximation that minimally confuses that we are measuring redshift
+# rv_to_D(v) = (log1p.((-v ./ light_speed_nu)) - log1p.((v ./ light_speed_nu))) ./ 2
 # rv_to_D(v) = log.((1 .- v ./ light_speed_nu) ./ (1 .+ v ./ light_speed_nu)) ./ 2
 function _lower_inds!(lower_inds::AbstractMatrix, lower_inds_adj::AbstractMatrix, model_log_λ::AbstractVector{<:Real}, rvs, log_λ_obs::AbstractMatrix)
 	n_obs = length(rvs)
@@ -762,52 +764,54 @@ function _spectra_interp_gp!(fluxes::AbstractVector, vars, log_λ, flux_obs::Abs
 	end
 	return gp
 end
-function _spectra_interp_gp!(fluxes::AbstractMatrix, log_λ, flux_obs, var_obs, log_λ_obs; kwargs...)
+function _spectra_interp_gp!(fluxes::AbstractMatrix, log_λ, flux_obs, var_obs, log_λ_obs; var_kernel=SOAP_gp_params.var_kernel, λ_kernel=SOAP_gp_params.λ, kwargs...)
+	gp_base = build_gp((var_kernel = var_kernel, λ = λ_kernel))
 	for i in axes(flux_obs, 2)
-		_spectra_interp_gp!(view(fluxes, :, i), log_λ, view(flux_obs, :, i), view(var_obs, :, i), view(log_λ_obs, :, i); mask_flux=Array{Bool}(undef, size(flux_obs, 1)), mask_var=Array{Bool}(undef, size(flux_obs, 1)),  kwargs...)
+		_spectra_interp_gp!(view(fluxes, :, i), log_λ, view(flux_obs, :, i), view(var_obs, :, i), view(log_λ_obs, :, i); mask_flux=Array{Bool}(undef, size(flux_obs, 1)), mask_var=Array{Bool}(undef, size(flux_obs, 1)),  gp_base=gp_base, kwargs...)
 	end
 end
-function _spectra_interp_gp!(fluxes::AbstractMatrix, vars, log_λ, flux_obs, var_obs, log_λ_obs; kwargs...)
+function _spectra_interp_gp!(fluxes::AbstractMatrix, vars, log_λ, flux_obs, var_obs, log_λ_obs; var_kernel=SOAP_gp_params.var_kernel, λ_kernel=SOAP_gp_params.λ, kwargs...)
+	gp_base = build_gp((var_kernel = var_kernel, λ = λ_kernel))
 	for i in axes(flux_obs, 2)
-		_spectra_interp_gp!(view(fluxes, :, i), view(vars, :, i), log_λ, view(flux_obs, :, i), view(var_obs, :, i), view(log_λ_obs, :, i); mask_flux=Array{Bool}(undef, size(flux_obs, 1)), mask_var=Array{Bool}(undef, size(flux_obs, 1)), kwargs...)
+		_spectra_interp_gp!(view(fluxes, :, i), view(vars, :, i), log_λ, view(flux_obs, :, i), view(var_obs, :, i), view(log_λ_obs, :, i); mask_flux=Array{Bool}(undef, size(flux_obs, 1)), mask_var=Array{Bool}(undef, size(flux_obs, 1)), gp_base=gp_base, kwargs...)
 	end
 end
 
-function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix, log_λ::AbstractVector, flux_obs::AbstractMatrix, var_obs::AbstractMatrix, log_λ_obs::AbstractMatrix, flux_other::AbstractMatrix, var_other::AbstractMatrix, log_λ_other::AbstractMatrix; gp_mean::Number=1., gp_base=SOAP_gp, gp_var=SOAP_gp_var, keep_mask::Bool=true, return_weights::Bool=false, ignore_model_uncertainty::Bool=false)
-	for i in axes(flux_obs, 2)
-		gpn = get_marginal_GP(gp_base(view(log_λ_obs, :, i), view(var_obs, :, i) .+ gp_var), view(flux_obs, :, i) .- gp_mean, log_λ)
-		gpd = get_marginal_GP(gp_base(view(log_λ_other, :, i), view(var_other, :, i) .+ gp_var), view(flux_other, :, i) .- gp_mean, log_λ)
-		gpn_μ = mean.(gpn) .+ gp_mean
-		gpd_μ = mean.(gpd) .+ gp_mean
-		fluxes[:, i] .= gpn_μ ./ gpd_μ
-		if !ignore_model_uncertainty
-			vars[:, i] .= (var.(gpn) ./ (gpd_μ .^2)) + (var.(gpd) .* (gpn_μ .^ 2) ./ (gpd_μ .^4))
-		else
-			vars[:, i] .= var.(gpn) ./ (gpd_μ .^2)
-		end
-		if keep_mask
-			inds = searchsortednearest(view(log_λ_obs, :, i), log_λ; lower=true)
-			for j in eachindex(inds)
-				if log_λ[j] <= log_λ_obs[1, i]
-					if isinf(var_obs[1, i]); vars[j, i] = Inf end
-				elseif log_λ[j] >= log_λ_obs[end, i]
-					if isinf(var_obs[end, i]); vars[j, i] = Inf end
-				elseif isinf(var_obs[inds[j], i]) || isinf(var_obs[inds[j]+1, i])
-					vars[j, i] = Inf
-				end
-			end
-		end
-	end
-	if return_weights
-		vars .= 1 ./ vars
-	end
-end
-function _spectra_interp_gp_div_gp(log_λ::AbstractVector, flux_obs::AbstractMatrix, var_obs::AbstractMatrix, log_λ_obs::AbstractMatrix, flux_other::AbstractMatrix, var_other::AbstractMatrix, log_λ_other::AbstractMatrix; kwargs...)
-	fluxes = Array{Float64}(undef, length(log_λ), size(flux_obs, 2))
-	vars = Array{Float64}(undef, length(log_λ), size(flux_obs, 2))
-	 _spectra_interp_gp_div_gp!(fluxes, vars, log_λ, flux_obs, var_obs, log_λ_obs, flux_other, var_other, log_λ_other; kwargs...)
-	return fluxes, vars
-end
+# function _spectra_interp_gp_div_gp!(fluxes::AbstractMatrix, vars::AbstractMatrix, log_λ::AbstractVector, flux_obs::AbstractMatrix, var_obs::AbstractMatrix, log_λ_obs::AbstractMatrix, flux_other::AbstractMatrix, var_other::AbstractMatrix, log_λ_other::AbstractMatrix; gp_mean::Number=1., gp_base=SOAP_gp, gp_var=SOAP_gp_var, keep_mask::Bool=true, return_weights::Bool=false, ignore_model_uncertainty::Bool=false)
+# 	for i in axes(flux_obs, 2)
+# 		gpn = get_marginal_GP(gp_base(view(log_λ_obs, :, i), view(var_obs, :, i) .+ gp_var), view(flux_obs, :, i) .- gp_mean, log_λ)
+# 		gpd = get_marginal_GP(gp_base(view(log_λ_other, :, i), view(var_other, :, i) .+ gp_var), view(flux_other, :, i) .- gp_mean, log_λ)
+# 		gpn_μ = mean.(gpn) .+ gp_mean
+# 		gpd_μ = mean.(gpd) .+ gp_mean
+# 		fluxes[:, i] .= gpn_μ ./ gpd_μ
+# 		if !ignore_model_uncertainty
+# 			vars[:, i] .= (var.(gpn) ./ (gpd_μ .^2)) + (var.(gpd) .* (gpn_μ .^ 2) ./ (gpd_μ .^4))
+# 		else
+# 			vars[:, i] .= var.(gpn) ./ (gpd_μ .^2)
+# 		end
+# 		if keep_mask
+# 			inds = searchsortednearest(view(log_λ_obs, :, i), log_λ; lower=true)
+# 			for j in eachindex(inds)
+# 				if log_λ[j] <= log_λ_obs[1, i]
+# 					if isinf(var_obs[1, i]); vars[j, i] = Inf end
+# 				elseif log_λ[j] >= log_λ_obs[end, i]
+# 					if isinf(var_obs[end, i]); vars[j, i] = Inf end
+# 				elseif isinf(var_obs[inds[j], i]) || isinf(var_obs[inds[j]+1, i])
+# 					vars[j, i] = Inf
+# 				end
+# 			end
+# 		end
+# 	end
+# 	if return_weights
+# 		vars .= 1 ./ vars
+# 	end
+# end
+# function _spectra_interp_gp_div_gp(log_λ::AbstractVector, flux_obs::AbstractMatrix, var_obs::AbstractMatrix, log_λ_obs::AbstractMatrix, flux_other::AbstractMatrix, var_other::AbstractMatrix, log_λ_other::AbstractMatrix; kwargs...)
+# 	fluxes = Array{Float64}(undef, length(log_λ), size(flux_obs, 2))
+# 	vars = Array{Float64}(undef, length(log_λ), size(flux_obs, 2))
+# 	 _spectra_interp_gp_div_gp!(fluxes, vars, log_λ, flux_obs, var_obs, log_λ_obs, flux_other, var_other, log_λ_other; kwargs...)
+# 	return fluxes, vars
+# end
 
 # function n_comps_needed(sm::Submodel; threshold::Real=0.05)
 #     @assert 0 < threshold < 1
