@@ -1,10 +1,9 @@
-StellarSpectraObservationFitting.jl
+StellarSpectraObservationFitting.jl (SSOF, */suf/* like soufflé)
 ========
-StellarSpectraObservationFitting (SSOF) is a Julia package for creating data-driven models (with fast, physically-motivated Gaussian Process regularization) for the time-variable spectral features for both the telluric transmission and stellar spectrum measured by Extremely Precise Radial Velcotiy (EPRV) spectrographs. 
 
 ![SSOF model](/docs/ssof_model.PNG "SSOF model")
 
-SSOF outputs estimates for the radial velocities, template spectra in both the observer and barycentric frames, and scores and feature vectors that quantify temporal variability of time-variable telluric and stellar features, while accounting for the wavelength-dependent instrumental line-spread function (LSF).
+StellarSpectraObservationFitting (SSOF) is a Julia package for measuring radial velocities and creating data-driven models (with fast, physically-motivated Gaussian Process regularization) for the time-variable spectral features for both the telluric transmission and stellar spectrum measured by Extremely Precise Radial Velocity (EPRV) spectrographs (while accounting for the wavelength-dependent instrumental line-spread function)
 
 # Documentation
 
