@@ -1,10 +1,8 @@
 ## Importing packages
 using Pkg
-# Pkg.activate(".")
-# Pkg.update()
 Pkg.activate("examples")
-# Pkg.develop(;path="C:\\Users\\chris\\Dropbox\\GP_research\\julia\\StellarSpectraObservationFitting")
-# Pkg.update()
+Pkg.instantiate()
+
 import StellarSpectraObservationFitting as SSOF
 using JLD2  # importing saved model
 using Plots  # plotting
