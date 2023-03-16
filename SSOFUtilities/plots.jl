@@ -92,7 +92,7 @@ function plot_stellar_with_lsf!(plt, om::SSOF.OrderModel, y::AbstractMatrix; d::
 end
 
 c_ind_f(i) = ((i + 1) % 16) + 1
-function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; display_plt::Bool=true, d::Union{SSOF.Data, Nothing}=nothing, o::Union{SSOF.Output, Nothing}=nothing, incl_χ²::Bool=true, tel_errors::Union{AbstractMatrix, Nothing}=nothing, star_errors::Union{AbstractMatrix, Nothing}=nothing, df_act::Dict=Dict(), kwargs...)
+function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; display_plt::Bool=true, d::Union{SSOF.Data, Nothing}=nothing, o::Union{SSOF.Output, Nothing}=nothing, incl_χ²::Bool=true, tel_errors::Union{AbstractMatrix, Nothing}=nothing, star_errors::Union{AbstractMatrix, Nothing}=nothing, df_act::Dict=Dict(), return_separate::Bool=false, shift_M::Real=0.2, kwargs...)
 	plot_stellar = SSOF.is_time_variable(om.star)
 	plot_telluric = SSOF.is_time_variable(om.tel)
 	# plot the two templates if there is no time variation
@@ -106,7 +106,6 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 
 	n_plots = plot_stellar + plot_telluric
 	plt = _plot(; layout=grid(2, n_plots), size=(n_plots * _plt_size[1],_plt_size[2]*2), kwargs...)
-	shift_M = 0.2
 	incl_χ² = incl_χ² && !isnothing(d) && !isnothing(o)
 	if incl_χ²; χ²_base = SSOF._loss(o, om, d) end
 
@@ -206,9 +205,8 @@ function plot_model(om::SSOF.OrderModel, airmasses::Vector, times_nu::Vector; di
 end
 plot_model(mws::SSOF.ModelWorkspace, airmasses::Vector, times_nu::Vector; kwargs...) =
 	plot_model(mws.om, airmasses, times_nu; d=mws.d, o=mws.o, kwargs...)
-function plot_model(lm::SSOF.FullLinearModel; λ=eachindex(lm.μ), times=axes(lm.s, 2), display_plt::Bool=true, kwargs...)
+function plot_model(lm::SSOF.FullLinearModel; λ=eachindex(lm.μ), times=axes(lm.s, 2), display_plt::Bool=true, shift_M::Real = 0.2, kwargs...)
 	plt = _plot(; layout=grid(2, 1), size=(_plt_size[1],_plt_size[2]*1.5), kwargs...)
-	shift_M = 0.2
 	inds = axes(lm.M, 2)
 
 	# basis plot
@@ -229,6 +227,38 @@ function plot_model(lm::SSOF.FullLinearModel; λ=eachindex(lm.μ), times=axes(lm
 	if display_plt; display(plt) end
 	return plt
 end
+
+function plot_bases(om::SSOF.OrderModel, d::SSOF.Data, stellar::Bool; shift_M::Real=0.2, kwargs...)
+	plt = _plot(; kwargs...)
+	if stellar
+		plot_telluric_with_lsf!(plt, om, om.tel.lm.μ; d=d, color=base_color, alpha=0.3, label=L"\mu_\oplus", title="Stellar Model Feature Vectors", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
+		plot_stellar_with_lsf!(plt, om, om.star.lm.μ; d=d, color=plt_colors[1], label=L"\mu_\star")
+		lm = om.star.lm
+	else
+		plot_stellar_with_lsf!(plt, om, om.star.lm.μ; d=d, color=base_color, alpha=0.3, label=L"\mu_\star", title="Telluric Model Feature Vectors", legend=:outerright, xlabel = "Wavelength (Å)", ylabel = "Continuum Normalized Flux + Const")
+		plot_telluric_with_lsf!(plt, om, om.tel.lm.μ; d=d, color=plt_colors[1], label=L"\mu_\oplus")
+		lm = om.tel.lm
+	end
+	inds = axes(lm.M, 2)
+	norm_Ms = [norm(view(lm.M, :, i)) for i in inds]
+	for j in eachindex(inds)
+		i = inds[j]
+		c_ind = c_ind_f(i - inds[1])
+		norm_M = norm_Ms[j]
+		# basis plot
+		if stellar
+			plot_stellar_with_lsf!(plt, om, (view(lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); d=d, label="Basis $i", color=plt_colors[c_ind])
+		else
+			plot_telluric_with_lsf!(plt, om, (view(lm.M, :, i) ./ norm_M) .- shift_M * (i - 1); d=d, label="Basis $i", color=plt_colors[c_ind])
+		end
+	end
+	return plt
+end
+plot_telluric_bases(om::SSOF.OrderModel, d::SSOF.Data; kwargs...) = 
+	plot_bases(om, d, false; kwargs...)
+plot_stellar_bases(om::SSOF.OrderModel, d::SSOF.Data; kwargs...) = 
+	plot_bases(om, d, true; kwargs...)
+
 
 time_average(a) = mean(a; dims=2)
 function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool=true, include_χ²::Bool=true, kwargs...)

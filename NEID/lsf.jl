@@ -3,7 +3,8 @@ module NEIDLSF
     using FITSIO
     using SpecialFunctions
     using SparseArrays
-    using Interpolations
+    # using Interpolations
+    using DataInterpolations
     
     function conv_gauss_tophat(x::Real, σ::Real, boxhalfwidth::Real; amp::Real=1)
         scale = 1 / (sqrt(2) * σ)
@@ -66,10 +67,12 @@ module NEIDLSF
         n = length(log_λ_obs)
 
         # need to convert σs, bhws, and threeish_sigma (in units of neid pixels) to units of log_λ_obs pixels
-        pixel_separation_log_λ_obs = linear_interpolation(log_λ_obs, SSOF.simple_derivative(log_λ_obs); extrapolation_bc=Line())
+        # pixel_separation_log_λ_obs = linear_interpolation(log_λ_obs, SSOF.simple_derivative(log_λ_obs); extrapolation_bc=Line())
+        pixel_separation_log_λ_obs = DataInterpolations.LinearInterpolation(SSOF.simple_derivative(log_λ_obs), log_λ_obs)
         pixel_separation_ratio = SSOF.simple_derivative(log_λ_neid_order) ./ pixel_separation_log_λ_obs.(log_λ_neid_order)
         # make the linear_interpolation object and evaluate it
-        converter(vals) = linear_interpolation(log_λ_neid_order, pixel_separation_ratio .* vals; extrapolation_bc=Line())(log_λ_obs)
+        # converter(vals) = linear_interpolation(log_λ_neid_order, pixel_separation_ratio .* vals; extrapolation_bc=Line())(log_λ_obs)
+        converter(vals) = (DataInterpolations.LinearInterpolation(pixel_separation_ratio .* vals, log_λ_neid_order)).(log_λ_obs)
         σs_converted = converter(σs[:, order])
         bhws_converted = converter(bhws[:, order])
         threeish_sigma_converted = converter(threeish_sigma.(σs[:, order], bhws[:, order]))

@@ -520,6 +520,14 @@ FrozenTelWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
 FrozenTelWorkspace(om::OrderModel, d::Data; kwargs...) =
 	FrozenTelWorkspace(Output(om, d), om, d; kwargs...)
 
+function ModelWorkspace(model::OrderModel, data::Data)
+	if no_tellurics(model)
+		return FrozenTelWorkspace(model, data)
+	else
+		return TotalWorkspace(model, data)
+	end
+end
+
 function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, verbose::Bool=_verbose_def, shift_scores::Bool=true, μ_positive::Bool=true, tel_μ_lt1::Bool=false, winsor::Bool=true, rm_doppler::Bool=true, kwargs...)
 
 	if rm_doppler; dop_comp_holder = Array{Float64}(undef, length(mws.om.star.lm.μ)) end
@@ -882,6 +890,14 @@ end
 update_interpolation_locations!(mws::ModelWorkspace) = update_interpolation_locations!(mws.om, mws.d)
 
 
+function improve_model!(mws::ModelWorkspace; verbose::Bool=true, kwargs...)
+	train_OrderModel!(mws; verbose=verbose, kwargs...)  # 120s
+	results = finalize_scores!(mws; verbose=verbose, kwargs...)
+	return results
+end
+
+improve_initial_model!(mws::ModelWorkspace; careful_first_step::Bool=true, speed_up::Bool=false, kwargs...) = improve_model!(mws; verbose=false, ignore_regularization=true, μ_positive=true, careful_first_step=careful_first_step, speed_up=speed_up, kwargs...)
+
 # TODO: Make this work for OrderModelDPCA
 function calculate_initial_model(data::Data, instrument::String, desired_order::Int, star::String, times::AbstractVector;
 	μ_min::Real=0, μ_max::Real=Inf, use_mean::Bool=true, stop_early::Bool=false,
@@ -974,10 +990,6 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 
 	end
 
-	function improve_model!(mws::ModelWorkspace; kwargs...)
-		train_OrderModel!(mws; verbose=false, ignore_regularization=true, μ_positive=true, careful_first_step=careful_first_step, speed_up=speed_up, kwargs...)  # 120s
-		finalize_scores!(mws; verbose=false, ignore_regularization=true, μ_positive=true, kwargs...)
-	end
 	function nicer_model!(mws::ModelWorkspace)
 		remove_lm_score_means!(mws.om)
 		flip_basis_vectors!(mws.om)
@@ -994,10 +1006,10 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		# 	mws.om.reg_star[k] = min_reg
 		# end
 		try
-			improve_model!(mws; iter=50)
+			improve_initial_model!(mws; iter=50)
 			if mws.d != data
 				mws = typeof(mws)(copy(mws.om), data)
-				improve_model!(mws; iter=30)
+				improve_initial_model!(mws; iter=30)
 			end
 			nicer_model!(mws)
 			k = total_length(mws)

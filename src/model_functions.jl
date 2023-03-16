@@ -381,9 +381,13 @@ struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:A
 	Σ_sde::StaticMatrix
 	Δℓ_coeff::AA
 end
-function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int, log_λ_gp::Real; include_mean::Bool=true, log_lm::Bool=_log_lm_default, kwargs...)
+function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int, log_λ_gp::Real; include_mean::Bool=true, log_lm::Bool=_log_lm_default, log_λ::Union{Nothing,AbstractRange}=nothing, kwargs...)
 	n_obs = size(log_λ_obs, 2)
-	log_λ, λ = create_λ_template(log_λ_obs; kwargs...)
+	if isnothing(log_λ)
+		log_λ, λ = create_λ_template(log_λ_obs; kwargs...)
+	else
+		λ = exp.(log_λ)
+	end
 	len = length(log_λ)
 	if include_mean
 		if n_comp > 0
@@ -530,13 +534,15 @@ function OrderModel(
 	dpca::Bool=false,
 	log_λ_gp_star::Real=1/SOAP_gp_params.λ,
 	log_λ_gp_tel::Real=1/LSF_gp_params.λ,
+	tel_log_λ::Union{Nothing,AbstractRange}=nothing,
+	star_log_λ::Union{Nothing,AbstractRange}=nothing,
 	kwargs...)
 
-	tel = Submodel(d.log_λ_obs, n_comp_tel, log_λ_gp_tel; kwargs...)
-	star = Submodel(d.log_λ_star, n_comp_star, log_λ_gp_star; kwargs...)
+	tel = Submodel(d.log_λ_obs, n_comp_tel, log_λ_gp_tel; log_λ=tel_log_λ, kwargs...)
+	star = Submodel(d.log_λ_star, n_comp_star, log_λ_gp_star; log_λ=star_log_λ, kwargs...)
 	n_obs = size(d.log_λ_obs, 2)
 	dpca ?
-		rv = Submodel(d.log_λ_star, 1, log_λ_gp_star; include_mean=false, kwargs...) :
+		rv = Submodel(d.log_λ_star, 1, log_λ_gp_star; include_mean=false, log_λ=star_log_λ, kwargs...) :
 		rv = zeros(n_obs)
 
 	bary_rvs = D_to_rv.([median(d.log_λ_star[:, i] - d.log_λ_obs[:, i]) for i in 1:n_obs])

@@ -169,3 +169,16 @@ function fit_regularization!(mws::ModelWorkspace, testing_inds::AbstractVecOrMat
         end
     end
 end
+
+
+function fit_regularization!(mws::ModelWorkspace; verbose::Bool=true, testing_ratio::Real=0.33, careful_first_step::Bool=true, speed_up::Bool=false, kwargs...)
+	# if mws.om.metadata[:todo][:reg_improved]
+    n_obs = size(mws.d.flux, 2)
+    train_OrderModel!(mws; verbose=verbose, ignore_regularization=true, careful_first_step=careful_first_step, speed_up=speed_up)
+    n_obs_test = Int(round(testing_ratio * n_obs))
+    test_start_ind = max(1, Int(round(rand() * (n_obs - n_obs_test))))
+    testing_inds = test_start_ind:test_start_ind+n_obs_test-1
+    fit_regularization!(mws, testing_inds; kwargs...)
+    mws.om.metadata[:todo][:reg_improved] = true
+	# end
+end

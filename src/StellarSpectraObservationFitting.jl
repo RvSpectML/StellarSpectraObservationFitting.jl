@@ -13,5 +13,6 @@ include("mask_functions.jl")
 include("Nabla_extension.jl")
 include("prior_gp_functions.jl")
 include("rassine.jl")
+include("error_estimation.jl")
 
 end # module
