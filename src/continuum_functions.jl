@@ -109,8 +109,9 @@ _max_flux_default = 2.
 # 	return affected
 # end
 # mask_infinite_pixels!(d::Data; kwargs...) = mask_infinite_pixels!(d.flux, d.var; kwargs...)
+or(a::Bool, b::Bool) = a || b
 function mask_infinite_pixels!(y::AbstractMatrix, σ²::AbstractMatrix, log_λ_star::AbstractMatrix, log_λ_star_bounds::AbstractMatrix; padding::Int=0, include_bary_shifts::Bool=false, verbose::Bool=true, kwargs...)
-	i = findall(vec(all(.!isfinite.(y) .|| .!isfinite.(σ²); dims=2)))
+	i = findall(vec(all(or.(.!isfinite.(y), .!isfinite.(σ²)); dims=2)))
 	if length(i) > 0
 		if verbose; println("Instrumental pipeline already masked out pixels $i at all times") end
 		# println("Instrumental pipeline already masked out many pixels")
