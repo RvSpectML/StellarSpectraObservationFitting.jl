@@ -8,7 +8,7 @@ StellarSpectraObservationFitting (SSOF) is a Julia package for creating data-dri
 
 ## Where to begin?
 
-If you haven't used GLOM before, a good place to start is the "Getting Started" section. We list how to install the package as well as a simple example
+If you haven't used SSOF before, a good place to start is the "Getting Started" section. We list how to install the package as well as a simple example
 
 ```@contents
 Pages = ["gettingstarted.md"]
