@@ -285,6 +285,7 @@ function flat_normalize!(d::Data; kwargs...)
 	end
 end
 
+and(a::Bool, b::Bool) = a && b
 function outlier_mask(v::AbstractVecOrMat; thres::Real=10, prop::Real=0.2, return_stats::Bool=false, only_low::Bool=false)
 	wv = winsor(v; prop=prop)
 	μ = mean(wv)
@@ -295,7 +296,7 @@ function outlier_mask(v::AbstractVecOrMat; thres::Real=10, prop::Real=0.2, retur
 			return mask, (v .- μ) ./ σ
 		end
 	else
-		mask = (v .< (μ + thres * σ)) .&& (v .> (μ - thres * σ))
+		mask = and.(v .< (μ + thres * σ), v .> (μ - thres * σ))
 	end
 	if return_stats
 		return mask, abs.((v .- μ) ./ σ)

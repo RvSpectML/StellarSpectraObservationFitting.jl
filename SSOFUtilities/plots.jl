@@ -357,7 +357,7 @@ function gated_plot!(plt, plotf!::Function, x::AbstractVector, y::AbstractVector
 	scatter!(x[m1], ones(sum(m1)) .* (ylims[1] + .05); label="", c=c, markershape=:utriangle, markerstrokewidth=0, alpha=alpha, markersize=markersize)
 	m2 = y .> ylims[2]
 	scatter!(x[m2], ones(sum(m2)) .* (ylims[2] - .05); label="", c=c, markershape=:dtriangle, markerstrokewidth=0, alpha=alpha, markersize=markersize)
-	m = .!m1 .&& .!m2
+	m = SSOF.and.(.!m1, .!m2)
 	plotf!(x[m], y[m]; label=label, c=c, markerstrokewidth=0, alpha=alpha, markersize=markersize)
 end
 
