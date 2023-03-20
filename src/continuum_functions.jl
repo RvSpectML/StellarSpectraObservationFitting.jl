@@ -4,35 +4,24 @@ using LinearAlgebra
 using Statistics
 import StatsBase: winsor
 
-# using Plots
-
 _high_quantile_default = 0.9
-# These were initially defined to act on all of the orders of the spectra at a
-# given time, but I have defined them to act on all of the times of the spectra
-# at a given order. Should be equivalent
-function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVector; ignore_weights::Bool=false, order::Int=6, nsigma::Vector{<:Real}=[0.5,3.0], maxniter::Int=50, plot_stuff::Bool=false, edge_mask::Int=0)
-    """Fit the continuum using sigma clipping
-    Args:
-        x: The wavelengths
-        y: The log-fluxes
-        σ² : variances for `ys`.
-        order: The polynomial order to use
-        nsigma: The sigma clipping threshold: vector (low, high)
-        maxniter: The maximum number of iterations to do
-    Returns:
-        The value of the continuum at the wavelengths in x
-    """
+
+"""
+	fit_continuum(x, y, σ²; ignore_weights=false, order=6, nsigma=[0.5,3.0], maxniter=50, edge_mask::Int=0)
+
+Fit the continuum of `y` with a polynomial of order `order` using assymetric sigma-clipping, similar to `wobble`
+"""
+function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVector; ignore_weights::Bool=false, order::Int=6, nsigma::Vector{<:Real}=[0.5,3.0], maxniter::Int=50, edge_mask::Int=0)
     @assert 0 <= order < length(x)
     @assert length(x) == length(y) == length(σ²)
     @assert length(nsigma) == 2
 
-    A = _vander(x .- mean(x), order)
-    m = fill(true, length(x))
-	# σ² = copy(σ²)
-	# σ²_thres = quantile(σ²[isfinite.(σ²)], _high_quantile_default)/10
-	# σ²[σ² .< σ²_thres] .= σ²_thres
-	m[y .< 0.5] .= false  # mask out the bad pixels
+    A = _vander(x .- mean(x), order)  # the constant design matrix
+    m = fill(true, length(x))  # the sigma-clipped mask
+	m[y .< 0.5] .= false  # mask out the low pixels
 	m[σ² .== Inf] .= false  # mask out the bad pixels
+
+	# masking out edge if desired
 	if edge_mask > 0
 		# m[edge_pad+1:edge_mask+edge_pad] .= false
 		# m[end-edge_mask-edge_pad+1:end-edge_pad] .= false
@@ -41,8 +30,12 @@ function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVecto
 		y[1:edge_mask] .= 1
 		y[end-edge_mask+1:end] .= 1
 	end
+
+	# preallocating arrays
     μ = ones(length(x))
 	w = Array{Float64}(undef, order+1)
+
+	# keep fitting polynomial and sigma clipping until the sigma-clipped mask stops changing
     for i in 1:maxniter
 		if ignore_weights
 			w[:] = general_lst_sq(view(A, m, :), view(y, m))
@@ -50,12 +43,6 @@ function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVecto
 			w[:] = general_lst_sq(view(A, m, :), view(y, m), view(σ², m))
 		end
         μ[:] = A * w
-		# if plot_stuff
-		# 	plt = scatter(x[m], y[m]; label="used", legend=:bottomleft)
-		# 	scatter!(plt, x[.!m], y[.!m]; label="masked")
-		# 	plot!(plt, x, μ; label="model")
-		# 	display(plt)
-		# end
         resid = y - μ
         # sigma = median(abs.(resid))
 		sigma = std(resid)
@@ -65,15 +52,27 @@ function fit_continuum(x::AbstractVector, y::AbstractVector, σ²::AbstractVecto
         if sum(m) == sum(m_new); break end
         m = m_new
     end
+
+	# restoring edge
 	if edge_mask > 0
 		y[1:edge_mask] .= hold_left
 		y[end-edge_mask+1:end] .= hold_right
 	end
+
     return μ, w
 end
+
+
+"""
+	continuum_normalize!(d; order=6, kwargs...)
+
+Divide `d.flux` (and `d.var`) by its sigma-clipped polynomial continuum (or its square)
+"""
 function continuum_normalize!(d::Data; order::Int=6, kwargs...)
 	continuum = ones(size(d.log_λ_obs, 1))
 	w = Array{Float64}(undef, order + 1, size(d.flux, 2))
+
+	# fit the continuum at each time
 	for i in axes(d.log_λ_obs, 2)
 		continuum[:], w[:, i] = fit_continuum(view(d.log_λ_obs, :, i), view(d.flux, :, i), view(d.var, :, i); order=order, kwargs...)
 		d.flux[:, i] ./= continuum
@@ -87,34 +86,17 @@ _min_flux_default = 0.
 _max_flux_default = 2.
 
 
-# function mask_infinite_pixels!(bad::AbstractVector, y::AbstractVector, σ²::AbstractVector; padding::Int=2, using_weights::Bool=false)
-# 	bad[:] = .!isfinite.(y) .|| .!isfinite.(σ²)
-# 	l = length(bad)
-# 	for i in findall(bad)
-# 		bad[max(1, i - padding):min(i + padding, l)] .= true
-# 	end
-# 	return mask!(σ², bad; using_weights=using_weights)
-# end
-# function mask_infinite_pixels!(y::AbstractVector, σ²::AbstractVector; kwargs...)
-# 	bad = Array{Bool}(undef, length(y))
-# 	mask_infinite_pixels!(bad, y, σ²; kwargs...)
-# end
-# function mask_infinite_pixels!(y::AbstractMatrix, σ²::AbstractMatrix; kwargs...)
-# 	affected = Int64[]
-# 	bad = Array{Bool}(undef, size(y, 1))
-# 	for i in axes(y, 2)
-# 		affected2 = mask_infinite_pixels!(bad, view(y, :, i), view(σ², :, i); kwargs...)
-# 		affected_pixels!(affected, affected2)
-# 	end
-# 	return affected
-# end
-# mask_infinite_pixels!(d::Data; kwargs...) = mask_infinite_pixels!(d.flux, d.var; kwargs...)
 or(a::Bool, b::Bool) = a || b
+
+"""
+	mask_infinite_pixels!(y, σ², log_λ_star, log_λ_star_bounds; padding=0, include_bary_shifts=false, verbose=true, kwargs...)
+
+Mask out pixels whose `y` or `σ²` values are infinite
+"""
 function mask_infinite_pixels!(y::AbstractMatrix, σ²::AbstractMatrix, log_λ_star::AbstractMatrix, log_λ_star_bounds::AbstractMatrix; padding::Int=0, include_bary_shifts::Bool=false, verbose::Bool=true, kwargs...)
 	i = findall(vec(all(or.(.!isfinite.(y), .!isfinite.(σ²)); dims=2)))
 	if length(i) > 0
 		if verbose; println("Instrumental pipeline already masked out pixels $i at all times") end
-		# println("Instrumental pipeline already masked out many pixels")
 		if include_bary_shifts
 			return mask_stellar_pixel!(σ², log_λ_star, log_λ_star_bounds, i; padding=padding, verbose=false)
 		else
@@ -128,6 +110,11 @@ function mask_infinite_pixels!(d::Data; kwargs...)
 	return mask_infinite_pixels!(d.flux, d.var, d.log_λ_star, d.log_λ_star_bounds; include_bary_shifts=false, verbose=false, kwargs...)
 end
 
+"""
+	mask_low_pixels!(bad, y, σ²; padding=0, min_flux=0., padding=2, using_weights=false)
+
+Mask out pixels whose `y` values are below `min_flux`
+"""
 function mask_low_pixels!(bad::AbstractVector, y::AbstractVector, σ²::AbstractVector; min_flux::Real=_min_flux_default, padding::Int=2, using_weights::Bool=false)
 	bad[:] = y .< min_flux
 	# y[bad] .= min_flux
@@ -154,28 +141,13 @@ function mask_low_pixels!(d::Data; kwargs...)
 	mask_low_pixels!(d.flux, d.var_s; kwargs...)
 	return mask_low_pixels!(d.flux, d.var; kwargs...)
 end
-# function mask_low_pixels_all_times!(y::AbstractMatrix, σ²::AbstractMatrix, log_λ_star::AbstractMatrix, log_λ_star_bounds::AbstractMatrix; min_flux::Real=_min_flux_default, padding::Int=2, using_weights::Bool=false)
-# 	bad = y .< min_flux
-# 	# y[bad] .= min_flux
-# 	l = size(bad, 1)
-# 	low_pix = Int64[]
-# 	for ij in findall(bad)
-# 		i = ij[1]  # only get pixel, time doesn't matter
-# 		if !(i in low_pix)
-# 			append!(low_pix, [i])
-# 			# bad[max(1, i - padding):min(i + padding, l), :] .= true  # masking the low pixel at all times
-# 		end
-# 	end
-# 	sort!(low_pix)
-# 	if length(low_pix) > 20
-# 		println("masked out many low pixels at all times")
-# 	elseif length(low_pix) > 0
-# 		println("masked out low pixels $low_pix (±$padding pixels) at all times")
-# 	end
-# 	mask_stellar_pixel!(σ², log_λ_star, log_λ_star_bounds, low_pix; padding=padding, using_weights=using_weights, verbose=false)
-# end
-# mask_low_pixels_all_times!(d::Data; kwargs...) = mask_low_pixels_all_times!(d.flux, d.var, d.log_λ_star, d.log_λ_star_bounds; kwargs...)
 
+
+"""
+	mask_high_pixels!(bad, y, σ²; padding=0, max_flux=2., padding=2, using_weights=false)
+
+Mask out pixels whose `y` values are above `max_flux`
+"""
 function mask_high_pixels!(bad::AbstractVector, y::AbstractVector, σ²::AbstractVector; max_flux::Real=_max_flux_default, padding::Int=2, kwargs...)
 	bad[:] = y .> max_flux
 	# y[bad] .= max_flux
@@ -203,26 +175,15 @@ function mask_high_pixels!(d::Data; kwargs...)
 	return mask_high_pixels!(d.flux, d.var; kwargs...)
 end
 
-# function mask_bad_edges!(y::AbstractVector, σ²::AbstractVector; window_width::Int=128, min_snr::Real=8.)
-# 	n_pix = length(y)
-# 	for window_start in 1:Int(floor(window_width/10)):(n_pix - window_width)
-# 		window_end = window_start + window_width
-# 		mean_snr = sqrt(mean((y[window_start:window_end] .^2) ./ abs.(σ²[window_start:window_end])))
-# 		if mean_snr > min_snr
-# 			σ²[1:window_start] .= Inf # trim everything to left of window
-# 			break
-# 		end
-# 	end
-# 	for window_end in n_pix:-Int(floor(window_width/10)):(window_width + 1)
-# 		window_start = window_end - window_width
-# 		mean_snr = sqrt(mean((y[window_start:window_end] .^2) ./ abs.(σ²[window_start:window_end])))
-# 		if mean_snr > min_snr
-# 			σ²[window_end:end] .= Inf # trim everything to right of window
-# 			break
-# 		end
-# 	end
-# end
+
+"""
+	mask_bad_edges!(y, σ², log_λ_star, log_λ_star_bounds; window_width=128, min_snr=8., verbose=true, always_mask_something=false, edges=nothing, kwargs...)
+
+Mask out edges of `y` (either given by `edges` or where `y`/`σ` is on average below `min_snr`)
+"""
 function mask_bad_edges!(y::AbstractMatrix, σ²::AbstractMatrix, log_λ_star::AbstractMatrix, log_λ_star_bounds::AbstractMatrix; window_width::Int=128, min_snr::Real=8., verbose::Bool=true, always_mask_something::Bool=false, edges=nothing, kwargs...)
+	
+	# if `edges` isn't given, find how much to mask based on SNR in a sliding window
 	if isnothing(edges)
 		n_pix = size(y, 1)
 		window_start_tot = 0
@@ -250,6 +211,8 @@ function mask_bad_edges!(y::AbstractMatrix, σ²::AbstractMatrix, log_λ_star::A
 	else
 		window_start_tot, window_end_tot = edges
 	end
+
+	# do the masking
 	if always_mask_something || window_start_tot > 1
 		# σ²[1:window_start_tot, :] .= Inf # trim everything to left of window
 		if verbose; println("masking out low SNR edge from 1:$window_start_tot") end
@@ -276,6 +239,11 @@ function mask_bad_edges!(d::Data; kwargs...)
 	return affected
 end
 
+"""
+	flat_normalize!(d; kwargs...)
+
+Divide `d.flux` (and `d.var`) by its `0.9` quantile value (or its square)
+"""
 function flat_normalize!(d::Data; kwargs...)
 	for i in axes(d.log_λ_obs, 2)
 		continuum = quantile(view(d.flux, .!(isnan.(view(d.flux, :, i))), i), _high_quantile_default)
@@ -285,11 +253,20 @@ function flat_normalize!(d::Data; kwargs...)
 	end
 end
 
+
 and(a::Bool, b::Bool) = a && b
+
+
+"""
+	outlier_mask(v; thres=10, prop=0.2, return_stats=false, only_low::Bool=false)
+
+Mask outliers in `v` that are outside `thres`-σ after winsorizing out the top and bottom `prop` quantiles
+"""
 function outlier_mask(v::AbstractVecOrMat; thres::Real=10, prop::Real=0.2, return_stats::Bool=false, only_low::Bool=false)
 	wv = winsor(v; prop=prop)
 	μ = mean(wv)
 	σ = stdm(wv, μ)
+
 	if only_low
 		mask = v .> (μ - thres * σ)
 		if return_stats
@@ -298,6 +275,7 @@ function outlier_mask(v::AbstractVecOrMat; thres::Real=10, prop::Real=0.2, retur
 	else
 		mask = and.(v .< (μ + thres * σ), v .> (μ - thres * σ))
 	end
+
 	if return_stats
 		return mask, abs.((v .- μ) ./ σ)
 	end
@@ -324,6 +302,12 @@ end
 # 	end
 # end
 
+
+"""
+	snap(y)
+
+Estimate δ⁴`y`/δ⁴x (a.k.a. the snap). See https://en.wikipedia.org/wiki/Finite_difference#Higher-order_differences
+"""
 function snap(y::AbstractMatrix)
 	snp = Array{Float64}(undef, size(y, 1), size(y, 2))
 	l = size(snp, 1)
@@ -363,13 +347,26 @@ function _snap(y::AbstractVector; kwargs...)
 	_snap!(snp, y; kwargs...)
 	return snp
 end
+
+
+"""
+	bad_pixel_flagger(y, σ²; prop=.005, thres=8)
+
+Find anomalous pixels where δ⁴`y`/δ⁴x is high, passing `prop` and `thres` to `outlier_mask()`
+"""
 function bad_pixel_flagger(y::AbstractMatrix, σ²::AbstractMatrix; prop::Real=.005, thres::Real=8)
 	snp = snap(y, σ²)
 	snp = vec(mean(snp; dims=2))
 	high_snap_pixels = find_modes(snp)
 	return high_snap_pixels[.!outlier_mask(snp[high_snap_pixels]; prop=prop, thres=thres)]
 end
-# bad_pixel_flagger(d::Data; kwargs...) = bad_pixel_flagger(d.flux, d.var; kwargs...)
+
+
+"""
+	mask_bad_pixel!(y, σ², log_λ_star, log_λ_star_bounds; padding=2, include_bary_shifts=false, verbose=true, bad_pixels=nothing, kwargs...)
+
+Mask anomalous pixels where δ⁴`y`/δ⁴x is high
+"""
 function mask_bad_pixel!(y::AbstractMatrix, σ²::AbstractMatrix, log_λ_star::AbstractMatrix, log_λ_star_bounds::AbstractMatrix; padding::Int=2, include_bary_shifts::Bool=false, verbose::Bool=true, bad_pixels=nothing, kwargs...)
 	if isnothing(bad_pixels); bad_pixels = bad_pixel_flagger(y, σ²; kwargs...) end
 	if length(bad_pixels) > 0
@@ -392,6 +389,12 @@ function mask_bad_pixel!(d::Data; kwargs...)
 	return affected
 end
 
+
+"""
+	mask_isolated_pixels!(σ²; neighbors_required::Int=29, verbose::Bool=true)
+
+Mask between two flagged pixels if there are fewer than `neighbors_required` pixels between them
+"""
 function mask_isolated_pixels!(σ²::AbstractMatrix; neighbors_required::Int=29, verbose::Bool=true)
 	affected = Int[]
 	lo = 1
@@ -399,8 +402,13 @@ function mask_isolated_pixels!(σ²::AbstractMatrix; neighbors_required::Int=29,
 	m = vec(all(isinf.(σ²); dims=2))
 	l = length(m)
 	while lo <= l
+
+		# if pixel is already flagged, keep going
 		if m[lo]
 			lo += 1
+
+		# if pixel is not flagged, go until the next flagged pixel is found
+		# and make sure the distance to it is <`neighbors_required`
 		else
 			hi = lo + 1
 			while hi <= l && !m[hi]
@@ -422,8 +430,17 @@ function mask_isolated_pixels!(d::Data; kwargs...)
 	return mask_isolated_pixels!(d.var; verbose=false, kwargs...)
 end
 
+
+"""
+	process!(d; λ_thres=4000., min_snr=8, kwargs...)
+
+Doing all of the data preprocessing, including continuum-fitting and masking
+"""
 function process!(d; λ_thres::Real=4000., min_snr::Real=8, kwargs...)
+	
 	flat_normalize!(d)
+
+	## masking
 	# mask_low_pixels_all_times!(d; padding=2)
 	bad_inst = mask_infinite_pixels!(d; padding=1)
 	bad_snap = mask_bad_pixel!(d; padding=1)  # thres from 4-11 seems good
@@ -431,31 +448,25 @@ function process!(d; λ_thres::Real=4000., min_snr::Real=8, kwargs...)
 	bad_high = mask_high_pixels!(d; padding=1)
 	bad_isol = mask_isolated_pixels!(d)
 
-	# @assert issorted(bad_infi)
-	# @assert issorted(bad_edge)
-	# @assert issorted(bad_high)
-	# @assert issorted(bad_snap)
-	# @assert issorted(bad_isol)
-	# filter_bads(bad) = [i for i in bad if length(searchsorted(bad_edge, i)) > 0]
-
+	## why was each pixel masked
 	filter_bads(bad) = [i for i in bad if !(i in bad_edge)]
 	bad_inst = filter_bads(bad_inst)
 	bad_high = filter_bads(bad_high)
 	bad_snap = filter_bads(bad_snap)
 	bad_isol = filter_bads(bad_isol)
 
+	## continuum normalizing
 	# λ_thres = 4000 # is there likely to even be a continuum (neid index order 23+)
 	# λ_thres = 6200 # where neid blaze correction starts to break down (neid index order 77+)
 	red_enough = minimum(d.log_λ_obs) > log(λ_thres)
-
 	# enough_points = (sum(isinf.(d.var)) / length(d.var)) < 0.5
 	enough_points = true
-
 	if (red_enough && enough_points)
 		println("normalizing")
 		w = continuum_normalize!(d; kwargs...)
 	else
 		w = nothing
 	end
+
 	return bad_inst, bad_high, bad_snap, bad_edge, bad_isol
 end
