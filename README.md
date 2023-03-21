@@ -7,7 +7,7 @@ StellarSpectraObservationFitting (SSOF) is a Julia package for measuring radial 
 
 # Documentation
 
-For more details and options, see the [documentation](https://christiangil.github.io/StellarSpectraObservationFitting.jl) (available soon)
+For more details and options, see the [documentation](https://christiangil.github.io/StellarSpectraObservationFitting.jl)
 
 # Installation
 
