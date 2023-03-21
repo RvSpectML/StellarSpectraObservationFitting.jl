@@ -2,6 +2,13 @@
 using ParameterHandling
 import ParameterHandling.flatten
 
+
+"""
+    flatten([eltype=Real], x::LinearModel)
+
+Returns a "flattened" representation of `x::LinearModel` as a vector of vectors and a function
+`unflatten` that takes a vector of reals of the same length and returns a LinearModel object
+"""
 function flatten(::Type{T}, x::LinearModel) where {T<:Real}
     x_vec, unflatten = flatten(T, [getfield(x, i) for i in fieldnames(typeof(x))])
     function unflatten_to_struct(v::Vector{T})
@@ -11,7 +18,12 @@ function flatten(::Type{T}, x::LinearModel) where {T<:Real}
     return x_vec, unflatten_to_struct
 end
 
-# removing type return restrictions from flatten for Array views
+"""
+    flatten([eltype=Real], x::SubArray)
+    
+Returns a "flattened" representation of `x::SubArray` as a vector and a function
+`unflatten` that takes a vector of reals of the same length and returns an Array object
+"""
 function flatten(::Type{T}, x::SubArray) where {T<:Real}
     x_vec, from_vec = flatten(T, vec(x))
     Array_from_vec(x_vec) = reshape(from_vec(x_vec), size(x))

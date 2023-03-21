@@ -16,7 +16,7 @@ Pkg.develop("StellarSpectraObservationFitting")
 
 ## Example
 
-An example script can be found [here](https://github.com/christiangil/StellarSpectraObservationFitting.jl/blob/master/examples/example.jl)
+An example notebook can be found [here](https://github.com/christiangil/StellarSpectraObservationFitting.jl/blob/master/examples/example.ipynb)
 
 ## Getting Help
 

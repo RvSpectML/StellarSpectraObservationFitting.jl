@@ -306,7 +306,7 @@ end
 """
 	snap(y)
 
-Estimate δ⁴`y`/δ⁴x (a.k.a. the snap). See https://en.wikipedia.org/wiki/Finite_difference#Higher-order_differences
+Estimate δ⁴`y`/δ⁴x (a.k.a. the snap) with finite differences. See https://en.wikipedia.org/wiki/Finite_difference#Higher-order_differences
 """
 function snap(y::AbstractMatrix)
 	snp = Array{Float64}(undef, size(y, 1), size(y, 2))

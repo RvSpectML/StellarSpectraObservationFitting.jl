@@ -10,7 +10,21 @@ makedocs(
     authors = "Christian Gilbertson",
     pages = [
         "Home" => "index.md",
+        "gettingstarted.md",
+        # "User's Guide" => [
+        #     "Kernels" => [
+        #         "Kernel functions" => "kernel.md",
+        #         "Adding new kernels" => "kernel_creation.md",
+        #         ],
+        #     "GPLinearODE struct" => "glo.md",
+        #     "GLOM Functionality" => "nlogl.md",
+        #     "Prior functions" => "priors.md",
+        # ],
+        hide("(D)EMPCA" => "empca.md"),
+        hide("Continuum" => "continuum.md"),
         hide("Indices" => "indices.md"),
+        # hide("Diagnostic functions" => "diagnostic.md"),
+        # hide("Utility functions" => "utility.md"),
         "LICENSE.md",
     ]
 )
