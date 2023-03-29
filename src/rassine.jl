@@ -2,7 +2,10 @@
 
 ############
 # code shamelessly ripped and modified from https://github.com/RvSpectML/NeidSolarScripts.jl/blob/fc6db7979b649370a2923ac987dbd02424cb1762/src/continuum_rassine_like.jl
+# which in turn is based off of the methods in https://arxiv.org/abs/2006.13098
+# This code is not really used in SSOF but is kept for posterity
 ##########
+
 # ] add DSP DataInterpolations Distributions NaNMath Polynomials RollingFunctions SortFilters
 
 # using RvSpectMLBase

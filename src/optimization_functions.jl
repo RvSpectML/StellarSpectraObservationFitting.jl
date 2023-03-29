@@ -10,10 +10,13 @@ abstract type ModelWorkspace end
 abstract type AdamWorkspace<:ModelWorkspace end
 abstract type OptimWorkspace<:ModelWorkspace end
 
+# generic χ² loss functions
 _χ²_loss_σ(model_m_data, sigma) = (model_m_data ./ sigma) .^ 2
 _χ²_loss(model_m_data, variance) = ((model_m_data) .^ 2) ./ variance
 _χ²_loss(model, data, variance) = _χ²_loss(model .- data, variance)
 _χ²_loss(model, data::Data; use_var_s::Bool=false) = use_var_s ? _χ²_loss(model, data.flux, data.var_s) : _χ²_loss(model, data.flux, data.var)
+
+# χ² loss functions per pixel
 __loss_diagnostic(tel, star, rv, d::GenericData; kwargs...) =
 	_χ²_loss(total_model(tel, star, rv), d; kwargs...)
 __loss_diagnostic(tel, star, rv, d::LSFData; kwargs...) =
@@ -45,39 +48,30 @@ function _loss_diagnostic(o::Output, om::OrderModel, d::Data;
 end
 _loss_diagnostic(mws::ModelWorkspace; kwargs...) = _loss_diagnostic(mws.o, mws.om, mws.d; kwargs...)
 
-# χ² loss function
+# summed χ² loss functions
 _loss(tel, star, rv, d::Data; kwargs...) = sum(__loss_diagnostic(tel, star, rv, d; kwargs...))
 _loss(tel, star, d::Data; kwargs...) = sum(__loss_diagnostic(tel, star, d; kwargs...))
 _loss(o::Output, om::OrderModel, d::Data; kwargs...) = sum(_loss_diagnostic(o, om, d; kwargs...))
 _loss(mws::ModelWorkspace; kwargs...) = _loss(mws.o, mws.om, mws.d; kwargs...)
-# function _loss(o::Output, om::OrderModel, d::Data;
-# 	tel=nothing, star=nothing, rv=nothing)
-#     !isnothing(tel) ? tel_o = spectra_interp(_eval_lm_vec(om, tel; log_lm=log_lm(om.tel.lm)), om.t2o) : tel_o = o.tel
-# 	if typeof(om) <: OrderModelDPCA
-# 		!isnothing(star) ? star_o = spectra_interp(_eval_lm_vec(om, star; log_lm=log_lm(om.star.lm)), om.b2o) : star_o = o.star
-# 	    !isnothing(rv) ? rv_o = spectra_interp(_eval_lm(om.rv.lm.M, rv), om.b2o) : rv_o = o.rv
-# 	    return _loss(tel_o, star_o, rv_o, d)
-# 	end
-# 	if !isnothing(star)
-# 		if !isnothing(rv)
-# 			star_o = spectra_interp(_eval_lm_vec(om, star; log_lm=log_lm(om.star.lm)), rv .+ om.bary_rvs, om.b2o)
-# 		else
-# 			star_o = spectra_interp(_eval_lm_vec(om, star; log_lm=log_lm(om.star.lm)), om.rv .+ om.bary_rvs, om.b2o)
-# 		end
-# 	elseif !isnothing(rv)
-# 		star_o = spectra_interp(om.star.lm(), rv .+ om.bary_rvs, om.b2o)
-# 	else
-# 		star_o = o.star
-# 	end
-# 	return _loss(tel_o, star_o, d)
-# end
-# _loss(mws::ModelWorkspace; kwargs...) = _loss(mws.o, mws.om, mws.d; kwargs...)
+
+
+"""
+	_loss_recalc_rv_basis(o, om, d; kwargs...)
+
+`_loss()` but including an AD-compliant way to recalcuate the Doppler basic vector 
+"""
 function _loss_recalc_rv_basis(o::Output, om::OrderModel, d::Data; kwargs...)
 	om.rv.lm.M .= doppler_component_AD(om.star.λ, om.star.lm.μ)
 	return _loss(o, om, d; kwargs...)
 end
 _loss_recalc_rv_basis(mws::ModelWorkspace; kwargs...) = _loss_recalc_rv_basis(mws.o, mws.om, mws.d; kwargs...)
 
+
+"""
+	loss_func(mws; include_priors=false)
+
+Create a loss function for the model and data in `mws`
+"""
 function loss_func(mws::ModelWorkspace; include_priors::Bool=false)
 	if include_priors
 		return (; kwargs...) -> _loss(mws; kwargs...) + tel_prior(mws.om) + star_prior(mws.om)
@@ -85,6 +79,18 @@ function loss_func(mws::ModelWorkspace; include_priors::Bool=false)
 		return (; kwargs...) -> _loss(mws; kwargs...)
 	end
 end
+
+
+"""
+	loss_funcs_telstar(o, om, d)
+
+Create loss functions for changing
+	- the telluric and stellar templates, features, and scores
+	- the telluric and stellar scores
+	- the RVs
+
+Used to fit scores efficiently with L-BFGS
+"""
 function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
     l_telstar(telstar; kwargs...) =
         _loss(o, om, d; tel=telstar[1], star=telstar[2], kwargs...) +
@@ -117,6 +123,17 @@ function loss_funcs_telstar(o::Output, om::OrderModel, d::Data)
     return l_telstar, l_telstar_s, l_rv
 end
 loss_funcs_telstar(mws::ModelWorkspace) = loss_funcs_telstar(mws.o, mws.om, mws.d)
+
+
+"""
+	loss_funcs_total(o, om, d)
+
+Create loss functions for changing
+	- the telluric and stellar templates, features, and scores
+	- the telluric and stellar scores and RVs
+
+Used to fit models with ADAM
+"""
 function loss_funcs_total(o::Output, om::OrderModelDPCA, d::Data)
     l_total(total) =
 		_loss_recalc_rv_basis(o, om, d; tel=total[1], star=total[2], rv=total[3]) +
@@ -178,6 +195,18 @@ function loss_funcs_total(o::Output, om::OrderModelWobble, d::Data)
     return l_total, l_total_s
 end
 loss_funcs_total(mws::ModelWorkspace) = loss_funcs_total(mws.o, mws.om, mws.d)
+
+
+
+"""
+	loss_funcs_frozen_tel(o, om, d)
+
+Create loss functions for changing
+	- the stellar templates, features, and scores and telluric scores
+	- the telluric and stellar scores and RVs
+
+Used to fit models with a set telluric model
+"""
 function loss_funcs_frozen_tel(o::Output, om::OrderModel, d::Data)
 	is_tel_time_variable = is_time_variable(om.tel)
 	is_star_time_variable = is_time_variable(om.star)
@@ -211,17 +240,32 @@ function loss_funcs_frozen_tel(o::Output, om::OrderModel, d::Data)
 end
 loss_funcs_frozen_tel(mws::ModelWorkspace) = loss_funcs_frozen_tel(mws.o, mws.om, mws.d)
 
-## Adam Version
 
+## ADAM things
 α, β1, β2, ϵ = 2e-3, 0.9, 0.999, 1e-8
+
+
+"""
+	Adam
+
+Holds information used for Adaptive Moment Estimation optimization
+"""
 mutable struct Adam{T<:AbstractArray}
+	"Learning rate"
     α::Float64
+	"Exponential decay rate for the first moment estimates"
     β1::Float64
+	"Exponential decay rate for the second-moment estimates"
     β2::Float64
+	"Holder for aggregate of gradients"
     m::T
+	"Holder for sum of square of past gradients"
     v::T
+	"Holder for accelerated β1"
     β1_acc::Float64
+	"Holder for accelerated β2"
     β2_acc::Float64
+	"A small positive constant"
     ϵ::Float64
 end
 Adam(θ0::AbstractArray, α::Float64, β1::Float64, β2::Float64, ϵ::Float64) =
@@ -236,15 +280,30 @@ Adams(θ0::AbstractVecOrMat{<:Real}, α::Float64, β1::Float64, β2::Float64, ϵ
 	Adam(θ0, α, β1, β2, ϵ)
 Base.copy(opt::Adam) = Adam(opt.α, opt.β1, opt.β2, opt.m, opt.v, opt.β1_acc, opt.β2_acc, opt.ϵ)
 
+
+"""
+	AdamState
+
+Holds diagonstic information on the current state of an ADAM opmitization
+"""
 mutable struct AdamState
+	"Interation number"
     iter::Int
+	"Loss"
     ℓ::Float64
+	"L1 norm of the gradient"
     L1_Δ::Float64
+	"L2 norm of the gradient"
     L2_Δ::Float64
+	"L∞ norm of the gradient"
     L∞_Δ::Float64
+	"Change in the loss between iterations"
 	δ_ℓ::Float64
+	"Change in the L1 norm between iterations"
 	δ_L1_Δ::Float64
+	"Change in the L2 norm between iterations"
 	δ_L2_Δ::Float64
+	"Change in the L∞ norm between iterations"
 	δ_L∞_Δ::Float64
 end
 AdamState() = AdamState(0, 0., 0., 0., 0., 0., 0., 0., 0.)
@@ -261,6 +320,13 @@ function iterate!(θs::Vector{<:AbstractArray}, ∇θs::Vector{<:AbstractArray},
 		iterate!(θs[i], ∇θs[i], opts[i])
     end
 end
+
+
+"""
+	iterate!(θ, ∇θ, opt)
+
+Perform an ADAM optimization step based on the contents of `opt` on `θ`
+"""
 function iterate!(θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt::Adam)
 	α=opt.α; β1=opt.β1; β2=opt.β2; ϵ=opt.ϵ; β1_acc=opt.β1_acc; β2_acc=opt.β2_acc; m=opt.m; v=opt.v
     one_minus_β1 = 1.0 - β1
@@ -279,10 +345,18 @@ function iterate!(θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt
 	β2_acc *= β2
 end
 
+
 function AdamState!_helper(as::AdamState, f::Symbol, val)
 	setfield!(as, Symbol(:δ_,f), val / getfield(as, f))
 	setfield!(as, f, val)
 end
+
+
+"""
+	AdamState!(as, ℓ, Δ)
+
+Update `as` with the next iteration's loss and gradient
+"""
 function AdamState!(as::AdamState, ℓ, Δ)
 	as.iter += 1
 	AdamState!_helper(as, :ℓ, ℓ)
@@ -300,11 +374,22 @@ _g_L∞tol_def = 1e3
 _f_reltol_def_s = 0
 _g_L∞tol_def_s = 1e-8
 
+
+"""
+	AdamSubWorkspace
+
+Holds a set of model parameters and the ADAM optimizer and functions used to optimize them
+"""
 struct AdamSubWorkspace{T}
+	"Model parameters to optimize"
 	θ::T
-	opt
+	"Adam optimizer parameters"
+	opt#::Adam
+	"Optimization state"
 	as::AdamState
+	"Loss function"
 	l::Function
+	"Loss and gradient function"
 	gl::Function
 	function AdamSubWorkspace(θ::T, opt, as, l, gl) where T
 		@assert typeof(l(θ)) <: Real
@@ -317,26 +402,36 @@ function AdamSubWorkspace(θ, l::Function)
 	return AdamSubWorkspace(θ, Adams(θ), AdamState(), l, gl)
 end
 
+
+"""
+	update!(aws; careful_first_step=true, speed_up=false)
+
+Perform an ADAM optimization step for the model parameters in `aws`
+"""
 function update!(aws::AdamSubWorkspace; careful_first_step::Bool=true, speed_up::Bool=false)
+
     val, Δ = aws.gl(aws.θ)
 	Δ = only(Δ)
 	AdamState!(aws.as, val.val, Δ)
+
+	# if you want to make sure the learning rate doesn't start too big
 	if careful_first_step && aws.as.iter==1
 		first_iterate!(aws.l, val.val, aws.θ, aws.θ, Δ, aws.opt)
+	# if you want to make sure the learning rate isn't too small (much more dangerous)
 	elseif speed_up && (aws.as.iter > 10 && aws.as.iter%20==5)
 		speed_up_iterate!(aws.l, aws.θ, aws.θ, Δ, aws.opt)
 	else
     	iterate!(aws.θ, Δ, aws.opt)
 	end
+
 end
 
 
-function first_iterate!(l::Function, l0::Real, θs_unchanging::Vector{<:AbstractArray}, θs::Vector{<:AbstractArray}, ∇θs::Vector{<:AbstractArray}, opts::Vector; ind=Int[], kwargs...)
-    @assert length(θs) == length(∇θs) == length(opts)
-	@inbounds for i in eachindex(θs)
-		first_iterate!(l, l0, θs_unchanging, θs[i], ∇θs[i], opts[i]; ind=append!(copy(ind),[i]), kwargs...)
-    end
-end
+"""
+	first_iterate!(l, l0, θs, θ, ∇θ, opt; ind=[], verbose=false)
+
+Perform an ADAM optimization step based on the contents of `opt` on `θ` and decreases the learning rate to ensure the loss actually decreases
+"""
 function first_iterate!(l::Function, l0::Real, θs::Vector{<:AbstractArray}, θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt::Adam; ind=[], verbose::Bool=false)
 	β1=opt.β1; β2=opt.β2; ϵ=opt.ϵ; β1_acc=opt.β1_acc; β2_acc=opt.β2_acc; m=opt.m; v=opt.v
 	one_minus_β1 = 1.0 - β1
@@ -355,6 +450,8 @@ function first_iterate!(l::Function, l0::Real, θs::Vector{<:AbstractArray}, θ:
 	β1_acc *= β1
 	β2_acc *= β2
 	θ .-= opt.α .* θ_step
+
+	# keep reducing `opt.α` until `l1` is less than `l0`
 	l1 = l(θs)
 	factor = 1
 	while l1 > l0
@@ -365,14 +462,20 @@ function first_iterate!(l::Function, l0::Real, θs::Vector{<:AbstractArray}, θ:
 	end
 	if verbose && factor > 1; println("shrunk α$ind by a factor of $factor") end
 end
-
-
-function speed_up_iterate!(l::Function, θs_unchanging::Vector{<:AbstractArray}, θs::Vector{<:AbstractArray}, ∇θs::Vector{<:AbstractArray}, opts::Vector; ind=Int[], kwargs...)
+function first_iterate!(l::Function, l0::Real, θs_unchanging::Vector{<:AbstractArray}, θs::Vector{<:AbstractArray}, ∇θs::Vector{<:AbstractArray}, opts::Vector; ind=Int[], kwargs...)
     @assert length(θs) == length(∇θs) == length(opts)
 	@inbounds for i in eachindex(θs)
-		speed_up_iterate!(l, θs_unchanging, θs[i], ∇θs[i], opts[i]; ind=append!(copy(ind),[i]), kwargs...)
+		first_iterate!(l, l0, θs_unchanging, θs[i], ∇θs[i], opts[i]; ind=append!(copy(ind),[i]), kwargs...)
     end
 end
+
+
+
+"""
+	speed_up_iterate!(l, θs, θ, ∇θ, opt; ind=[], verbose=false)
+
+Perform an ADAM optimization step based on the contents of `opt` on `θ` and increases the learning rate to attempt to speed up the optimization
+"""
 function speed_up_iterate!(l::Function, θs::Vector{<:AbstractArray}, θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt::Adam; ind=[], verbose::Bool=false)
 	β1=opt.β1; β2=opt.β2; ϵ=opt.ϵ; β1_acc=opt.β1_acc; β2_acc=opt.β2_acc; m=opt.m; v=opt.v
 	one_minus_β1 = 1.0 - β1
@@ -393,6 +496,8 @@ function speed_up_iterate!(l::Function, θs::Vector{<:AbstractArray}, θ::Abstra
 	θ .-= opt.α .* θ_step
 	l1 = l(θs)
 	θ .-= opt.α .* θ_step
+
+	# keep increasing `opt.α` while `l2` is still lower than `l1`
 	l2 = l(θs)
 	factor = 1
 	while l1 > l2
@@ -405,13 +510,31 @@ function speed_up_iterate!(l::Function, θs::Vector{<:AbstractArray}, θ::Abstra
 	θ .+= opt.α .* θ_step
 	if verbose && factor > 1; println("increased α$ind by a factor of $factor") end
 end
+function speed_up_iterate!(l::Function, θs_unchanging::Vector{<:AbstractArray}, θs::Vector{<:AbstractArray}, ∇θs::Vector{<:AbstractArray}, opts::Vector; ind=Int[], kwargs...)
+    @assert length(θs) == length(∇θs) == length(opts)
+	@inbounds for i in eachindex(θs)
+		speed_up_iterate!(l, θs_unchanging, θs[i], ∇θs[i], opts[i]; ind=append!(copy(ind),[i]), kwargs...)
+    end
+end
 
 
+"""
+	check_converged(as, f_reltol, g_reltol, g_L∞tol)
+
+Check to see if the Adam optimization has coverged based on the change in loss or its gradient
+"""
 function check_converged(as::AdamState, f_reltol::Real, g_reltol::Real, g_L∞tol::Real)
 	as.ℓ > 0 ? δ_ℓ = as.δ_ℓ : δ_ℓ = 1 / as.δ_ℓ  # further reductions in negative cost functions are good!
 	return ((δ_ℓ > (1 - f_reltol)) && (max(as.δ_L2_Δ,1/as.δ_L2_Δ) < (1+abs(g_reltol)))) || (as.L∞_Δ < g_L∞tol)
 end
 check_converged(as::AdamState, iter::Int, f_reltol::Real, g_reltol::Real, g_L∞tol::Real) = (as.iter > iter) || check_converged(as, f_reltol, g_reltol, g_L∞tol)
+
+
+"""
+	train_SubModel!(aws; iter=_iter_def, f_reltol=_f_reltol_def, g_reltol=_g_reltol_def, g_L∞tol=_g_L∞tol_def, cb=(as::AdamState)->(), careful_first_step=true, speed_up=false, kwargs...)
+
+Train the model parameters in `aws` for up to `iter` Adam iterations until it converges based on `check_converged()`
+"""
 function train_SubModel!(aws::AdamSubWorkspace; iter=_iter_def, f_reltol = _f_reltol_def, g_reltol = _g_reltol_def, g_L∞tol = _g_L∞tol_def, cb::Function=(as::AdamState)->(), careful_first_step::Bool=true, speed_up::Bool=false, kwargs...)
 	converged = false  # check_converged(aws.as, iter, f_tol, g_tol)
 	while !converged
@@ -424,7 +547,12 @@ function train_SubModel!(aws::AdamSubWorkspace; iter=_iter_def, f_reltol = _f_re
 	return converged
 end
 
-rel_step_size(θ::AbstractVecOrMat) = sqrt(mean(abs2, θ))
+
+"""
+	scale_α_helper!(opt, α_ratio, θ, α, scale_α)
+
+Optionally scale `opt.α` based on the amplitudes in `θ`
+"""
 function scale_α_helper!(opt::Adam, α_ratio::Real, θ::AbstractVecOrMat, α::Real, scale_α::Bool)
 	scale_α ? opt.α = α_ratio * rel_step_size(θ) : opt.α = α
 end
@@ -433,13 +561,26 @@ function scale_α_helper!(opts::Vector, α_ratio::Real, θs, α::Real, scale_α:
 		scale_α_helper!(opts[i], α_ratio, θs[i], α, scale_α)
 	end
 end
+rel_step_size(θ::AbstractVecOrMat) = sqrt(mean(abs2, θ))
 _scale_α_def = false
 
+
+"""
+	TotalWorkspace
+
+A workspace to optimize all of the parameters in a SSOF model and data it is to be optimized on
+Uses our custom implementation of ADAM
+"""
 struct TotalWorkspace <: AdamWorkspace
+	"Optimization workspace for all model parameters"
 	total::AdamSubWorkspace
+	"SSOF model"
 	om::OrderModel
+	"SSOF model output"
 	o::Output
+	"pre-formatted SSOF data"
 	d::Data
+	"Whether or not the templates and features should be fit"
 	only_s::Bool
 end
 
@@ -477,13 +618,24 @@ TotalWorkspace(om::OrderModel, d::Data; kwargs...) =
 Base.copy(mws::TotalWorkspace) = TotalWorkspace(copy(mws.om), mws.d)
 
 
+"""
+	FrozenTelWorkspace
+
+A workspace to optimize all of the parameters in a SSOF model (except for the tellruc template and features) and data it is to be optimized on
+"""
 struct FrozenTelWorkspace <: AdamWorkspace
+	"Optimization workspace for (nearly) all model parameters"
 	total::AdamSubWorkspace
+	"SSOF model"
 	om::OrderModel
+	"SSOF model output"
 	o::Output
+	"pre-formatted SSOF data"
 	d::Data
+	"Whether or not the templates and features should be fit"
 	only_s::Bool
 end
+
 
 function FrozenTelWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def)
 	l_frozen_tel, l_frozen_tel_s = loss_funcs_frozen_tel(o, om, d)
@@ -520,6 +672,13 @@ FrozenTelWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) =
 FrozenTelWorkspace(om::OrderModel, d::Data; kwargs...) =
 	FrozenTelWorkspace(Output(om, d), om, d; kwargs...)
 
+
+"""
+	ModelWorkspace(model, data)
+
+Create a workspace for optimizing `model` with `data`
+Creates a FrozenTelWorkspace if the model has no telluric feature vectors and an empty telluric template
+"""
 function ModelWorkspace(model::OrderModel, data::Data)
 	if no_tellurics(model)
 		return FrozenTelWorkspace(model, data)
@@ -528,18 +687,29 @@ function ModelWorkspace(model::OrderModel, data::Data)
 	end
 end
 
-function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, verbose::Bool=_verbose_def, shift_scores::Bool=true, μ_positive::Bool=true, tel_μ_lt1::Bool=false, winsor::Bool=true, rm_doppler::Bool=true, kwargs...)
+
+"""
+	train_OrderModel!(mws; ignore_regularization=false, verbose=_verbose_def, shift_scores=true, μ_positive=true, tel_μ_lt1=false, rm_doppler=true, kwargs...)
+
+Train the model in `mws` with some optional modifications to the optimization (ignore_regularization, shift_score, μ_positive, tel_μ_lt1, rm_doppler)
+"""
+function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false, verbose::Bool=_verbose_def, shift_scores::Bool=true, μ_positive::Bool=true, tel_μ_lt1::Bool=false, rm_doppler::Bool=true, kwargs...)
 
 	if rm_doppler; dop_comp_holder = Array{Float64}(undef, length(mws.om.star.lm.μ)) end
+
 	update_interpolation_locations!(mws)
 
+	# optionally ignore the regularization in `mws.om`
     if ignore_regularization
         reg_tel_holder = copy(mws.om.reg_tel)
         reg_star_holder = copy(mws.om.reg_star)
         rm_regularization!(mws.om)
     end
 
+	# create a callback function that runs after every iteration
 	function cb(as::AdamState)
+
+		# optionally shift the score means to be near 0
 		if shift_scores
 			if !(typeof(mws) <: FrozenTelWorkspace)
 				remove_lm_score_means!(mws.om.tel.lm; prop=0.2)
@@ -548,40 +718,49 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
 				remove_lm_score_means!(mws.om.star.lm; prop=0.2)
 			end
 		end
+
+		# optionally make the templates always positive
 		if μ_positive
 			mws.om.tel.lm.μ[mws.om.tel.lm.μ .< 1e-10] .= 1e-10
 			mws.om.star.lm.μ[mws.om.star.lm.μ .< 1e-10] .= 1e-10
 		end
+
+		# optionally make the telluric template always less than 1
 		if tel_μ_lt1
 			mws.om.tel.lm.μ[mws.om.tel.lm.μ .> 1] .= 1
 		end
+
+		# optionally make the stellar feature vectors orthagonal to a doppler shift
 		if rm_doppler && is_time_variable(mws.om.star.lm)  
 			if mws.om.star.lm.log
 				dop_comp_holder[:] = doppler_component_log(mws.om.star.λ, mws.om.star.lm.μ)
 			else
-			dop_comp_holder[:] = doppler_component(mws.om.star.λ, mws.om.star.lm.μ)
+				dop_comp_holder[:] = doppler_component(mws.om.star.λ, mws.om.star.lm.μ)
 			end
 			for i in axes(mws.om.star.lm.M, 2)
 				EMPCA._reorthogonalize_no_renorm!(view(mws.om.star.lm.M, :, i), dop_comp_holder)
 			end
 		end
 
+		# make sure the interpolation locations are still correct
 		if as.iter % 10 == 9
 			update_interpolation_locations!(mws)
 		end
 
 		if verbose; println(as) end
 	end
-	# verbose ? cb(as::AdamState) = println(as) : cb(as::AdamState) = nothing
 
+	# train the model and update `mws.o`
 	result = train_SubModel!(mws.total; cb=cb, kwargs...)
 	mws.total.as.iter = 0
     Output!(mws)
 
+	# reset the regularization
     if ignore_regularization
         copy_dict!(mws.om.reg_tel, reg_tel_holder)
         copy_dict!(mws.om.reg_star, reg_star_holder)
     end
+
 	return result
 end
 
@@ -590,6 +769,12 @@ Output!(mws::ModelWorkspace) = Output!(mws.o, mws.om, mws.d)
 
 ## Optim Versions
 
+
+"""
+	opt_funcs(loss, pars)
+
+Create an objective object for Optim from `loss` that uses a flattened verison of `pars`
+"""
 function opt_funcs(loss::Function, pars::AbstractVecOrMat)
     flat_initial_params, unflatten = flatten(pars)  # unflatten returns Vector of untransformed params
     f = loss ∘ unflatten
@@ -608,11 +793,22 @@ function opt_funcs(loss::Function, pars::AbstractVecOrMat)
     return flat_initial_params, OnceDifferentiable(f, g!, fg_obj!, flat_initial_params), unflatten, g_nabla, g_val_nabla
 end
 
+
+"""
+	OptimSubWorkspace
+
+Holds a set of model parameters and the Optim optimizer and functions used to optimize them
+"""
 struct OptimSubWorkspace
+	"Model parameters to optimize"
     θ::AbstractVecOrMat
+	"Optim objective object"
     obj::OnceDifferentiable
+	"The first order optimizer to use"
     opt::Optim.FirstOrderOptimizer
+	"Flattened version of `θ`"
     p0::Vector
+	"Function to convert `p0` to `θ`"
     unflatten::Union{Function,DataType}
 end
 function OptimSubWorkspace(θ::AbstractVecOrMat, loss::Function; use_cg::Bool=true)
@@ -624,12 +820,25 @@ function OptimSubWorkspace(θ::AbstractVecOrMat, loss::Function; use_cg::Bool=tr
 	return OptimSubWorkspace(θ, obj, opt, p0, unflatten)
 end
 
+
+"""
+	OptimTelStarWorkspace
+
+A workspace to go back and forth optimizing the telluric and stellar parameters then the RVs in a SSOF model and data it is to be optimized on
+Uses methods in Optim
+"""
 struct OptimTelStarWorkspace <: OptimWorkspace
+	"Optimization workspace for stellar and telluric model parameters"
     telstar::OptimSubWorkspace
+	"Optimization workspace for RV model parameters"
     rv::OptimSubWorkspace
+	"SSOF model"
     om::OrderModel
+	"SSOF model output"
     o::Output
+	"pre-formatted SSOF data"
     d::Data
+	"Whether or not the templates and features should be fit"
     only_s::Bool
 end
 function OptimTelStarWorkspace(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=false, only_s::Bool=false)
@@ -661,11 +870,23 @@ OptimTelStarWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...
 OptimTelStarWorkspace(om::OrderModel, d::Data; kwargs...) =
 	OptimTelStarWorkspace(om, Output(om, d), d; kwargs...)
 
+
+"""
+	OptimTotalWorkspace
+
+A workspace to optimize all of the parameters in a SSOF model and data it is to be optimized on
+Uses methods in Optim
+"""
 struct OptimTotalWorkspace <: OptimWorkspace
+	"Optimization workspace for all model parameters"
     total::OptimSubWorkspace
+	"SSOF model"
     om::OrderModel
+	"SSOF model output"
     o::Output
+	"pre-formatted SSOF data"
     d::Data
+	"Whether or not the templates and features should be fit"
     only_s::Bool
 end
 function OptimTotalWorkspace(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=false, only_s::Bool=false)
@@ -695,6 +916,12 @@ OptimTotalWorkspace(om::OrderModel, d::Data, inds::AbstractVecOrMat; kwargs...) 
 OptimTotalWorkspace(om::OrderModel, d::Data; kwargs...) =
 	OptimTotalWorkspace(om, Output(om, d), d; kwargs...)
 
+
+"""
+	_OSW_optimize!(osw, options)
+
+Optimize the model in `osw`
+"""
 function _OSW_optimize!(osw::OptimSubWorkspace, options::Optim.Options)
     result = Optim.optimize(osw.obj, osw.p0, osw.opt, options)
     osw.p0[:] = result.minimizer
@@ -707,12 +934,13 @@ function optim_print(x::OptimizationState)
 		println("Iter:  ", x.iteration)
 		println("Time:  ", x.metadata["time"], " s")
 		println("ℓ:     ", x.value)
-		println("l∞(∇): ", x.g_norm)
+		println("L∞(∇): ", x.g_norm)
 		println()
 	end
+	# ends optimization if true
 	return false
 end
-# ends optimization if true
+
 function optim_cb_f(; verbose::Bool=true)
     if verbose
 		return (x::OptimizationState) -> optim_print(x::OptimizationState)
@@ -721,15 +949,25 @@ function optim_cb_f(; verbose::Bool=true)
     end
 end
 
-function train_OrderModel!(ow::OptimTelStarWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, train_telstar::Bool=true, ignore_regularization::Bool=false, μ_positive::Bool=false, careful_first_step::Bool=true, speed_up::Bool=false, kwargs...)
-    optim_cb = optim_cb_f(; verbose=verbose)
 
+"""
+	train_OrderModel!(ow::OptimTelStarWorkspace; verbose=_verbose_def, iter=_iter_def, f_tol=_f_reltol_def, g_tol=_g_L∞tol_def, train_telstar=true, ignore_regularization=false, μ_positive=false, careful_first_step=true, speed_up=false, kwargs...)
+
+Train the model in `ow`, training the telluric and stellar parameters, then the RVs
+"""
+function train_OrderModel!(ow::OptimTelStarWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, train_telstar::Bool=true, ignore_regularization::Bool=false, μ_positive::Bool=false, careful_first_step::Bool=true, speed_up::Bool=false, kwargs...)
+    # `μ_positive`, `careful_first_step`, and `speed_up` are only included to prevent errors and do nothing
+	
+	optim_cb = optim_cb_f(; verbose=verbose)
+
+	# optionally ignore the regularization in `ow.om`
     if ignore_regularization
         reg_tel_holder = copy(ow.om.reg_tel)
         reg_star_holder = copy(ow.om.reg_star)
         rm_regularization!(ow.om)
     end
 
+	# train the telluric and stellar parameters if desired
     if train_telstar
         options = Optim.Options(;iterations=iter, f_tol=f_tol, g_tol=g_tol, callback=optim_cb, kwargs...)
         # optimize tellurics and star
@@ -767,9 +1005,19 @@ function train_OrderModel!(ow::OptimTelStarWorkspace; verbose::Bool=_verbose_def
     end
     return result_telstar, result_rv
 end
-function train_OrderModel!(ow::OptimTotalWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, ignore_regularization::Bool=false, μ_positive::Bool=false, careful_first_step::Bool=true, speed_up::Bool=false, kwargs...)
-    optim_cb = optim_cb_f(; verbose=verbose)
 
+
+"""
+	train_OrderModel!(ow::OptimTelStarWorkspace; verbose=_verbose_def, iter=_iter_def, f_tol=_f_reltol_def, g_tol=_g_L∞tol_def, train_telstar=true, ignore_regularization=false, μ_positive=false, careful_first_step=true, speed_up=false, kwargs...)
+
+Train the model in `ow`, training the telluric and stellar parameters, then the RVs
+"""
+function train_OrderModel!(ow::OptimTotalWorkspace; verbose::Bool=_verbose_def, iter::Int=_iter_def, f_tol::Real=_f_reltol_def, g_tol::Real=_g_L∞tol_def, ignore_regularization::Bool=false, μ_positive::Bool=false, careful_first_step::Bool=true, speed_up::Bool=false, kwargs...)
+    # `μ_positive`, `careful_first_step`, and `speed_up` are only included to prevent errors and do nothing
+	
+	optim_cb = optim_cb_f(; verbose=verbose)
+
+	# optionally ignore the regularization in `ow.om`
     if ignore_regularization
         reg_tel_holder = copy(ow.om.reg_tel)
         reg_star_holder = copy(ow.om.reg_star)
@@ -818,6 +1066,19 @@ function train_OrderModel!(ow::OptimTotalWorkspace; verbose::Bool=_verbose_def, 
 end
 
 
+"""
+	train_rvs_optim!(rv_ws, rv, optim_cb; g_tol=_g_L∞tol_def_s, f_tol=_f_reltol_def_s, iter=_iter_def, ignore_regularization=false, μ_positive=false, kwargs...)
+
+Train the RVs from the `rv_ws` with Optim
+"""
+function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::AbstractVector, optim_cb::Function; g_tol::Real=_g_L∞tol_def_s, f_tol::Real=_f_reltol_def_s, iter::Int=_iter_def, ignore_regularization::Bool=false, μ_positive::Bool=false, kwargs...)
+	# `μ_positive` and `ignore_regularization` are only included to prevent errors and do nothing
+	options = Optim.Options(; callback=optim_cb, g_tol=g_tol, f_tol=f_tol, iterations=iter, kwargs...)
+	result_rv = _OSW_optimize!(rv_ws, options)
+	rv[:] = rv_ws.unflatten(rv_ws.p0)
+	return result_rv
+end
+# same as above but for DPCA models
 function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::Submodel, star::Submodel, optim_cb::Function; g_tol::Real=_g_L∞tol_def_s, f_tol::Real=_f_reltol_def_s, iter::Int=_iter_def, kwargs...)
 	options = Optim.Options(; callback=optim_cb, g_tol=g_tol, f_tol=f_tol, iterations=iter, kwargs...)
 	rv.lm.M .= doppler_component(star.λ, star.lm.μ)
@@ -825,17 +1086,17 @@ function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::Submodel, star::Submodel
 	rv.lm.s[:] = rv_ws.unflatten(rv_ws.p0)
 	return result_rv
 end
-function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::AbstractVector, optim_cb::Function; g_tol::Real=_g_L∞tol_def_s, f_tol::Real=_f_reltol_def_s, iter::Int=_iter_def, ignore_regularization::Bool=false, μ_positive::Bool=false, kwargs...)
-	options = Optim.Options(; callback=optim_cb, g_tol=g_tol, f_tol=f_tol, iterations=iter, kwargs...)
-	result_rv = _OSW_optimize!(rv_ws, options)
-	rv[:] = rv_ws.unflatten(rv_ws.p0)
-	return result_rv
-end
 train_rvs_optim!(ow::OptimTelStarWorkspace, optim_cb::Function; kwargs...) =
 	typeof(ow.om) <: OrderModelDPCA ?
 		train_rvs_optim!(ow.rv, ow.om.rv, ow.om.star, optim_cb; kwargs...) :
 		train_rvs_optim!(ow.rv, ow.om.rv, optim_cb; kwargs...)
 
+
+"""
+	finalize_scores_setup(mws; verbose=_verbose_def, f_tol=_f_reltol_def_s, g_tol=_g_L∞tol_def_s, careful_first_step=true, speed_up=false, kwargs...)
+
+Create a function that optimizes the model scores with Optim
+"""
 function finalize_scores_setup(mws::ModelWorkspace; verbose::Bool=_verbose_def, f_tol::Real=_f_reltol_def_s, g_tol::Real=_g_L∞tol_def_s, careful_first_step::Bool=true, speed_up::Bool=false, kwargs...)
 	if is_time_variable(mws.om.tel) || is_time_variable(mws.om.star)
 		mws_s = OptimTotalWorkspace(mws.om, mws.d; only_s=true)  # does not converge reliably
@@ -857,11 +1118,25 @@ function _finalize_scores_setup(mws::ModelWorkspace, om::OrderModelWobble, loss_
 	rv_trainer() = train_rvs_optim!(rv_ws, mws.om.rv, optim_cb; kwargs...)
 	return rv_trainer
 end
+
+
+"""
+	finalize_scores!(score_trainer, mws)
+
+Run `score_trainer` and update the output in `mws`
+"""
 function finalize_scores!(score_trainer::Function, mws::ModelWorkspace)
 	result = score_trainer()
 	Output!(mws)
 	return result
 end
+
+
+"""
+	finalize_scores!(mws; kwargs...)
+
+Optimize the scores in `mws`
+"""
 function finalize_scores!(mws::ModelWorkspace; kwargs...)
 	score_trainer = finalize_scores_setup(mws; kwargs...)
 	return finalize_scores!(score_trainer, mws)
@@ -871,8 +1146,13 @@ is_time_variable(lm::LinearModel) = !(typeof(lm) <: TemplateModel)
 is_time_variable(sm::Submodel) = is_time_variable(sm.lm)
 
 
-# TODO: do this for undersamp_interp_helper as well
+"""
+	update_interpolation_locations!(om, d; use_mean=false)
+
+Make sure the linear iterpolation locations for going from the stellar model to the data are correct as the RVs change
+"""
 function update_interpolation_locations!(om::OrderModel, d::Data; use_mean::Bool=false)
+	# TODO: do this for undersamp_interp_helper as well
 	if typeof(om) <: OrderModelWobble
 		if use_mean
 			StellarInterpolationHelper!(om.b2o,
@@ -887,54 +1167,109 @@ function update_interpolation_locations!(om::OrderModel, d::Data; use_mean::Bool
 		end
 	end
 end
-update_interpolation_locations!(mws::ModelWorkspace) = update_interpolation_locations!(mws.om, mws.d)
+update_interpolation_locations!(mws::ModelWorkspace; kwargs...) = update_interpolation_locations!(mws.om, mws.d; kwargs...)
 
 
+"""
+	improve_model!(mws; verbose=true, kwargs...)
+
+Train the model in `mws` with an extra step to ensure we are at a local maximum for the scores and RVs
+"""
 function improve_model!(mws::ModelWorkspace; verbose::Bool=true, kwargs...)
 	train_OrderModel!(mws; verbose=verbose, kwargs...)  # 120s
 	results = finalize_scores!(mws; verbose=verbose, kwargs...)
 	return results
 end
 
+
+"""
+	improve_initial_model!(mws; careful_first_step=true, speed_up=false, kwargs...)
+
+Train the model in `mws` with an extra step to ensure we are at a local maximum for the scores and RVs
+Defaults to taking a careful first step
+"""
 improve_initial_model!(mws::ModelWorkspace; careful_first_step::Bool=true, speed_up::Bool=false, kwargs...) = improve_model!(mws; verbose=false, ignore_regularization=true, μ_positive=true, careful_first_step=careful_first_step, speed_up=speed_up, kwargs...)
 
-# TODO: Make this work for OrderModelDPCA
-function calculate_initial_model(data::Data, instrument::String, desired_order::Int, star::String, times::AbstractVector;
+
+"""
+	calculate_initial_model(data; kwargs...)
+	
+Find a SSOF model for a given dataset, `data`.
+Defaults to returning the AIC-minimum model
+	
+# Optional arguments
+- `instrument::String="None"`: The name of the instrument(s) the data was taken from. For bookeeping
+- `desired_order::Int=0`: What order (if any) the data was taken from. For bookeeping
+- `star::String="None"`: The name of the star the data was taken from. For bookeeping
+- `times::AbstractVector=1:size(data.flux, 2)`: The list of times (in days). Used to calculate intra-night RMS
+- `μ_min::Real=0`: Set the minimum flux value for the output of `make_template()`
+- `μ_max::Real=Inf`: Set the maximum flux value for the output of `make_template()`
+- `use_mean::Bool=true`: Whether to use the mean or median for `make_template()`
+- `stop_early::Bool=false`: Whether to stop the model search the first time adding a component increases the AIC
+- `remove_reciprocal_continuum::Bool=false`: Whether you should attempt to remove places where the telluric template and stellar template are opposing each other (i.e. where continuum goes up in one and down in the other)
+- `return_full_path::Bool=false`: Whether to return all of the searched models and metrics
+- `max_n_tel::Int=5`: The maximum amount of telluric features vectors to look for
+- `max_n_star::Int=5`: The maximum amount of stellar features vectors to look for
+- `use_all_comps::Bool=false`: Whether to use all feature vectors, regardless of AIC
+- `careful_first_step::Bool=true`: Whether to shrink the learning rates until the loss improves on the first iteration
+- `speed_up::Bool=false`: Whether to inflate the learning rates until the loss is no longer improving throughout the optimization
+- `log_λ_gp_star::Real=1/SOAP_gp_params.λ`: The log λ lengthscale of the stellar regularization GP
+- `log_λ_gp_tel::Real=1/LSF_gp_params.λ`: The log λ lengthscale of the telluric regularization GP
+- `kwargs...`: kwargs passed to `OrderModel`
+"""
+function calculate_initial_model(data::Data;
+	instrument::String="None", desired_order::Int=0, star::String="None", times::AbstractVector=1:size(data.flux, 2),
 	μ_min::Real=0, μ_max::Real=Inf, use_mean::Bool=true, stop_early::Bool=false,
 	remove_reciprocal_continuum::Bool=false, return_full_path::Bool=false,
 	max_n_tel::Int=5, max_n_star::Int=5, use_all_comps::Bool=false, careful_first_step::Bool=true, speed_up::Bool=false, 
 	log_λ_gp_star::Real=1/SOAP_gp_params.λ, log_λ_gp_tel::Real=1/LSF_gp_params.λ, kwargs...)
+	# TODO: Make this work for OrderModelDPCA
 
+	# Get non-LSF version of `data`
 	d = GenericData(data)
 
 	@assert max_n_tel >= -1
 	@assert max_n_star >= 0
+
+	# which amounts of feature vectors to test
 	test_n_comp_tel = -1:max_n_tel
 	test_n_comp_star = 0:max_n_star
+
+	# initialize metric and model storage
 	aics = Inf .* ones(length(test_n_comp_tel), length(test_n_comp_star))
 	ℓs = -copy(aics)
 	bics = copy(aics)
 	rv_stds = copy(aics)
 	rv_stds_intra = copy(aics)
 	oms = Array{OrderModelWobble}(undef, length(test_n_comp_tel), length(test_n_comp_star))
+	
 	logdet_Σ, n = ℓ_prereqs(d.var)
-	comp2ind(n_tel::Int, n_star::Int) = (n_tel+2, n_star+1)
+	comp2ind(n_tel::Int, n_star::Int) = (n_tel+2, n_star+1)  # converts number of components to storage matrix index
 	n_obs = size(d.flux, 2)
 
 	om = OrderModel(d, instrument, desired_order, star; n_comp_tel=max_n_tel, n_comp_star=max_n_star, log_λ_gp_star=log_λ_gp_star, log_λ_gp_tel=log_λ_gp_tel, kwargs...)
+	
+	# get the stellar model wavelengths in observed frame as a function of time
 	star_log_λ_tel = _shift_log_λ_model(d.log_λ_obs, d.log_λ_star, om.star.log_λ)
+	# get the telluric model wavelengths in stellar frame as a function of time
 	tel_log_λ_star = _shift_log_λ_model(d.log_λ_star, d.log_λ_obs, om.tel.log_λ)
+
 	flux_star = ones(length(om.star.log_λ), n_obs)
 	vars_star = SOAP_gp_var .* ones(length(om.star.log_λ), n_obs)
 	flux_tel = ones(length(om.tel.log_λ), n_obs)
 	vars_tel = SOAP_gp_var .* ones(length(om.tel.log_λ), n_obs)
 
+
+	"Find places where the telluric and stellar continuums are reciprocals of each other"
 	function reciprocal_continuum_mask(continuum::AbstractVector, other_interpolated_continuum::AbstractVector; probe_depth::Real=0.02, return_cc::Bool=false)
-		# probe_depth=0.0
+		
+
 		cc = (1 .- continuum) .* (1 .- other_interpolated_continuum)
 		ccm = find_modes(-cc)
 
+		# find places where the continuums are opposite in sign and changing a similar amount
 		ccm = [i for i in ccm if ((cc[i] < -(probe_depth^2)) && (0.5 < abs(continuum[i] / other_interpolated_continuum[i]) < 2))]
+		
 		mask = zeros(Bool, length(cc))
 		l = length(cc)
 		for m in ccm
@@ -962,62 +1297,83 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		lm_tel = om.tel.lm
 		lm_star = om.star.lm
 
+		# Calculate a Rassine-like continuum for the telluric template
 		_, c_t, _ = calc_continuum(om.tel.λ, lm_tel.μ, ones(length(lm_tel.μ)) ./ 1000;
 			min_R_factor=1, smoothing_half_width=0,
 			stretch_factor=10., merging_threshold = 0.)
 
+		# Calculate a Rassine-like continuum for the stellar template
 		_, c_s, _ = calc_continuum(om.star.λ, lm_star.μ, ones(length(lm_star.μ)) ./ 1000;
 			min_R_factor=1,
 			stretch_factor=10., merging_threshold = 0.)
 
+		# interpolate the stellar continuum to the observed frame
 		flux_star_holder .= c_s
 		vars_star_holder .= SOAP_gp_var
 		_spectra_interp_gp!(flux_tel_holder, vars_tel_holder, om.tel.log_λ, flux_star_holder, vars_star_holder, star_log_λ_tel; gp_mean=1., λ_kernel=1/log_λ_gp_star)
+		
+		# find where the continuums are reciprocal and remove the difference
 		m, cc = reciprocal_continuum_mask(c_t, flux_tel_holder; return_cc=true, kwargs...)
 		use_stellar_continuum ?
 			lm_tel.μ[m] .*= vec(mean(flux_tel_holder[m, :]; dims=2)) :
 			lm_tel.μ[m] ./= c_t[m]
 		did_anything = any(m)
 
+		# interpolate the telluric continuum to the stellar frame
 		flux_tel .= c_t
 		vars_tel .= SOAP_gp_var
 		_spectra_interp_gp!(flux_star_holder, vars_star_holder, om.star.log_λ, flux_tel_holder, vars_tel_holder, tel_log_λ_star; gp_mean=1., λ_kernel=1/log_λ_gp_star)
+		
+		# find where the continuums are reciprocal and remove the difference
 		m, cc = reciprocal_continuum_mask(c_s, flux_star_holder; return_cc=true, kwargs...)
 		use_stellar_continuum ?
 			lm_star.μ[m] ./= c_s[m] :
 			lm_star.μ[m] .*= vec(mean(flux_star_holder[m, :]; dims=2))
-		return did_anything || any(m)
+		did_anything = did_anything || any(m)
+
+		return did_anything
 
 	end
 
+	# remove the score means and flip the feature vectors
 	function nicer_model!(mws::ModelWorkspace)
 		remove_lm_score_means!(mws.om)
-		flip_basis_vectors!(mws.om)
+		flip_feature_vectors!(mws.om)
 		mws.om.metadata[:todo][:initialized] = true
 		mws.om.metadata[:todo][:downsized] = true
 		# copy_dict!(mws.om.reg_tel, default_reg_tel)
 		# copy_dict!(mws.om.reg_star, default_reg_star)
 	end
+
+	# 
 	function get_metrics!(mws::ModelWorkspace, i::Int, j::Int)
+		
+		# # could set very small regularizations beforehand if we wanted
 		# for (k, v) in mws.om.reg_tel
 		# 	mws.om.reg_tel[k] = min_reg
 		# end
 		# for (k, v) in mws.om.reg_star
 		# 	mws.om.reg_star[k] = min_reg
 		# end
+
+
 		try
+			# improve the model
 			improve_initial_model!(mws; iter=50)
+
+			# if there is an LSF, do some more fitting
 			if mws.d != data
 				mws = typeof(mws)(copy(mws.om), data)
 				improve_initial_model!(mws; iter=30)
 			end
 			nicer_model!(mws)
+
+			# calculate metrics
 			k = total_length(mws)
 			ℓs[i,j] = ℓ(_loss(mws), logdet_Σ, n)
 			if isnan(ℓs[i,j]); ℓs[i,j] = -Inf end
-			aics[i,j] = aic(k, ℓs[i,j])  # nicer_model!() shouldn't affect this but not taking any risks
+			aics[i,j] = aic(k, ℓs[i,j])
 			bics[i,j] = bic(k, ℓs[i,j], n)
-
 			model_rvs = rvs(mws.om)
 			rv_stds[i,j] = std(model_rvs)
 			rv_stds_intra[i,j] = intra_night_std(model_rvs, times; show_warn=false)
@@ -1034,7 +1390,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		end
 	end
 
-	# stellar models assuming no tellurics
+	# stellar template model assuming no tellurics
 	n_tel_cur = -1
 	n_star_cur = 0
 	search_new_tel = n_tel_cur+1 <= max_n_tel
@@ -1045,7 +1401,9 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 	flux_star_no_tel = copy(flux_star)
 	vars_star_no_tel = copy(vars_star)
 	oms[1,1].star.lm.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
-	dop_comp = doppler_component(oms[1,1].star.λ, oms[1,1].star.lm.μ)
+	
+	# how good is the stellar template at modeling each pixel
+	# dop_comp = doppler_component(oms[1,1].star.λ, oms[1,1].star.lm.μ)
 	# project_doppler_comp!(mws.om.rv, flux_star_no_tel .- mws.om.star.lm.μ, dop_comp, 1 ./ vars_star)
 	mask_low_pixels!(flux_star_no_tel, vars_star_no_tel)
 	mask_high_pixels!(flux_star_no_tel, vars_star_no_tel)
@@ -1054,46 +1412,21 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 
 	# get aic for base, only stellar template model
 	mws = FrozenTelWorkspace(oms[1,1], d)
-	om0 = get_metrics!(mws, 1, 1)
+	om_cur = get_metrics!(mws, 1, 1)
 
 	# telluric template assuming no stellar (will be overwritten later)
 	_om = downsize(om, 0, 0)
 	_om.star.lm.μ .= 1
 	_spectra_interp_gp!(flux_tel, vars_tel, _om.tel.log_λ, d.flux, d.var .+ SOAP_gp_var, d.log_λ_obs; gp_mean=1., λ_kernel=1/log_λ_gp_star)
 	_om.tel.lm.μ[:] = make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
+	
+	# how good is the stellar telluric template at modeling each pixel
 	χ²_tel = vec(sum(_χ²_loss(tel_model(_om), d); dims=2))  # TODO: could optimize before checking this
-	# tel_template_χ² = sum(χ²_tel)
 
-	# get aic for only n_star=1 model
-	# if search_new_star
-	# 	oms[1,2] = downsize(om, 0, 1)
-	# 	fill_OrderModel!(oms[1,2], oms[1,1], 0:0, 0:0)
-	# 	dop_comp .= doppler_component(oms[1,2].star.λ, oms[1,2].star.lm.μ)
-	# 	oms[1,2].tel.lm.μ .= 1
-	# 	# oms[1,2].rv .=
-	# 	DEMPCA!(oms[1,2].star.lm, copy(flux_star_no_tel), 1 ./ vars_star_no_tel, dop_comp; log_lm=log_lm(oms[1,2].star.lm), save_doppler_in_M1=false, inds=1:1, extra_vec=dop_comp)
-	# 	mws = FrozenTelWorkspace(oms[1,2], d)
-	# 	aics[1,2], om2 = get_aic(mws)
-	# end
-	om2 = om0
+	om_add_star = om_cur
 
-	# function interp_helper!(flux_to::AbstractMatrix, vars_to::AbstractMatrix, log_λ_to::AbstractVector,
-	# 	flux_from::AbstractMatrix, vars_from::AbstractMatrix, log_λ_from::AbstractMatrix,
-	# 	log_λ_data::AbstractMatrix; mask_extrema::Bool=true, keep_data_mask::Bool=true)
-	# 	vars_from .= SOAP_gp_var
-	# 	_spectra_interp_gp_div_gp!(flux_to, vars_to, log_λ_to, d.flux, d.var, log_λ_data, flux_from, vars_from, log_λ_from; keep_mask=keep_data_mask, ignore_model_uncertainty=true)
-	# 	if mask_extrema
-	# 		mask_low_pixels!(flux_to, vars_to)
-	# 		mask_high_pixels!(flux_to, vars_to)
-	# 	end
-	# end
-	# interp_to_star!(; kwargs...) = interp_helper!(flux_star, vars_star, om.star.log_λ,
-	# 	flux_tel, vars_tel, tel_log_λ_star,
-	# 	d.log_λ_star; kwargs...)
-	# interp_to_tel!(; kwargs...) = interp_helper!(flux_tel, vars_tel, om.tel.log_λ,
-	# 	flux_star, vars_star, star_log_λ_tel,
-	# 	d.log_λ_obs; kwargs...)
-	function interp_helper2!(flux_to::AbstractMatrix, vars_to::AbstractMatrix, log_λ_to::AbstractVector,
+	# get `flux_to` in the desired frame after interpolating the data dividing out the other model, `flux_from`
+	function interp_helper!(flux_to::AbstractMatrix, vars_to::AbstractMatrix, log_λ_to::AbstractVector,
 		flux_from::AbstractMatrix,
 		log_λ_data::AbstractMatrix; mask_extrema::Bool=true, keep_data_mask::Bool=true)
 		try
@@ -1118,13 +1451,31 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 			mask_high_pixels!(flux_to, vars_to)
 		end
 	end
-	interp_to_star!(om::OrderModel; kwargs...) = interp_helper2!(flux_star, vars_star, om.star.log_λ,
+	interp_to_star!(om::OrderModel; kwargs...) = interp_helper!(flux_star, vars_star, om.star.log_λ,
 		tel_model(om),
 		d.log_λ_star; kwargs...)
-	interp_to_tel!(om::OrderModel; kwargs...) = interp_helper2!(flux_tel, vars_tel, om.tel.log_λ,
+	interp_to_tel!(om::OrderModel; kwargs...) = interp_helper!(flux_tel, vars_tel, om.tel.log_λ,
 		star_model(om),
 		d.log_λ_obs; kwargs...)
-
+	# # a version of interp helper instead gets `flux_to` in the desired frame after dividing out a GP interpolated version of the other model
+	# function interp_helper!(flux_to::AbstractMatrix, vars_to::AbstractMatrix, log_λ_to::AbstractVector,
+	# 	flux_from::AbstractMatrix, vars_from::AbstractMatrix, log_λ_from::AbstractMatrix,
+	# 	log_λ_data::AbstractMatrix; mask_extrema::Bool=true, keep_data_mask::Bool=true)
+	# 	vars_from .= SOAP_gp_var
+	# 	_spectra_interp_gp_div_gp!(flux_to, vars_to, log_λ_to, d.flux, d.var, log_λ_data, flux_from, vars_from, log_λ_from; keep_mask=keep_data_mask, ignore_model_uncertainty=true)
+	# 	if mask_extrema
+	# 		mask_low_pixels!(flux_to, vars_to)
+	# 		mask_high_pixels!(flux_to, vars_to)
+	# 	end
+	# end
+	# interp_to_star!(; kwargs...) = interp_helper!(flux_star, vars_star, om.star.log_λ,
+	# 	flux_tel, vars_tel, tel_log_λ_star,
+	# 	d.log_λ_star; kwargs...)
+	# interp_to_tel!(; kwargs...) = interp_helper!(flux_tel, vars_tel, om.tel.log_λ,
+	# 	flux_star, vars_star, star_log_λ_tel,
+	# 	d.log_λ_obs; kwargs...)
+	
+	# if one wants to search for a telluric template
 	if search_new_tel
 
 		oms[2,1] = downsize(om, 0, 0)
@@ -1191,34 +1542,39 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		# flux_tel .= oms[2,1].tel.lm.μ
 		# interp_to_star!(; mask_extrema=false)
 		# mws.om.rv .= vec(project_doppler_comp(flux_star .- mws.om.star.lm.μ, doppler_component(mws.om.star.λ, mws.om.star.lm.μ), 1 ./ vars_star))
-		om1 = get_metrics!(mws, 2, 1)
+		om_add_tel = get_metrics!(mws, 2, 1)
 
 	else
 	
-		om1 = om0
+		om_add_tel = om_cur
 	
 	end
 
 	j = comp2ind(n_tel_cur, n_star_cur)
+	# if we looked for a telluric template, get the aic
 	search_new_tel ? aic_tel = aics[comp2ind(n_tel_cur+1, n_star_cur)...] : aic_tel = Inf
-	# search_new_star ? aic_star = aics[comp2ind(n_tel_cur, n_star_cur+1)...] : aic_star = Inf
-	# println("tel: $aic_tel, star: $aics[j...]")
+	# was the model with a telluric template better than the current model (just a stellar template)?
 	added_tel_better = aic_tel < aics[j...]
-	if added_tel_better; oms[j...] = om0 end
+	
+	# if including the telluric template model helped, use it going forward
+	if added_tel_better; oms[j...] = om_cur end
 	n_star_next = n_star_cur
 	n_tel_next = n_tel_cur+added_tel_better
 	added_tel_better ? aic_next = aic_tel : aic_next = aics[j...]
+	
 	add_comp = true
 	println("looking for time variability...")
 
+	# while we are looking to add new model components
 	while add_comp
 
 		if added_tel_better
-			om0 = om1
+			om_cur = om_add_tel
 		else
-			om0 = om2
+			om_cur = om_add_star
 		end
 
+		# if we added a component, print some stuff
 		if (n_tel_cur != n_tel_next) || (n_star_cur != n_star_next)
 			println("n_comp: ($n_tel_cur,$n_star_cur) -> ($n_tel_next,$n_star_next)")
 			println("aic   : $(aics[comp2ind(n_tel_cur, n_star_cur)...]) -> $(aics[comp2ind(n_tel_next, n_star_next)...])")
@@ -1229,6 +1585,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		search_new_star = n_star_cur+1 <= max_n_star
 		j = comp2ind(n_tel_cur, n_star_cur)
 
+		# if we want to add a telluric component
 		if search_new_tel
 
 			i = comp2ind(n_tel_cur+1, n_star_cur)
@@ -1237,30 +1594,31 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 			oms[i...].rv .= 0  # the rv is a small effect that we could just be getting wrong
 			# flux_star .= _eval_lm(oms[i...].star.lm)
 			interp_to_tel!(oms[i...])# .+ rv_to_D(oms[i...].rv)')  # the rv is a small effect that we could just be getting wrong
-			if n_tel_cur + 1 > 0
+			if n_tel_cur + 1 > 0  # if we are trying to add a feature vector
 				EMPCA.EMPCA!(oms[i...].tel.lm, flux_tel, 1 ./ vars_tel; inds=(n_tel_cur+1):(n_tel_cur+1))
-			else
+			else # if we are trying to add a template
 				oms[i...].tel.lm.μ .= make_template(flux_tel, vars_tel; min=μ_min, max=μ_max, use_mean=use_mean)
 			end
 			# remove_reciprocal_continuum!(oms[i...], flux_star, vars_star, flux_tel, vars_tel)
 			mws = TotalWorkspace(oms[i...], d)
-			om1 = get_metrics!(mws, i...)
-
+			om_add_tel = get_metrics!(mws, i...)
 
 		end
 
+		# if we want to add a stellar component
 		if search_new_star
+
 			i = comp2ind(n_tel_cur, n_star_cur+1)
 			oms[i...] = downsize(om, max(0, n_tel_cur), n_star_cur+1)
 			fill_OrderModel!(oms[i...], oms[j...], 1:n_tel_cur, 1:n_star_cur)
 			dop_comp .= doppler_component(oms[i...].star.λ, oms[i...].star.lm.μ)
-			if n_tel_cur < 0
+			if n_tel_cur < 0  # if we don't have a telluric model
 				oms[i...].tel.lm.μ .= 1
 				# oms[i...].rv .=
 				DEMPCA!(oms[i...].star.lm, copy(flux_star_no_tel), 1 ./ vars_star_no_tel, dop_comp; save_doppler_in_M1=false, inds=(n_star_cur+1):(n_star_cur+1), extra_vec=dop_comp)
 				# remove_reciprocal_continuum!(oms[i...], flux_star, vars_star, flux_tel, vars_tel)
 				mws = FrozenTelWorkspace(oms[i...], d)
-			else
+			else  # if we have a telluric model
 				# flux_tel .= _eval_lm(oms[i...].tel.lm)
 				interp_to_star!(oms[i...])
 				# oms[i...].rv .=
@@ -1268,13 +1626,11 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 				# remove_reciprocal_continuum!(oms[i...], flux_star, vars_star, flux_tel, vars_tel)
 				mws = TotalWorkspace(oms[i...], d)
 			end
-			om2 = get_metrics!(mws, i...)
+			om_add_star = get_metrics!(mws, i...)
 		end
 
-		# TODO scatter(times_nu, om.bary_rvs)
-
 		# look at the (up to 2) new aics and choose where to go next
-		oms[j...] = om0
+		oms[j...] = om_cur
 		search_new_tel ? aic_tel = aics[comp2ind(n_tel_cur+1, n_star_cur)...] : aic_tel = Inf
 		search_new_star ? aic_star = aics[comp2ind(n_tel_cur, n_star_cur+1)...] : aic_star = Inf
 		# println("tel: $aic_tel, star: $aic_star")
@@ -1285,6 +1641,7 @@ function calculate_initial_model(data::Data, instrument::String, desired_order::
 		add_comp = (isfinite(aic_tel) || isfinite(aic_star)) && (!stop_early || aic_next < aics[j...]) && (search_new_tel || search_new_star)
 	
 	end
+	
 	println("stopped at ($n_tel_cur,$n_star_cur)")
 	# aics[isnan.(aics)] .= Inf
 	best_aic = argmin(aics)

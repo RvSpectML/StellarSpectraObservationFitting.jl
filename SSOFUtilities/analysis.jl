@@ -20,7 +20,8 @@ function get_data(data_fn::String; min_pix::Int=800, use_lsf::Bool=true)
 	if !use_lsf; data = SSOF.GenericData(data) end
 	return data, times_nu, airmasses
 end
-function calculate_initial_model(data::SSOF.Data, instrument::String, desired_order::Int, star::String, times::AbstractVector;
+function calculate_initial_model(data::SSOF.Data;
+	instrument::String="None", desired_order::Int=0, star::String="None", times::AbstractVector=1:size(data.flux, 2),
 	n_comp_tel::Int=5, n_comp_star::Int=5, save_fn::String="", plots_fn::String="",
 	recalc::Bool=false, use_custom_n_comp::Bool=false, use_reg::Bool=true, return_full_path::Bool=false, kwargs...)
 
@@ -29,7 +30,7 @@ function calculate_initial_model(data::SSOF.Data, instrument::String, desired_or
 		println("using saved model at $save_fn")
 		@load save_fn model
 	else
-		oms, ℓs, aics, bics, rv_stds, rv_stds_intra, comp2ind, n_tel_cur, n_star_cur = SSOF.calculate_initial_model(data, instrument, desired_order, star, times;
+		oms, ℓs, aics, bics, rv_stds, rv_stds_intra, comp2ind, n_tel_cur, n_star_cur = SSOF.calculate_initial_model(data; instrument=instrument, desired_order=desired_order, star=star, times=times,
 			max_n_tel=n_comp_tel, max_n_star=n_comp_star, use_all_comps=use_custom_n_comp, return_full_path=true, kwargs...)
 
 		# plots

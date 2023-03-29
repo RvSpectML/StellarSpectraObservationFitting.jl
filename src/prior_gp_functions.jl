@@ -1,7 +1,11 @@
 # [1]: Jouni Hartikainen and Simo Särkkä 2015? https://users.aalto.fi/~ssarkka/pub/gp-ts-kfrts.pdf
 # [2]: Arno Solin and Simo Särkkä 2019 https://users.aalto.fi/~asolin/sde-book/sde-book.pdf
+# See also Appendix A of Data-Driven Modeling of Telluric Features and Stellar Variability with StellarSpectraObservationFitting.jl (Gilbertson et al. 2023)
+# This code is to compute a fast GP-likelihood regularization term
+
 using StaticArrays
 import TemporalGPs; TGP = TemporalGPs
+using SparseArrays
 
 @assert typeof(SOAP_gp.f.kernel.kernel.kernel) <: Matern52Kernel
 @assert typeof(LSF_gp.f.kernel.kernel.kernel) <: Matern52Kernel
@@ -79,6 +83,13 @@ end
 # changing y only changes m_kbar, v_k, and m_k. Could be faster if
 # P_kbar, S_k, K_k, and P_k were saved?
 _log2π = log(2π)
+
+
+"""
+    gp_ℓ(y, A_k, Σ_k; σ²_meas=_σ²_meas_def, H_k=H_k, P∞=P∞)
+
+Getting the posterior likelihood that `y` is from a LTISDE described by `A_k` and `Σ_k`, equivalent to a GP
+"""
 function gp_ℓ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_meas::Real=_σ²_meas_def, H_k::AbstractMatrix=H_k, P∞::AbstractMatrix=P∞)
 
     n = length(y)
@@ -109,7 +120,13 @@ end
 # end
 
 
-# removing things that Nabla doesn't like from SOAP_gp_ℓ
+
+"""
+    gp_ℓ_nabla(y, A_k, Σ_k; σ²_meas=_σ²_meas_def, H_k=H_k, P∞=P∞)
+
+Getting the posterior likelihood that `y` is from a LTISDE described by `A_k` and `Σ_k`, equivalent to a GP.
+Same as `gp_ℓ()` but removing things that Nabla doesn't like
+"""
 function gp_ℓ_nabla(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_meas::Real=_σ²_meas_def, H_k::AbstractMatrix=H_k, P∞::AbstractMatrix=P∞)
 
     n = length(y)
@@ -138,7 +155,11 @@ function gp_ℓ_nabla(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_meas::R
 end
 
 
-# for calculating gradients w.r.t. y
+"""
+    gp_Δℓ_helper_K(n, A_k, Σ_k, H_k, P∞; σ²_meas=_σ²_meas_def)
+
+Precalculate all of the `K` matrices for at each time
+"""
 function gp_Δℓ_helper_K(n::Int, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; σ²_meas::Real=_σ²_meas_def)
 
     n_state = 3
@@ -156,6 +177,12 @@ function gp_Δℓ_helper_K(n::Int, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_
     return K
 end
 
+
+"""
+    gp_Δℓ_helper_γ(y, A_k, Σ_k, H_k, P∞; σ²_meas=_σ²_meas_def)
+
+Precalculate all of the `γ` values for at each time
+"""
 function gp_Δℓ_helper_γ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; σ²_meas::Real=_σ²_meas_def)
     n_state = 3
     n = length(y)
@@ -173,6 +200,12 @@ function gp_Δℓ_helper_γ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::A
     return γ
 end
 
+
+"""
+    gp_Δℓ(y, A_k, Σ_k, H_k, P∞; kwargs...)
+
+Calculate the gradient of `gp_ℓ()` w.r.t. `y`
+"""
 function gp_Δℓ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; kwargs...)
     n = length(y)
     K = gp_Δℓ_helper_K(n, A_k, Σ_k, H_k, P∞; kwargs...)  # O(n)
@@ -193,7 +226,11 @@ function gp_Δℓ(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMat
 end
 
 
-using SparseArrays
+"""
+    gp_Δℓ_coefficients(n, A_k, Σ_k; H_k=H_k, P∞=P∞, sparsity=0, kwargs...)
+
+Precalculate coefficients that can be used to calculate gradient of `gp_ℓ()` w.r.t. `y`
+"""
 function gp_Δℓ_coefficients(n::Int, A_k::AbstractMatrix, Σ_k::AbstractMatrix; H_k::AbstractMatrix=H_k, P∞::AbstractMatrix=P∞, sparsity::Int=0, kwargs...)
     @assert 0 <= sparsity <= n/10
     use_sparse = sparsity != 0
@@ -223,17 +260,27 @@ end
 # Δℓ_coe = Δℓ_coefficients(y, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas)
 # Δℓ_coe_s = Δℓ_coefficients(y, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas, sparsity=100)
 
-# only to allow Nabla to know that we should use the faster gradient
-# calculations using the precalcuated coefficients
+"""
+    gp_ℓ_precalc(ℓ_coeff, x, A_k, Σ_k; kwargs...)
+
+A version of `gp_ℓ()` using the coefficients calculated by `gp_Δℓ_coefficients()`
+"""
 gp_ℓ_precalc(Δℓ_coeff::AbstractMatrix, x::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix; kwargs...) =
     gp_ℓ(x, A_k, Σ_k; kwargs...)
 
+
+"""
+    gp_ℓ_precalc(ℓ_coeff, x, A_k, Σ_k; kwargs...)
+
+Calculate the gradient of `gp_ℓ_precalc()` w.r.t. `y`
+"""
 Δℓ_precalc(Δℓ_coeff::AbstractMatrix, x::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; kwargs...) =
     Δℓ_coeff * gp_Δℓ_helper_γ(x, A_k, Σ_k, H_k, P∞; kwargs...)
 
 
-using Nabla
+# Tell Nabla that `Δℓ_precalc()` is the gradient of `gp_ℓ_precalc()`
 # BE EXTREMELY CAREFUL! AS WE CANT PASS kwargs... THIS WILL ONLY WORK FOR THE DEFAULT VALUES OF H_k, P∞, F, AND σ²_meas
+using Nabla
 @explicit_intercepts gp_ℓ_precalc Tuple{AbstractMatrix, AbstractVector, AbstractMatrix, AbstractMatrix}
 Nabla.∇(::typeof(gp_ℓ_precalc), ::Type{Arg{2}}, _, y, ȳ, Δℓ_coeff, x, A_k, Σ_k) =
     ȳ .* Δℓ_precalc(Δℓ_coeff, x, A_k, Σ_k, H_k, P∞)

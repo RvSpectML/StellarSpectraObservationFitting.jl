@@ -112,7 +112,8 @@ instrument = "SSOF"
 order = 81
 n_comp = 2  # how many components to use in the model
 
-model_new = SSOF.calculate_initial_model(data_simulated, instrument, order, star, times;
+model_new = SSOF.calculate_initial_model(data_simulated;
+	instrument=instrument, desired_order=order, star=star, times=times;
 	max_n_tel=n_comp, max_n_star=n_comp, log_λ_gp_star=1/SSOF.SOAP_gp_params.λ,
 	log_λ_gp_tel=5.134684755671457e-6,
 	tel_log_λ=model.tel.log_λ, star_log_λ=model.star.log_λ, oversamp=false)

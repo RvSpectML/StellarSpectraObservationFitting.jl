@@ -1,15 +1,25 @@
 _reg_fields = [:reg_tel, :reg_star]
 
 
+"""
+    _eval_regularization(om, mws, training_inds, testing_inds; kwargs...)
+
+Training `om` on the training data, evaluating `_loss()` on the testing data after optimizing the RVs and scores
+"""
 function _eval_regularization(om::OrderModel, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat; kwargs...)
     train = typeof(mws)(om, mws.d, training_inds)
     test = typeof(mws)(om, mws.d, testing_inds; only_s=true)
-    # train_OrderModel!(train; iter=50, kwargs...) # trains basis vectors and (scores at training time)
-    # train_OrderModel!(test; shift_scores=false, iter=50, kwargs...)  # trains scores at testing times
-    train_OrderModel!(train; kwargs...) # trains basis vectors and (scores at training time)
+    train_OrderModel!(train; kwargs...) # trains feature vectors and scores at training times
     train_OrderModel!(test; shift_scores=false, kwargs...)  # trains scores at testing times
     return _loss(test)
 end
+
+
+"""
+    eval_regularization(reg_fields, reg_key, reg_val, mws, training_inds, testing_inds; kwargs...)
+
+Setting regularizaiton values for a copy of `mws.om` then training it on the training data and evaluating `_loss()` on the testing data after optimizing the RVs and scores
+"""
 function eval_regularization(reg_fields::Vector{Symbol}, reg_key::Symbol, reg_val::Real, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat; kwargs...)
     om = copy(mws.om)
     for field in reg_fields
@@ -18,12 +28,22 @@ function eval_regularization(reg_fields::Vector{Symbol}, reg_key::Symbol, reg_va
     return _eval_regularization(om, mws, training_inds, testing_inds; kwargs...)
 end
 
+
+"""
+    fit_regularization_helper!(reg_fields, reg_key, before_ℓ, mws, training_inds, testing_inds, test_factor, reg_min, reg_max; start=10e3, cullable=Symbol[], robust_start=true, thres=8, kwargs...)
+
+Setting `reg_key` values in each Dict in mws.om.x (where x is each symbol in ``reg_fields``) for a copy of `mws.om` then training it on the training data and evaluating `_loss()` on the testing data after optimizing the RVs and scores
+"""
 function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol, before_ℓ::Real, mws::ModelWorkspace, training_inds::AbstractVecOrMat, testing_inds::AbstractVecOrMat, test_factor::Real, reg_min::Real, reg_max::Real; start::Real=10e3, cullable::Vector{Symbol}=Symbol[], robust_start::Bool=true, thres::Real=8, kwargs...)
+    
+    # only do anything if 
     if haskey(getfield(mws.om, reg_fields[1]), reg_key)
 
         om = mws.om
         @assert 0 < reg_min < reg_max < Inf
         ℓs = Array{Float64}(undef, 2)
+
+        # check starting from `reg_min`, `start`, and `reg_max`
         if robust_start
             starting_ℓs =
                 [eval_regularization(reg_fields, reg_key, reg_min, mws, training_inds, testing_inds; kwargs...),
@@ -59,6 +79,7 @@ function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol,
             start_ℓ = ℓs[1] = eval_regularization(reg_fields, reg_key, reg_hold[1], mws, training_inds, testing_inds; kwargs...)
             ℓs[2] = eval_regularization(reg_fields, reg_key, reg_hold[2], mws, training_inds, testing_inds; kwargs...)
         end
+
         # need to try decreasing regularization
         if ℓs[2] > ℓs[1]
             off_edge = reg_min < reg_hold[1]
@@ -93,8 +114,11 @@ function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol,
         if isapprox(end_ℓ, last_checked_ℓ; rtol=1e-6)
             @warn "weak local minimum $end_ℓ vs. $last_checked_ℓ"
         end
+
         println("$(reg_fields[1])[:$reg_key] χ²: $start_ℓ -> $end_ℓ (" * ratio_clarifier_string(end_ℓ/start_ℓ) * ")")
         println("overall χ² change: $before_ℓ -> $end_ℓ (" * ratio_clarifier_string(end_ℓ/before_ℓ) * ")")
+
+        # removing the regularization term if it is significantly bad
         if end_ℓ > ((1 + thres/100) * before_ℓ)
             for field in reg_fields
                 getfield(mws.om, field)[reg_key] = 0.
@@ -106,6 +130,13 @@ function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol,
     end
     return before_ℓ
 end
+
+
+"""
+    choose_reg_and_ℓ(reg_fields, om, reg_key, reg_hold, ℓs, j)
+
+Set the `reg_key` regularization for `om` once the local minimum is found
+"""
 function choose_reg_and_ℓ(reg_fields::Vector{Symbol}, om::OrderModel, reg_key::Symbol, reg_hold::Vector{<:Real}, ℓs::Vector{<:Real}, j::Int)
     jis1 = j == 1
     @assert jis1 || j == 2
@@ -114,6 +145,13 @@ function choose_reg_and_ℓ(reg_fields::Vector{Symbol}, om::OrderModel, reg_key:
     end
     jis1 ? (return ℓs[2], ℓs[1]) : (return ℓs[1], ℓs[2])
 end
+
+
+"""
+    ratio_clarifier_string(ratio)
+
+Convert `ratio` to a nice 3 digit-rounded string
+"""
 function ratio_clarifier_string(ratio::Real)
     x = round(ratio; digits=3)
     if x == 1.
@@ -128,6 +166,13 @@ end
 _key_list = [:GP_μ, :L2_μ, :L1_μ, :L1_μ₊_factor, :GP_M, :L2_M, :L1_M, :shared_M]
 _key_list_fit = [:GP_μ, :L2_μ, :L1_μ, :GP_M, :L2_M, :L1_M]
 _key_list_bases = [:GP_M, :L2_M, :L1_M, :shared_M]
+
+
+"""
+    check_for_valid_regularization(reg)
+
+Make sure all the keys in `reg` are in SSOF._key_list
+"""
 function check_for_valid_regularization(reg::Dict{Symbol, <:Real})
     for i in keys(reg)
         @assert i in _key_list "The requested regularization isn't valid"
@@ -136,6 +181,13 @@ end
 
 min_reg = 1e-3
 max_reg = 1e12
+
+
+"""
+    fit_regularization!(mws, testing_inds; key_list=_key_list_fit, share_regs=false, kwargs...)
+
+Fit all of the regularization values in `key_list` for the model in `mws`
+"""
 function fit_regularization!(mws::ModelWorkspace, testing_inds::AbstractVecOrMat; key_list::Vector{Symbol}=_key_list_fit, share_regs::Bool=false, kwargs...)
     om = mws.om
     n_obs = size(mws.d.flux, 2)
@@ -171,6 +223,12 @@ function fit_regularization!(mws::ModelWorkspace, testing_inds::AbstractVecOrMat
 end
 
 
+
+"""
+    fit_regularization!(mws; verbose=true, testing_ratio=0.33, careful_first_step=true, speed_up=false, kwargs...)
+
+Find the best fit model withouth regularization then fit all of the regularization values in `key_list` for the model in `mws`
+"""
 function fit_regularization!(mws::ModelWorkspace; verbose::Bool=true, testing_ratio::Real=0.33, careful_first_step::Bool=true, speed_up::Bool=false, kwargs...)
 	# if mws.om.metadata[:todo][:reg_improved]
     n_obs = size(mws.d.flux, 2)
