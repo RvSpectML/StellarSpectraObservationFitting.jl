@@ -811,19 +811,19 @@ function remove_lm_score_means!(lms::Vector{<:LinearModel}; kwargs...)
 	end
 end
 
-function flip_basis_vectors!(lm::FullLinearModel)
+function flip_feature_vectors!(lm::FullLinearModel)
 	flipper = -sign.(mean(lm.M; dims=1) - median(lm.M; dims=1))  # make basis vector be absorption features
 	lm.M .*= flipper
 	lm.s .*= flipper'
 end
-flip_basis_vectors!(lm::LinearModel) = nothing
-function flip_basis_vectors!(om::OrderModel)
-	flip_basis_vectors!(om.star.lm)
-	flip_basis_vectors!(om.tel.lm)
+flip_feature_vectors!(lm::LinearModel) = nothing
+function flip_feature_vectors!(om::OrderModel)
+	flip_feature_vectors!(om.star.lm)
+	flip_feature_vectors!(om.tel.lm)
 end
-function flip_basis_vectors!(lms::Vector{<:LinearModel})
+function flip_feature_vectors!(lms::Vector{<:LinearModel})
 	for lm in lms
-		flip_basis_vectors!(lm)
+		flip_feature_vectors!(lm)
 	end
 end
 
