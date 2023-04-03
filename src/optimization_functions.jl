@@ -1215,7 +1215,7 @@ Defaults to returning the AIC-minimum model
 - `speed_up::Bool=false`: Whether to inflate the learning rates until the loss is no longer improving throughout the optimization
 - `log_λ_gp_star::Real=1/SOAP_gp_params.λ`: The log λ lengthscale of the stellar regularization GP
 - `log_λ_gp_tel::Real=1/LSF_gp_params.λ`: The log λ lengthscale of the telluric regularization GP
-- `kwargs...`: kwargs passed to `OrderModel`
+- `kwargs...`: kwargs passed to `OrderModel` constructor
 """
 function calculate_initial_model(data::Data;
 	instrument::String="None", desired_order::Int=0, star::String="None", times::AbstractVector=1:size(data.flux, 2),
@@ -1641,7 +1641,7 @@ function calculate_initial_model(data::Data;
 		add_comp = (isfinite(aic_tel) || isfinite(aic_star)) && (!stop_early || aic_next < aics[j...]) && (search_new_tel || search_new_star)
 	
 	end
-	
+
 	println("stopped at ($n_tel_cur,$n_star_cur)")
 	# aics[isnan.(aics)] .= Inf
 	best_aic = argmin(aics)

@@ -117,7 +117,15 @@ aic(mws::ModelWorkspace, logdet_Σ::Real, n::Int) =
 	aic(total_length(mws), ℓ(_loss(mws), logdet_Σ, n))
 function aic(mws::ModelWorkspace)
 	n, logdet_Σ = ℓ_prereqs(mws.d.var)
-	return aic(mws, n, logdet_Σ)
+	return aic(mws, logdet_Σ, n)
+end
+"Akaike information criterion (corrected for small sample sizes)"
+aicc(k::Int, ℓ::Real, n::Int) = aic(k, ℓ) + (2k(k+1))/(n-k-1)
+aicc(mws::ModelWorkspace, logdet_Σ::Real, n::Int) =
+	aicc(total_length(mws), ℓ(_loss(mws), logdet_Σ, n), n)
+function aicc(mws::ModelWorkspace)
+	n, logdet_Σ = ℓ_prereqs(mws.d.var)
+	return aicc(mws, logdet_Σ, n)
 end
 "Bayesian information criterion"
 bic(k::Int, ℓ::Real, n::Int) = k * log(n) - 2 * ℓ
