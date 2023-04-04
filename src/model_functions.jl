@@ -22,17 +22,33 @@ abstract type OrderModel end
 abstract type Output end
 abstract type Data end
 
-_current_matrix_modifier = SparseMatrixCSC
 
+"""
+	D_to_rv(D)
+
+Approximately converting a Doppler shift `D ≡ log(λ1/λ0)` in log-wavelength space to an RV using `(λ1-λ0)/λ0 = λ1/λ0 - 1 = e^D - 1 ≈ β = v / c` (with an extra negative sign from somewhere)
+"""
 D_to_rv(D) = light_speed_nu .* (1-exp.(D))
 # function D_to_rv(D)
 # 	x = exp.(2 .* D)
 # 	return light_speed_nu .* ((1 .- x) ./ (1 .+ x))
 # end
 
+"""
+	rv_to_D(v)
+
+Approximately converting an RV to a Doppler shift `D ≡ log(λ1/λ0)` in log-wavelength space using `(λ1-λ0)/λ0 = λ1/λ0 - 1 = e^D - 1 ≈ β = v / c` (with an extra negative sign from somewhere)
+"""
 rv_to_D(v) = log1p.(-v ./ light_speed_nu)  # a simple approximation that minimally confuses that we are measuring redshift
 # rv_to_D(v) = (log1p.((-v ./ light_speed_nu)) - log1p.((v ./ light_speed_nu))) ./ 2
 # rv_to_D(v) = log.((1 .- v ./ light_speed_nu) ./ (1 .+ v ./ light_speed_nu)) ./ 2
+
+
+"""
+	_lower_inds!(lower_inds, lower_inds_adj, model_log_λ, rvs, log_λ_obs)
+
+find the `model_log_λ` indices (incl. RV shifts) that bracket each `log_λ_obs`
+"""
 function _lower_inds!(lower_inds::AbstractMatrix, lower_inds_adj::AbstractMatrix, model_log_λ::AbstractVector{<:Real}, rvs, log_λ_obs::AbstractMatrix)
 	n_obs = length(rvs)
 	len = size(log_λ_obs, 1)
@@ -61,10 +77,20 @@ function _lower_inds(model_log_λ::AbstractVector{<:Real}, rvs, log_λ_obs::Abst
 	return _lower_inds!(lower_inds, lower_inds_adj, model_log_λ, rvs, log_λ_obs)
 end
 
+
+"""
+	StellarInterpolationHelper
+
+A linear interpolation holding information to interpolate the stellar model shifted by an RV to the data
+"""
 struct StellarInterpolationHelper{T1<:Real, T2<:Int}
+	"`log_λ_obs - model_log_λ[lower_inds]` precomputed for coefficient calculations"
     log_λ_obs_m_model_log_λ_lo::AbstractMatrix{T1}
+	"The stellar model log λ uniform step size"
 	model_log_λ_step::T1
+	"The lower indices"
 	lower_inds::AbstractMatrix{T2}
+	"The lower indices plus 1"
 	lower_inds_p1::AbstractMatrix{T2}
 	function StellarInterpolationHelper(
 		log_λ_obs_m_model_log_λ_lo::AbstractMatrix{T1},
@@ -111,10 +137,12 @@ function StellarInterpolationHelper!(
 end
 Base.copy(s::StellarInterpolationHelper) = StellarInterpolationHelper(copy(s.log_λ_obs_m_model_log_λ_lo), s.model_log_λ_step, copy(s.lower_inds), copy(s.lower_inds_p1))
 
-function spectra_interp(model_flux::AbstractVector, rv::Real, sih::StellarInterpolationHelper; sih_ind::Int=1)
-	ratios = (view(sih.log_λ_obs_m_model_log_λ_lo, :, sih_ind) .+ rv_to_D(rv)) ./ sih.model_log_λ_step
-	return (view(model_flux, view(sih.lower_inds, :, sih_ind)) .* (1 .- ratios)) + (view(model_flux, view(sih.lower_inds_p1, :, sih_ind)) .* ratios)
-end
+
+"""
+	spectra_interp(model_flux, rvs, sih)
+
+Interpolate the stellar model to the data using the lower inds in `sih`
+"""
 function spectra_interp(model_flux::AbstractMatrix, rvs::AbstractVector, sih::StellarInterpolationHelper)
 	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_step
 	# prop_bad = sum((ratios .> 1) + (ratios .< 0)) / length(ratios)
@@ -124,6 +152,10 @@ end
 function spectra_interp_nabla(model_flux, rvs, sih::StellarInterpolationHelper)
 	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_step
 	return (model_flux[sih.lower_inds] .* (1 .- ratios)) + (model_flux[sih.lower_inds_p1] .* ratios)
+end
+function spectra_interp(model_flux::AbstractVector, rv::Real, sih::StellarInterpolationHelper; sih_ind::Int=1)
+	ratios = (view(sih.log_λ_obs_m_model_log_λ_lo, :, sih_ind) .+ rv_to_D(rv)) ./ sih.model_log_λ_step
+	return (view(model_flux, view(sih.lower_inds, :, sih_ind)) .* (1 .- ratios)) + (view(model_flux, view(sih.lower_inds_p1, :, sih_ind)) .* ratios)
 end
 spectra_interp(model_flux, rvs, sih::StellarInterpolationHelper) =
 	spectra_interp_nabla(model_flux, rvs, sih)
@@ -148,16 +180,30 @@ function Nabla.∇(::typeof(spectra_interp), ::Type{Arg{1}}, _, y, ȳ, model_fl
 	return ȳnew
 end
 
+
+"""
+	LSFData
+
+Holds preprocessed data used to optimize SSOF models (including a matrix that approximates convolution with the instrument line spread function)
+"""
 struct LSFData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
-    flux::AM
+    "Observed normalized flux"
+	flux::AM
+	"Observed normalized variance"
     var::AM
+	"Observed normalized variance (with constant masking in barycentric frame)"
 	var_s::AM
+	"Log of observed wavelengths"
     log_λ_obs::AM
+	"Pixel boundaries of the observed log wavelengths"
 	log_λ_obs_bounds::M
+	"Log of observed wavelengths (after barycentric correction)"
     log_λ_star::AM
+	"Pixel boundaries of the observed log wavelengths (after barycentric correction)"
 	log_λ_star_bounds::M
-	lsf::_current_matrix_modifier
-	function LSFData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_star::AM, lsf::_current_matrix_modifier) where {T<:Real, AM<:AbstractMatrix{T}}
+	"Matrix that approximates convolution with the instrument line spread function"
+	lsf::SparseMatrixCSC
+	function LSFData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_star::AM, lsf::SparseMatrixCSC) where {T<:Real, AM<:AbstractMatrix{T}}
 		@assert size(flux) == size(var) == size(var_s) == size(log_λ_obs) == size(log_λ_star)
 		@assert size(lsf, 1) == size(lsf, 2) == size(flux, 1)
 		log_λ_obs_bounds = bounds_generator(log_λ_obs)
@@ -172,13 +218,26 @@ LSFData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_star::AM, lsf::Noth
 	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds), d.lsf)
 Base.copy(d::LSFData) = LSFData(copy(d.flux), copy(d.var), copy(d.var_s), copy(d.log_λ_obs), copy(d.log_λ_star), copy(d.lsf))
 
+
+"""
+	GenericData
+
+Holds preprocessed data used to optimize SSOF models
+"""
 struct GenericData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
-    flux::AM
+    "Observed normalized flux"
+	flux::AM
+	"Observed normalized variance"
     var::AM
+	"Observed normalized variance (with constant masking in barycentric frame)"
 	var_s::AM
+	"Log of observed wavelengths"
     log_λ_obs::AM
+	"Pixel boundaries of the observed log wavelengths"
 	log_λ_obs_bounds::M
+	"Log of observed wavelengths (after barycentric correction)"
     log_λ_star::AM
+	"Pixel boundaries of the observed log wavelengths (after barycentric correction)"
 	log_λ_star_bounds::M
 	function GenericData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_star::AM) where {T<:Number, AM<:AbstractMatrix{T}}
 		@assert size(flux) == size(var) == size(var_s) == size(log_λ_obs) == size(log_λ_star)
@@ -194,13 +253,26 @@ Base.copy(d::GenericData) = GenericData(copy(d.flux), copy(d.var), copy(d.var_s)
 GenericData(d::LSFData) = GenericData(d.flux, d.var, d.var_s, d.log_λ_obs, d.log_λ_star)
 GenericData(d::GenericData) = d
 
+
+"""
+	GenericDatum
+
+Holds a single preprocessed spectrum used to optimize SSOF models
+"""
 struct GenericDatum{T<:Number, AV<:AbstractVector{T}, V<:Vector{<:Number}} <: Data
+    "Observed normalized flux"
     flux::AV
+    "Observed normalized variance"
     var::AV
+	"Observed normalized variance (with constant masking in barycentric frame)"
 	var_s::AV
+    "Log of observed wavelengths"
     log_λ_obs::AV
+	"Pixel boundaries of the observed log wavelengths"
 	log_λ_obs_bounds::V
+    "Log of observed wavelengths (after barycentric correction)"
     log_λ_star::AV
+	"Pixel boundaries of the observed log wavelengths (after barycentric correction)"
 	log_λ_star_bounds::V
 	function GenericDatum(flux::AV, var::AV, log_λ_obs::AV, log_λ_star::AV) where {T<:Number, AV<:AbstractVector{T}}
 		@assert size(flux) == size(var) == size(var_s) == size(log_λ_obs) == size(log_λ_star)
@@ -213,6 +285,7 @@ end
 	GenericData(view(d.flux, inds), view(d.var, inds), view(d.var_s, inds),
 	view(d.log_λ_obs, inds), view(d.log_λ_star, inds))
 Base.copy(d::GenericDatum) = GenericDatum(copy(d.flux), copy(d.var), copy(d.var_s), copy(d.log_λ_obs), copy(d.log_λ_star))
+# combines many GenericDatum into a GenericData object
 function GenericData(d::Vector{<:GenericDatum})
 	len_obs = length(d[1].flux)
 	n_obs = length(d)
@@ -235,12 +308,18 @@ function GenericData(d::Vector{<:GenericDatum})
 	return GenericData(flux_obs, var_obs, var_obs_s, log_λ_obs, log_λ_star)
 end
 
+
+"""
+	create_λ_template(log_λ_obs; upscale=1.)
+
+Creating a uniform grid of log wavelengths for the SSOF models to be evaluated on
+"""
 function create_λ_template(log_λ_obs::AbstractMatrix; upscale::Real=1.)
     log_min_wav, log_max_wav = extrema(log_λ_obs)
-	Δ_logλ_og = minimum(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :))  # minimum pixel sep
-	# Δ_logλ_og = minimum(view(log_λ_obs, size(log_λ_obs, 1), :) .- view(log_λ_obs, 1, :)) / size(log_λ_obs, 1)  # minimum avg pixel sep
-	# Δ_logλ_og = median(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :))  # median pixel sep
-	# Δ_logλ_og = maximum(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :))  # maximum pixel sep
+	Δ_logλ_og = minimum(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :))  # minimum pixel separation
+	# Δ_logλ_og = minimum(view(log_λ_obs, size(log_λ_obs, 1), :) .- view(log_λ_obs, 1, :)) / size(log_λ_obs, 1)  # minimum avg pixel separation
+	# Δ_logλ_og = median(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :))  # median pixel separation
+	# Δ_logλ_og = maximum(view(log_λ_obs, 2:size(log_λ_obs, 1), :) .- view(log_λ_obs, 1:size(log_λ_obs, 1)-1, :))  # maximum pixel separation
 	Δ_logλ = Δ_logλ_og / upscale
     log_λ_template = (log_min_wav - 2 * Δ_logλ_og):Δ_logλ:(log_max_wav + 2 * Δ_logλ_og)
     λ_template = exp.(log_λ_template)
@@ -250,11 +329,19 @@ end
 abstract type LinearModel end
 _log_lm_default = true
 
-# Full (includes mean) linear model
+"""
+	FullLinearModel
+
+A (log) linear model including a mean (either μ+M*s or μ*exp(M*s))
+"""
 struct FullLinearModel{T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}, AV<:AbstractVector{T}}  <: LinearModel
+	"Feature vectors/weights that control where the model varies"
 	M::AM1
+	"Scores that control how much the model varies at each time"
 	s::AM2
+	"Template which controls the average behavior"
 	μ::AV
+	"Whether or not the model is log linear"
 	log::Bool
 	function FullLinearModel(M::AM1, s::AM2, μ::AV, log::Bool) where {T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}, AV<:AbstractVector{T}}
 		@assert length(μ) == size(M, 1)
@@ -268,10 +355,19 @@ Base.copy(flm::FullLinearModel) = FullLinearModel(copy(flm.M), copy(flm.s), copy
 LinearModel(flm::FullLinearModel, inds::AbstractVecOrMat) =
 	FullLinearModel(flm.M, view(flm.s, :, inds), flm.μ, flm.log)
 
-# Base (no mean) linear model
+
+"""
+	BaseLinearModel
+
+A (log) linear model without a mean (either M*s or exp(M*s)).
+Used for DPCA models
+"""
 struct BaseLinearModel{T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}} <: LinearModel
+	"Feature vectors/weights that control where the model varies"
 	M::AM1
+	"Scores that control how much the model varies at each time"
 	s::AM2
+	"Whether or not the model is log linear"
 	log::Bool
 	function BaseLinearModel(M::AM1, s::AM2, log::Bool) where {T<:Number, AM1<:AbstractMatrix{T}, AM2<:AbstractMatrix{T}}
 		@assert size(M, 2) == size(s, 1)
@@ -284,7 +380,11 @@ Base.copy(blm::BaseLinearModel) = BaseLinearModel(copy(blm.M), copy(blm.s), blm.
 LinearModel(blm::BaseLinearModel, inds::AbstractVecOrMat) =
 	BaseLinearModel(blm.M, view(blm.s, :, inds), blm.log)
 
-# Template (no bases) model
+"""
+	TemplateModel
+
+A constant model (when there are no feature vectors)
+"""
 struct TemplateModel{T<:Number, AV<:AbstractVector{T}} <: LinearModel
 	μ::AV
 	n::Int
@@ -292,18 +392,23 @@ end
 Base.copy(tlm::TemplateModel) = TemplateModel(copy(tlm.μ), tlm.n)
 LinearModel(tm::TemplateModel, inds::AbstractVecOrMat) = TemplateModel(tm.μ, length(inds))
 
+"Whether a LinearModel is log linear"
 log_lm(lm::TemplateModel) = false
 log_lm(lm::LinearModel) = lm.log
+
+# setting some syntactic sugar
 Base.getindex(lm::LinearModel, s::Symbol) = getfield(lm, s)
 Base.eachindex(lm::TemplateModel) = fieldnames(typeof(lm))
 Base.eachindex(lm::LinearModel) = fieldnames(typeof(lm))[1:end-1]  # dealing with log fieldname
 Base.setindex!(lm::LinearModel, a::AbstractVecOrMat, s::Symbol) = (lm[s] .= a)
+
+# getting a vector of the linear model components
 vec(lm::LinearModel) = [lm[i] for i in eachindex(lm)]
 vec(lm::TemplateModel) = [lm.μ]
 vec(lms::Vector{<:LinearModel}) = [vec(lm) for lm in lms]
 
-LinearModel(M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector; log_lm::Bool=_log_lm_default) = FullLinearModel(M, s, μ, log)
-LinearModel(M::AbstractMatrix, s::AbstractMatrix; log_lm::Bool=_log_lm_default) = BaseLinearModel(M, s, log)
+LinearModel(M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector; log_lm::Bool=_log_lm_default) = FullLinearModel(M, s, μ, log_lm)
+LinearModel(M::AbstractMatrix, s::AbstractMatrix; log_lm::Bool=_log_lm_default) = BaseLinearModel(M, s, log_lm)
 LinearModel(μ::AbstractVector, n::Int) = TemplateModel(μ, n)
 
 LinearModel(lm::FullLinearModel, s::AbstractMatrix) = FullLinearModel(lm.M, s, lm.μ, log)
@@ -314,12 +419,17 @@ LinearModel(lm::TemplateModel, s::AbstractMatrix) = lm
 # Ref(lm::BaseLinearModel) = [Ref(lm.M), Ref(lm.s)]
 # Ref(lm::TemplateModel) = [Ref(lm.μ)]
 
+
+"""
+	_eval_lm(M, s, μ; log_lm=false)
+
+Evaluate a LinearModel
+"""
+_eval_lm(M, s, μ; log_lm::Bool=false) = log_lm ? (return exp.(M * s) .* μ) : (return (M * s) .+ μ)
+_eval_lm(M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector) = muladd(M, s, μ)  # faster, but Nabla doesn't handle it
+_eval_lm(M, s; log_lm::Bool=false) = log_lm ? (return exp.(M * s)) : (return (M * s))
 # _eval_lm(μ, n::Int) = repeat(μ, 1, n)
 _eval_lm(μ, n::Int) = μ * ones(n)'  # this is faster I dont know why
-_eval_lm(M, s; log_lm::Bool=false) = log_lm ? (return exp.(M * s)) : (return (M * s))
-_eval_lm(M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector) = muladd(M, s, μ)  # faster, but Nabla doesn't handle it
-_eval_lm(M, s, μ; log_lm::Bool=false) = log_lm ? (return exp.(M * s) .* μ) : (return (M * s) .+ μ)
-
 _eval_lm(flm::FullLinearModel) = _eval_lm(flm.M, flm.s, flm.μ; log_lm=flm.log)
 _eval_lm(blm::BaseLinearModel) = _eval_lm(blm.M, blm.s; log_lm=blm.log)
 _eval_lm(tlm::TemplateModel) = _eval_lm(tlm.μ, tlm.n)
@@ -373,12 +483,24 @@ function copy_to_LinearModel!(to::LinearModel, from::Vector)
 	end
 end
 
+
+"""
+	Submodel
+
+Holds information on the wavelengths, LTISDE representaiton for the GP reguarlization term, and linear model for a SSOF model component
+"""
 struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:AbstractArray{T}}
-    log_λ::AV1
+    "Uniform separation log wavelengths of the SSOF model component"
+	log_λ::AV1
+	"`exp.(log_λ)`"
     λ::AV2
+	"Linear model"
 	lm::LinearModel
+	"State transition matrix"
 	A_sde::StaticMatrix
+	"Process noise"
 	Σ_sde::StaticMatrix
+	"Coefficients that can be used to calculate the gradient of the GP regularization term"
 	Δℓ_coeff::AA
 end
 function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int, log_λ_gp::Real; include_mean::Bool=true, log_lm::Bool=_log_lm_default, log_λ::Union{Nothing,AbstractRange}=nothing, kwargs...)
@@ -420,6 +542,12 @@ end
 	Submodel(sm.log_λ, sm.λ, LinearModel(sm.lm, inds), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff)
 Base.copy(sm::Submodel) = Submodel(sm.log_λ, sm.λ, copy(sm.lm), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff)
 
+
+"""
+	_shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
+
+Getting model log λ in a different reference frame using the shifts in the different `log_λ_obs`
+"""
 function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 	n_obs = size(log_λ_obs_from, 2)
 	dop = [log_λ_obs_from[1, i] - log_λ_obs_to[1, i] for i in 1:n_obs]
@@ -430,8 +558,8 @@ function _shift_log_λ_model(log_λ_obs_from, log_λ_obs_to, log_λ_model_from)
 	return log_λ_model_to
 end
 
+# Default regularization values
 # They need to be different or else the stellar μ will be surpressed
-# We only use the ones that have seemed useful
 default_reg_tel = Dict([(:GP_μ, 1e6), (:L2_μ, 1e6), (:L1_μ, 1e5), (:L1_μ₊_factor, 6.),
 	(:GP_M, 1e7), (:L1_M, 1e7)])
 default_reg_star = Dict([(:GP_μ, 1e2), (:L2_μ, 1e-2), (:L1_μ, 1e2), (:L1_μ₊_factor, 6.),
@@ -441,6 +569,12 @@ default_reg_tel_full = Dict([(:GP_μ, 1e6), (:L2_μ, 1e6), (:L1_μ, 1e5),
 default_reg_star_full = Dict([(:GP_μ, 1e2), (:L2_μ, 1e-2), (:L1_μ, 1e1),
 	(:L1_μ₊_factor, 6.), (:GP_M, 1e4), (:L2_M, 1e4), (:L1_M, 1e7)])
 
+
+"""
+	oversamp_interp_helper(to_bounds, from_x)
+
+Finding the coefficients to integrate the model between observed pixel bounds
+"""
 function oversamp_interp_helper(to_bounds::AbstractVector, from_x::AbstractVector)
 	ans = spzeros(length(to_bounds)-1, length(from_x))
 	bounds_inds = searchsortednearest(from_x, to_bounds)
@@ -477,6 +611,12 @@ oversamp_interp_helper(to_bounds::AbstractMatrix, from_x::AbstractVector) =
 oversamp_interp_helper(to_x::AbstractVector, from_x::AbstractMatrix) =
 	[oversamp_interp_helper(to_bounds, view(from_x, :, i)) for i in axes(from_x, 2)]
 
+
+"""
+	undersamp_interp_helper(to_x, from_x)
+
+Finding the coefficients to linear interpolate the model at observed pixel locations
+"""
 function undersamp_interp_helper(to_x::AbstractVector, from_x::AbstractVector)
 	ans = spzeros(length(to_x), length(from_x))
 	# ans = sparse(Float64[],Float64[],Float64[],length(to_x),length(from_x))
@@ -500,34 +640,86 @@ undersamp_interp_helper(to_x::AbstractMatrix, from_x::AbstractVector) =
 undersamp_interp_helper(to_x::AbstractVector, from_x::AbstractMatrix) =
 	[undersamp_interp_helper(to_x, view(from_x, :, i)) for i in axes(from_x, 2)]
 
+
+"""
+	OrderModelDPCA
+
+SSOF model for a set of 1D spectra using Doppler-constrained PCA to measure the RVs (which are contained in the RV Submodel)
+"""
 struct OrderModelDPCA{T<:Number} <: OrderModel
+	"Telluric submodel"
     tel::Submodel
+	"Stellar submodel"
     star::Submodel
+	"RV submodel with Doppler feature vector"
 	rv::Submodel
+	"Telluric regularization coefficients"
 	reg_tel::Dict{Symbol, T}
+	"Stellar regularization coefficients"
 	reg_star::Dict{Symbol, T}
-	b2o::AbstractVector{<:_current_matrix_modifier}
-	t2o::AbstractVector{<:_current_matrix_modifier}
+	"Matrices to interpolate stellar model to observed wavelengths (barycenter 2 observed)"
+	b2o::AbstractVector{<:SparseMatrixCSC}
+	"Matrices to interpolate telluric model to observed wavelengths (telluric 2 observed)"
+	t2o::AbstractVector{<:SparseMatrixCSC}
+	"Holds the data on the instrument, star, and order of data being as well as whether the model has been optimized or regularized etc."
 	metadata::Dict{Symbol, Any}
+	"Number of spectra to be modeled"
 	n::Int
 end
+
+"""
+	OrderModelWobble
+
+SSOF model for a set of 1D spectra using linear interpolation of the stellar model to measure the RVs
+"""
 struct OrderModelWobble{T<:Number} <: OrderModel
+	"Telluric submodel"
     tel::Submodel
+	"Stellar submodel"
     star::Submodel
+	"RVs"
 	rv::AbstractVector
+	"Telluric regularization coefficients"
 	reg_tel::Dict{Symbol, T}
+	"Stellar regularization coefficients"
 	reg_star::Dict{Symbol, T}
+	"Linear interpolation helper objects to interpolate stellar model to observed wavelengths (barycenter 2 observed)"
 	b2o::StellarInterpolationHelper
+	"Approximate barycentric correction \"RVs\" (using `(λ1-λ0)/λ0 = λ1/λ0 - 1 = e^D - 1 ≈ β = v / c`)"
 	bary_rvs::AbstractVector{<:Real}
-	t2o::AbstractVector{<:_current_matrix_modifier}
+	"Matrices to interpolate telluric model to observed wavelengths (telluric 2 observed)"
+	t2o::AbstractVector{<:SparseMatrixCSC}
+	"Holds the data on the instrument, star, and order of data being as well as whether the model has been optimized or regularized etc."
 	metadata::Dict{Symbol, Any}
+	"Number of spectra to be modeled"
 	n::Int
 end
+
+
+"""
+	OrderModel(d; kwargs...)
+	
+Constructor for the `OrderModel`-type objects (SSOF model for a set of 1D spectra)
+	
+# Optional arguments
+- `instrument::String="None"`: The name of the instrument(s) the data was taken from. For bookkeeping
+- `order::Int=0`: What order (if any) the data was taken from. For bookkeeping
+- `star_str::String="None"`: The name of the star the data was taken from. For bookkeeping
+- `n_comp_tel::Int=5`: Amount of telluric feature vectors
+- `n_comp_star::Int=5`: The maximum amount of stellar feature vectors
+- `oversamp::Bool=true`: Whether or not to integrate the model or do linear interpolation (for the telluric model)
+- `dpca::Bool=false`: Whether to use Doppler-constrained PCA or variable interpolation location to determine the RVs
+- `log_λ_gp_star::Real=1/SOAP_gp_params.λ`: The log λ lengthscale of the stellar regularization GP
+- `log_λ_gp_tel::Real=1/LSF_gp_params.λ`: The log λ lengthscale of the telluric regularization GP
+- `tel_log_λ::Union{Nothing,AbstractRange}=nothing`: The log
+- `star_log_λ::Union{Nothing,AbstractRange}=nothing`: The log λ lengthscale of the telluric regularization GP
+- `kwargs...`: kwargs passed to `Submodel` constructors
+"""
 function OrderModel(
-	d::Data,
-	instrument::String,
-	order::Int,
-	star::String;
+	d::Data;
+	instrument::String="None",
+	order::Int=0,
+	star_str::String="None",
 	n_comp_tel::Int=2,
 	n_comp_star::Int=2,
 	oversamp::Bool=true,
@@ -538,6 +730,7 @@ function OrderModel(
 	star_log_λ::Union{Nothing,AbstractRange}=nothing,
 	kwargs...)
 
+	# Creating models
 	tel = Submodel(d.log_λ_obs, n_comp_tel, log_λ_gp_tel; log_λ=tel_log_λ, kwargs...)
 	star = Submodel(d.log_λ_star, n_comp_star, log_λ_gp_star; log_λ=star_log_λ, kwargs...)
 	n_obs = size(d.log_λ_obs, 2)
@@ -546,8 +739,8 @@ function OrderModel(
 		rv = zeros(n_obs)
 
 	bary_rvs = D_to_rv.([median(d.log_λ_star[:, i] - d.log_λ_obs[:, i]) for i in 1:n_obs])
-	todo = Dict([(:initialized, false), (:reg_improved, false), (:downsized, false), (:err_estimated, false)])
-	metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star)])
+	todo = Dict([(:initialized, false), (:reg_improved, false), (:err_estimated, false)])
+	metadata = Dict([(:todo, todo), (:instrument, instrument), (:order, order), (:star, star_str)])
 	if dpca
 		if oversamp
 			b2o = oversamp_interp_helper(d.log_λ_star_bounds, star.log_λ)
@@ -576,15 +769,35 @@ Base.copy(om::OrderModelWobble) = OrderModelWobble(copy(om.tel), copy(om.star), 
 	OrderModelWobble(om.tel(inds), om.star(inds), view(om.rv, inds), copy(om.reg_tel),
 		copy(om.reg_star), om.b2o(inds, length(om.star.lm.μ)), view(om.bary_rvs, inds), view(om.t2o, inds), copy(om.metadata), length(inds))
 
+
+"""
+	rm_dict!(d)
+
+Remove all keys in a Dict
+"""
 function rm_dict!(d::Dict)
 	for (key, value) in d
 		delete!(d, key)
 	end
 end
+
+
+"""
+	rm_regularization!(om)
+
+Remove all of the keys in the regularization Dicts
+"""
 function rm_regularization!(om::OrderModel)
 	rm_dict!(om.reg_tel)
 	rm_dict!(om.reg_star)
 end
+
+
+"""
+	zero_regularization(om; include_L1_factor=false)
+
+Zero-out all of the keys in the regularization Dicts
+"""
 function zero_regularization(om::OrderModel; include_L1_factor::Bool=false)
 	for (key, value) in om.reg_tel
 		if include_L1_factor || (key != :L1_μ₊_factor)
@@ -597,6 +810,13 @@ function zero_regularization(om::OrderModel; include_L1_factor::Bool=false)
 		end
 	end
 end
+
+
+"""
+	reset_regularization!(om)
+
+Reset all of the keys in the regularization Dicts to the default values
+"""
 function reset_regularization!(om::OrderModel)
 	for (key, value) in om.reg_tel
 		om.reg_tel[key] = default_reg_tel_full[key]
@@ -606,6 +826,12 @@ function reset_regularization!(om::OrderModel)
 	end
 end
 
+
+"""
+	_eval_lm_vec(om, v; log_lm=_log_lm_default)
+
+Evaluate a vectorized version of a linear model in `v`
+"""
 function _eval_lm_vec(om::OrderModel, v; log_lm::Bool=_log_lm_default)
 	@assert 0 < length(v) < 4
 	if length(v)==1
@@ -617,10 +843,22 @@ function _eval_lm_vec(om::OrderModel, v; log_lm::Bool=_log_lm_default)
 	end
 end
 
-# I have no idea why the negative sign needs to be here
+
+"""
+	rvs(model)
+
+Get RVs (in m/s) from an OrderModel
+The negative sign is only in the DPCA version because of how SSOF was originally coded
+"""
 rvs(model::OrderModelDPCA) = vec(model.rv.lm.s .* -light_speed_nu)
 rvs(model::OrderModelWobble) = model.rv
 
+
+"""
+	downsize(lm, n_comp)
+
+Create a smaller version of `lm` that only copies some amount of the feature vectors
+"""
 function downsize(lm::FullLinearModel, n_comp::Int)
 	if n_comp > 0
 		return FullLinearModel(lm.M[:, 1:n_comp], lm.s[1:n_comp, :], copy(lm.μ), lm.log)
@@ -648,6 +886,11 @@ downsize(m::OrderModelWobble, n_comp_tel::Int, n_comp_star::Int) =
 		copy(m.rv), copy(m.reg_tel), copy(m.reg_star), copy(m.b2o), m.bary_rvs, m.t2o, copy(m.metadata), m.n)
 
 
+"""
+	downsize(lm, n_comp)
+
+Create a smaller view of `lm` that can only see some amount of the feature vectors
+"""
 function downsize_view(lm::FullLinearModel, n_comp::Int)
 	if n_comp > 0
 		return FullLinearModel(view(lm.M, :, 1:n_comp), view(lm.s, 1:n_comp, :), lm.μ, lm.log)
@@ -674,22 +917,48 @@ downsize_view(m::OrderModelWobble, n_comp_tel::Int, n_comp_star::Int) =
 		downsize_view(m.star, n_comp_star),
 		m.rv, copy(m.reg_tel), copy(m.reg_star), m.b2o, m.bary_rvs, m.t2o, copy(m.metadata), m.n)
 
-spectra_interp(model::AbstractVector, interp_helper::_current_matrix_modifier) =
+"""
+	spectra_interp(model, interp_helper)
+
+Interpolates `model` using the interoplation described by `interp_helper`
+"""
+spectra_interp(model::AbstractVector, interp_helper::SparseMatrixCSC) =
 	interp_helper * model
-spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
+spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:SparseMatrixCSC}) =
 	hcat([spectra_interp(view(model, :, i), interp_helper[i]) for i in axes(model, 2)]...)
-# spectra_interp_nabla(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
+# spectra_interp_nabla(model, interp_helper::AbstractVector{<:SparseMatrixCSC}) =
 # 	hcat([interp_helper[i] * model[:, i] for i in axes(model, 2)]...)
-# spectra_interp(model, interp_helper::AbstractVector{<:_current_matrix_modifier}) =
+# spectra_interp(model, interp_helper::AbstractVector{<:SparseMatrixCSC}) =
 # 	spectra_interp_nabla(model, interp_helper)
-@explicit_intercepts spectra_interp Tuple{AbstractMatrix, AbstractVector{<:_current_matrix_modifier}} [true, false]
+@explicit_intercepts spectra_interp Tuple{AbstractMatrix, AbstractVector{<:SparseMatrixCSC}} [true, false]
 Nabla.∇(::typeof(spectra_interp), ::Type{Arg{1}}, _, y, ȳ, model, interp_helper) =
 	hcat([interp_helper[i]' * view(ȳ, :, i) for i in axes(model, 2)]...)
 
-tel_model(om::OrderModel; lm=om.tel.lm::LinearModel) = spectra_interp(lm(), om.t2o)
-star_model(om::OrderModelDPCA; lm=om.star.lm::LinearModel) = spectra_interp(lm(), om.b2o)
-rv_model(om::OrderModelDPCA; lm=om.rv.lm::LinearModel) = spectra_interp(lm(), om.b2o)
-star_model(om::OrderModelWobble; lm=om.star.lm::LinearModel) = spectra_interp(lm(), om.rv .+ om.bary_rvs, om.b2o)
+
+"""
+	tel_model(om; lm=om.tel.lm)
+
+Gets telluric model interpolated onto the observed wavelengths
+"""
+tel_model(om::OrderModel; lm::LinearModel=om.tel.lm) = spectra_interp(lm(), om.t2o)
+
+
+"""
+	star_model(om; lm=om.star.lm)
+
+Gets stellar model interpolated onto the observed wavelengths
+"""
+star_model(om::OrderModelDPCA; lm::LinearModel=om.star.lm) = spectra_interp(lm(), om.b2o)
+star_model(om::OrderModelWobble; lm::LinearModel=om.star.lm) = spectra_interp(lm(), om.rv .+ om.bary_rvs, om.b2o)
+
+
+"""
+	rv_model(om; lm=om.rv.lm)
+
+Gets RV model interpolated onto the observed wavelengths (used by OrderModelDPCA)
+"""
+rv_model(om::OrderModelDPCA; lm::LinearModel=om.rv.lm) = spectra_interp(lm(), om.b2o)
+
 
 # function fix_FullLinearModel_s!(flm, min::Number, max::Number)
 # 	@assert all(min .< flm.μ .< max)
@@ -705,6 +974,12 @@ star_model(om::OrderModelWobble; lm=om.star.lm::LinearModel) = spectra_interp(lm
 # 	end
 # end
 
+
+"""
+	get_marginal_GP(finite_GP, ys, xs)
+
+Marginalizes a TemporalGPs GP on `ys` and `xs`
+"""
 function get_marginal_GP(
     finite_GP::Distribution{Multivariate,Continuous},
     ys::AbstractVector,
@@ -714,6 +989,12 @@ function get_marginal_GP(
     return TemporalGPs.marginals(gpx_post)
 end
 
+
+"""
+	get_mean_GP(finite_GP, ys, xs)
+
+Gets the mean of the posterior of a TemporalGPs GP
+"""
 function get_mean_GP(
     finite_GP::Distribution{Multivariate,Continuous},
     ys::AbstractVector,
@@ -721,10 +1002,19 @@ function get_mean_GP(
     return mean.(get_marginal_GP(finite_GP, ys, xs))
 end
 
+
+"""
+	build_gp(params)
+
+Builds a Matern 5/2 TemporalGPs GP
+"""
 function build_gp(params::NamedTuple)
 	f_naive = AbstractGPs.GP(params.var_kernel * Matern52Kernel() ∘ ScaleTransform(params.λ))
 	return to_sde(f_naive, SArrayStorage(Float64))
 end
+
+
+# default TemporalGPs lengthscales fit to either SOAP data or a LSF line
 SOAP_gp_params = (var_kernel = 0.19222435463373258, λ = 26801.464367577082)
 SOAP_gp = build_gp(SOAP_gp_params)
 SOAP_gp_var = 1e-6
@@ -737,6 +1027,13 @@ LSF_gp_var = 1e-6
 # flat_SOAP_gp_params, unflatten = value_flatten(SOAP_gp_params)
 # # unflatten(flat_SOAP_gp_params) == ParameterHandling.value(SOAP_gp_params)  # true
 # SOAP_gp = build_gp(ParameterHandling.value(SOAP_gp_params))
+
+
+"""
+	_spectra_interp_gp!(fluxes, log_λ, flux_obs, var_obs, log_λ_obs; gp_mean=0., gp_base=SOAP_gp, mask_flux=Array{Bool}(undef, length(flux_obs)), mask_var=Array{Bool}(undef, length(flux_obs)))
+
+Use a GP to interpolate `flux_obs` observed at `log_λ_obs` onto `log_λ`
+"""
 function _spectra_interp_gp!(fluxes::AbstractVector, log_λ, flux_obs::AbstractVector, var_obs, log_λ_obs; gp_mean::Number=0., gp_base=SOAP_gp, mask_flux::Vector=Array{Bool}(undef, length(flux_obs)), mask_var::Vector=Array{Bool}(undef, length(flux_obs)))
 	mask_var[:] = isfinite.(var_obs)
 	if !any(mask_var)
@@ -784,6 +1081,11 @@ function _spectra_interp_gp!(fluxes::AbstractMatrix, vars, log_λ, flux_obs, var
 end
 
 
+"""
+	remove_lm_score_means!(lm; prop=0.)
+
+Recenter the scores in `lm` around 0
+"""
 function remove_lm_score_means!(lm::FullLinearModel; prop::Real=0.)
 	if prop != 0.
 		mean_s = Array{Float64}(undef, size(lm.s, 1), 1)
@@ -811,6 +1113,12 @@ function remove_lm_score_means!(lms::Vector{<:LinearModel}; kwargs...)
 	end
 end
 
+
+"""
+	flip_feature_vectors!(lm)
+
+Make each feature vector's median value negative
+"""
 function flip_feature_vectors!(lm::FullLinearModel)
 	flipper = -sign.(mean(lm.M; dims=1) - median(lm.M; dims=1))  # make basis vector be absorption features
 	lm.M .*= flipper
@@ -828,11 +1136,22 @@ function flip_feature_vectors!(lms::Vector{<:LinearModel})
 end
 
 
+"""
+	fill_TelModel!(om, lm)
+
+Replace the telluric model in `om` with `lm`
+"""
 fill_TelModel!(om::OrderModel, lm::LinearModel) =
 	copy_to_LinearModel!(om.tel.lm, lm)
 fill_TelModel!(om::OrderModel, lm::LinearModel, inds) =
 	copy_to_LinearModel!(om.tel.lm, lm, inds)
 
+
+"""
+	fill_StarModel!(om, lm; inds=2:size(lm.M, 2))
+
+Replace the stellar model in `om` with `lm`
+"""
 function fill_StarModel!(om::OrderModel, lm::FullLinearModel; inds=2:size(lm.M, 2))
 	if length(inds) > 0; @assert inds[1] > 1 end
 	copy_to_LinearModel!(om.star.lm, lm, inds)
@@ -852,6 +1171,13 @@ function fill_StarModel!(om::OrderModel, lm::LinearModel, rvs::Vector, inds)
 		om.rv .= rvs
 	end
 end
+
+
+"""
+	fill_OrderModel!(om1, om2, inds_tel, inds_star)
+
+Replace the models in `om1` with those in `om2`
+"""
 function fill_OrderModel!(om1::OrderModel, om2::OrderModel, inds_tel, inds_star)
 	fill_TelModel!(om1, om2.tel.lm, inds_tel)
 	if typeof(om2) <: OrderModelWobble
@@ -862,16 +1188,31 @@ function fill_OrderModel!(om1::OrderModel, om2::OrderModel, inds_tel, inds_star)
 end
 
 
+"L1 norm"
 L1(a) = sum(abs, a)
+"L2 norm"
 L2(a) = sum(abs2, a)
+"L∞ norm"
 L∞(Δ::VecOrMat{<:Real}) = maximum(Δ)
 L∞(Δ) = maximum(L∞.(Δ))
+
+
+"""
+	shared_attention(M)
+
+Ad-hoc regularization that punishes feature vectors with power in the same place
+"""
 function shared_attention(M)
 	shared_attentions = M' * M
 	return sum(shared_attentions) - sum(diag(shared_attentions))
 end
 
 
+"""
+	model_prior(lm, om, key)
+
+Calulate the model prior on `lm` with the regularization terms in `om.reg_` * `key`
+"""
 function model_prior(lm, om::OrderModel, key::Symbol)
 	reg = getfield(om, Symbol(:reg_, key))
 	sm = getfield(om, key)
@@ -907,6 +1248,12 @@ end
 model_prior(lm::Union{FullLinearModel, TemplateModel}, om::OrderModel, key::Symbol) = model_prior(vec(lm), om, key)
 
 nonzero_key(reg, key) = haskey(reg, key) && reg[key] != 0
+
+"""
+	model_s_prior(s, reg)
+
+Add an L2 term to the scores if there are any regularization terms applied to the feature vectors
+"""
 function model_s_prior(s, reg::Dict)
 	if (nonzero_key(reg, :L1_M) || nonzero_key(reg, :L2_M) || nonzero_key(reg, :GP_M))
 		return L2(s)
@@ -914,24 +1261,59 @@ function model_s_prior(s, reg::Dict)
 	return 0
 end
 
+
+"""
+	tel_prior(om)
+
+Calulate the telluric model prior on `om.tel.lm` with the regularization terms in `om.reg_tel`
+"""
 tel_prior(om::OrderModel) = tel_prior(om.tel.lm, om)
 tel_prior(lm, om::OrderModel) = model_prior(lm, om, :tel)
+
+"""
+	star_prior(om)
+
+Calulate the stellar model prior on `om.star.lm` with the regularization terms in `om.star_tel`
+"""
 star_prior(om::OrderModel) = star_prior(om.star.lm, om)
 star_prior(lm, om::OrderModel) = model_prior(lm, om, :star)
 
+
+"""
+	total_model(tel, star)
+
+Multiply the telluric and stellar models
+"""
 total_model(tel, star, rv) = tel .* (star .+ rv)
 total_model(tel, star) = tel .* star
 
+
+"""
+	OutputDPCA
+
+Holds the current outputs for the models at the observed wavelengths
+"""
 struct OutputDPCA{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}} <: Output
+	"Telluric model at the observed wavelengths"
 	tel::AM
+	"Stellar model at the observed wavelengths"
 	star::AM
+	"RV model at the observed wavelengths"
 	rv::AM
+	"Total model at the observed wavelengths"
 	total::M
 	function OutputDPCA(tel::AM, star::AM, rv::AM, total::M) where {T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}}
 		@assert size(tel) == size(star) == size(rv) == size(total)
 		new{T, AM, M}(tel, star, rv, total)
 	end
 end
+
+
+"""
+	Output(om, d)
+
+Calculates the current outputs for the models at the observed wavelengths
+"""
 function Output(om::OrderModelDPCA, d::Data)
 	@assert size(om.b2o[1], 1) == size(d.flux, 1)
 	return OutputDPCA(tel_model(om), star_model(om), rv_model(om), d)
@@ -940,28 +1322,56 @@ OutputDPCA(tel, star, rv, d::GenericData) =
 	OutputDPCA(tel, star, rv, total_model(tel, star, rv))
 OutputDPCA(tel, star, rv, d::LSFData) =
 	OutputDPCA(tel, star, rv, d.lsf * total_model(tel, star, rv))
+
+
 Base.copy(o::OutputDPCA) = OutputDPCA(copy(tel), copy(star), copy(rv))
+
+
+"""
+	recalc_total!(o, d)
+
+Recalulates the current outputs for the total model at the observed wavelengths
+"""
 function recalc_total!(o::OutputDPCA, d::GenericData)
 	o.total .= total_model(o.tel, o.star, o.rv)
 end
 function recalc_total!(o::OutputDPCA, d::LSFData)
 	o.total .= d.lsf * total_model(o.tel, o.star, o.rv)
 end
+
+
+"""
+	Output!(o, om, d)
+
+Recalculates the current outputs for the models at the observed wavelengths
+"""
 function Output!(o::OutputDPCA, om::OrderModelDPCA, d::Data)
 	o.tel .= tel_model(om)
 	o.star .= star_model(om)
 	o.rv .= rv_model(om)
 	recalc_total!(o, d)
 end
+
+
+"""
+	OutputWobble
+
+Holds the current outputs for the models at the observed wavelengths
+"""
 struct OutputWobble{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}} <: Output
+	"Telluric model at the observed wavelengths"
 	tel::AM
+	"Stellar model at the observed wavelengths"
 	star::AM
+	"Total model at the observed wavelengths"
 	total::M
 	function OutputWobble(tel::AM, star::AM, total::M) where {T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{T}}
 		@assert size(tel) == size(star) == size(total)
 		new{T, AM, M}(tel, star, total)
 	end
 end
+
+
 function Output(om::OrderModelWobble, d::Data)
 	@assert size(om.t2o[1], 1) == size(d.flux, 1)
 	return OutputWobble(tel_model(om), star_model(om), d)
@@ -970,22 +1380,40 @@ OutputWobble(tel, star, d::GenericData) =
 	OutputWobble(tel, star, total_model(tel, star))
 OutputWobble(tel, star, d::LSFData) =
 	OutputWobble(tel, star, d.lsf * total_model(tel, star))
+
+
 Base.copy(o::OutputWobble) = OutputWobble(copy(tel), copy(star))
+
+
 function recalc_total!(o::OutputWobble, d::GenericData)
 	o.total .= total_model(o.tel, o.star)
 end
 function recalc_total!(o::OutputWobble, d::LSFData)
 	o.total .= d.lsf * total_model(o.tel, o.star)
 end
+
+
 function Output!(o::OutputWobble, om::OrderModelWobble, d::Data)
 	o.tel .= tel_model(om)
 	o.star .= star_model(om)
 	recalc_total!(o, d)
 end
 
+
+"""
+	copy_reg!(from, to)
+
+Copy the regularizations from one OrderModel to another
+"""
 function copy_reg!(from::OrderModel, to::OrderModel)
 	copy_dict!(to.reg_tel, from.reg_tel)
 	copy_dict!(to.reg_star, from.reg_star)
 end
 
+
+"""
+	no_tellurics(model)
+
+Figure out whether a `model` uses its telluric model
+"""
 no_tellurics(model::OrderModel) = all(isone.(model.tel.lm.μ)) && !SSOF.is_time_variable(model.tel)

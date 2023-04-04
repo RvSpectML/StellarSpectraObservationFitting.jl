@@ -1,7 +1,7 @@
 # [1]: Jouni Hartikainen and Simo Särkkä 2015? https://users.aalto.fi/~ssarkka/pub/gp-ts-kfrts.pdf
 # [2]: Arno Solin and Simo Särkkä 2019 https://users.aalto.fi/~asolin/sde-book/sde-book.pdf
 # See also Appendix A of Data-Driven Modeling of Telluric Features and Stellar Variability with StellarSpectraObservationFitting.jl (Gilbertson et al. 2023)
-# This code is to compute a fast GP-likelihood regularization term
+# This code is to compute a fast GP-likelihood regularization term using a Matern 5/2 Kernel
 
 using StaticArrays
 import TemporalGPs; TGP = TemporalGPs

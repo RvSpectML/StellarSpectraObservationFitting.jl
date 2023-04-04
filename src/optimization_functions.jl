@@ -1198,9 +1198,9 @@ Find a SSOF model for a given dataset, `data`.
 Defaults to returning the AIC-minimum model
 	
 # Optional arguments
-- `instrument::String="None"`: The name of the instrument(s) the data was taken from. For bookeeping
-- `desired_order::Int=0`: What order (if any) the data was taken from. For bookeeping
-- `star::String="None"`: The name of the star the data was taken from. For bookeeping
+- `instrument::String="None"`: The name of the instrument(s) the data was taken from. For bookkeeping
+- `desired_order::Int=0`: What order (if any) the data was taken from. For bookkeeping
+- `star::String="None"`: The name of the star the data was taken from. For bookkeeping
 - `times::AbstractVector=1:size(data.flux, 2)`: The list of times (in days). Used to calculate intra-night RMS
 - `μ_min::Real=0`: Set the minimum flux value for the output of `make_template()`
 - `μ_max::Real=Inf`: Set the maximum flux value for the output of `make_template()`
@@ -1208,8 +1208,8 @@ Defaults to returning the AIC-minimum model
 - `stop_early::Bool=false`: Whether to stop the model search the first time adding a component increases the AIC
 - `remove_reciprocal_continuum::Bool=false`: Whether you should attempt to remove places where the telluric template and stellar template are opposing each other (i.e. where continuum goes up in one and down in the other)
 - `return_full_path::Bool=false`: Whether to return all of the searched models and metrics
-- `max_n_tel::Int=5`: The maximum amount of telluric features vectors to look for
-- `max_n_star::Int=5`: The maximum amount of stellar features vectors to look for
+- `max_n_tel::Int=5`: The maximum amount of telluric feature vectors to look for
+- `max_n_star::Int=5`: The maximum amount of stellar feature vectors to look for
 - `use_all_comps::Bool=false`: Whether to use all feature vectors, regardless of AIC
 - `careful_first_step::Bool=true`: Whether to shrink the learning rates until the loss improves on the first iteration
 - `speed_up::Bool=false`: Whether to inflate the learning rates until the loss is no longer improving throughout the optimization
@@ -1247,7 +1247,7 @@ function calculate_initial_model(data::Data;
 	comp2ind(n_tel::Int, n_star::Int) = (n_tel+2, n_star+1)  # converts number of components to storage matrix index
 	n_obs = size(d.flux, 2)
 
-	om = OrderModel(d, instrument, desired_order, star; n_comp_tel=max_n_tel, n_comp_star=max_n_star, log_λ_gp_star=log_λ_gp_star, log_λ_gp_tel=log_λ_gp_tel, kwargs...)
+	om = OrderModel(d; instrument=instrument, order=desired_order, star=star, n_comp_tel=max_n_tel, n_comp_star=max_n_star, log_λ_gp_star=log_λ_gp_star, log_λ_gp_tel=log_λ_gp_tel, kwargs...)
 	
 	# get the stellar model wavelengths in observed frame as a function of time
 	star_log_λ_tel = _shift_log_λ_model(d.log_λ_obs, d.log_λ_star, om.star.log_λ)
@@ -1359,12 +1359,12 @@ function calculate_initial_model(data::Data;
 
 		try
 			# improve the model
-			improve_initial_model!(mws; iter=50)
+			improve_initial_model!(mws; careful_first_step=careful_first_step, speed_up=speed_up, iter=50)
 
 			# if there is an LSF, do some more fitting
 			if mws.d != data
 				mws = typeof(mws)(copy(mws.om), data)
-				improve_initial_model!(mws; iter=30)
+				improve_initial_model!(mws; careful_first_step=careful_first_step, speed_up=speed_up, iter=30)
 			end
 			nicer_model!(mws)
 
