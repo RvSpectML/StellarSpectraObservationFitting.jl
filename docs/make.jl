@@ -10,21 +10,27 @@ makedocs(
     authors = "Christian Gilbertson",
     pages = [
         "Home" => "index.md",
-        "gettingstarted.md",
-        # "User's Guide" => [
-        #     "Kernels" => [
-        #         "Kernel functions" => "kernel.md",
-        #         "Adding new kernels" => "kernel_creation.md",
-        #         ],
-        #     "GPLinearODE struct" => "glo.md",
-        #     "GLOM Functionality" => "nlogl.md",
-        #     "Prior functions" => "priors.md",
-        # ],
-        hide("(D)EMPCA" => "empca.md"),
-        hide("Continuum" => "continuum.md"),
-        hide("Indices" => "indices.md"),
-        # hide("Diagnostic functions" => "diagnostic.md"),
-        # hide("Utility functions" => "utility.md"),
+        "Getting started" => "gettingstarted.md",
+        "User's guide" => [
+            "Data preparation" => "data.md",
+            # "Creating a SSOF model" => [
+            #     "Common structures" => "structs.md",
+            #     "Initialization and model selection" => "init.md"
+            #     "Optimization" => "opt.md",
+            #     ],
+            # "Regularization" => [
+            #     "Regularization functions" => "prior.md",
+            #     "𝒪(n) GP Regularization" => "prior_gp.md"
+            #     ],
+            # "Model error estimation" => "error.md",
+        ],
+        "Various other functions" => [
+            # "(D)EMPCA" => "empca.md",
+            # "Utility functions" => "general.md",
+            # "Model functions" => "model.md",
+            # "Rassine-like continuum fitting" => "continuum.md",
+            "Everything else" => "indices.md",
+        ],
         "LICENSE.md",
     ]
 )

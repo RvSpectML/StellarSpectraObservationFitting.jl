@@ -1,17 +1,19 @@
-# Getting Started
+# Getting started
 
 ## Installation
 
-The most current, tagged version of [StellarSpectraObservationFitting.jl](https://github.com/christiangil/StellarSpectraObservationFitting.jl) can be easily installed using Julia's Pkg
+The most current, tagged version of [StellarSpectraObservationFitting.jl](https://github.com/christiangil/StellarSpectraObservationFitting.jl) will soon be able to be easily installed using Julia's Pkg
 
 ```julia
 Pkg.add("StellarSpectraObservationFitting")
 ```
 
-If you would like to contribute to the package, or just want to run the latest (untagged) version, you can use the following
+For now, use
 
 ```julia
-Pkg.develop("StellarSpectraObservationFitting")
+using Pkg
+Pkg.add(;url = "https://github.com/christiangil/StellarSpectraObservationFitting.jl")
+# Pkg.develop(;url = "https://github.com/christiangil/StellarSpectraObservationFitting.jl")  # if you wanted to be able to locally edit the code easily
 ```
 
 ## Example

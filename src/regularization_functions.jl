@@ -227,7 +227,7 @@ end
 """
     fit_regularization!(mws; verbose=true, testing_ratio=0.33, careful_first_step=true, speed_up=false, kwargs...)
 
-Find the best fit model withouth regularization then fit all of the regularization values in `key_list` for the model in `mws`
+Find the best fit model without regularization then fit all of the regularization values in `key_list` for the model in `mws`
 """
 function fit_regularization!(mws::ModelWorkspace; verbose::Bool=true, testing_ratio::Real=0.33, careful_first_step::Bool=true, speed_up::Bool=false, kwargs...)
 	# if mws.om.metadata[:todo][:reg_improved]

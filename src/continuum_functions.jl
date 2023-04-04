@@ -434,7 +434,7 @@ end
 """
 	process!(d; λ_thres=4000., min_snr=8, kwargs...)
 
-Doing all of the data preprocessing, including continuum-fitting and masking
+Doing all of the data preprocessing, including continuum-fitting and masking of infinite points, anomalously snappy or high pixels, and low SNR edges.
 """
 function process!(d; λ_thres::Real=4000., min_snr::Real=8, kwargs...)
 	
