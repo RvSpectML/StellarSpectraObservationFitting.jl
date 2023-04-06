@@ -24,7 +24,7 @@ makedocs(
             "Data preprocessing" => "continuum.md",
             "(D)EMPCA" => "empca.md",
             "Utility functions" => "general.md",
-            "Model functions" => "model.md",
+            # "Model functions" => "model.md",
             "Everything else" => "indices.md",
         ],
         "LICENSE.md",

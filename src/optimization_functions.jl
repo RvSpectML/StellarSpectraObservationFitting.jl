@@ -1403,7 +1403,7 @@ function calculate_initial_model(data::Data;
 	oms[1,1].star.lm.μ[:] = make_template(flux_star, vars_star; min=μ_min, max=μ_max, use_mean=use_mean)
 	
 	# how good is the stellar template at modeling each pixel
-	# dop_comp = doppler_component(oms[1,1].star.λ, oms[1,1].star.lm.μ)
+	dop_comp = doppler_component(oms[1,1].star.λ, oms[1,1].star.lm.μ)
 	# project_doppler_comp!(mws.om.rv, flux_star_no_tel .- mws.om.star.lm.μ, dop_comp, 1 ./ vars_star)
 	mask_low_pixels!(flux_star_no_tel, vars_star_no_tel)
 	mask_high_pixels!(flux_star_no_tel, vars_star_no_tel)
