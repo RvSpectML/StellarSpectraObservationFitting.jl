@@ -13,22 +13,18 @@ makedocs(
         "Getting started" => "gettingstarted.md",
         "User's guide" => [
             "Data preparation" => "data.md",
-            # "Creating a SSOF model" => [
-            #     "Common structures" => "structs.md",
-            #     "Initialization and model selection" => "init.md"
-            #     "Optimization" => "opt.md",
-            #     ],
-            # "Regularization" => [
-            #     "Regularization functions" => "prior.md",
-            #     "𝒪(n) GP Regularization" => "prior_gp.md"
-            #     ],
-            # "Model error estimation" => "error.md",
+            "Creating a SSOF model" => [
+                "Initialization and model selection" => "init.md",
+                "Optimization" => "opt.md",
+                ],
+            "Regularization"  => "prior.md"
+            "Model error estimation" => "error.md",
         ],
         "Various other functions" => [
-            # "(D)EMPCA" => "empca.md",
-            # "Utility functions" => "general.md",
-            # "Model functions" => "model.md",
-            # "Rassine-like continuum fitting" => "continuum.md",
+            "(D)EMPCA" => "empca.md",
+            "Utility functions" => "general.md",
+            "Model functions" => "model.md",
+            "Rassine-like continuum fitting" => "continuum.md",
             "Everything else" => "indices.md",
         ],
         "LICENSE.md",
