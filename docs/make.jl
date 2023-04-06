@@ -21,10 +21,10 @@ makedocs(
             "Model error estimation" => "error.md",
         ],
         "Various other functions" => [
+            "Data preprocessing" => "continuum.md",
             "(D)EMPCA" => "empca.md",
             "Utility functions" => "general.md",
             "Model functions" => "model.md",
-            "Rassine-like continuum fitting" => "continuum.md",
             "Everything else" => "indices.md",
         ],
         "LICENSE.md",
