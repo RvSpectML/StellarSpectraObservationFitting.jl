@@ -17,7 +17,7 @@ makedocs(
                 "Initialization and model selection" => "init.md",
                 "Optimization" => "opt.md",
                 ],
-            "Regularization"  => "prior.md"
+            "Regularization"  => "prior.md",
             "Model error estimation" => "error.md",
         ],
         "Various other functions" => [
