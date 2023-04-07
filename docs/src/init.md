@@ -2,9 +2,9 @@
 
 The total SSOF model is most commonly held in a [`StellarSpectraObservationFitting.OrderModelWobble`](@ref) struct.
 
-```@docs
+<!-- ```@docs
 StellarSpectraObservationFitting.OrderModelWobble
-```
+``` -->
 
 A good start for a SSOF model for a given dataset can be obtained with
 
