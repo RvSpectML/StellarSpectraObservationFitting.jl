@@ -4,10 +4,6 @@ Before optimization, the SSOF problem (with a SSOF model and the [`StellarSpectr
 
 $$\mathcal{L}(\beta_M) = \sum_{n=1}^N (Y_{D,n} - Y_{M,n})^T \Sigma_n^{-1} (Y_{D,n} - Y_{M,n}) + \textrm{constant}$$
 
-<!-- ```@docs
-StellarSpectraObservationFitting.TotalWorkspace
-``` -->
-
 This object can be passed to a function like [`StellarSpectraObservationFitting.improve_model!`](@ref) to optimize the SSOF model on the data.
 
 ```@docs
