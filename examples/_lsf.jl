@@ -26,8 +26,8 @@ module NEIDLSF
     #     out = amp * (part1 + part2)
     #     return(out)
 
-    σs = read(FITS(pkgdir(SSOF) *"/NEID/sigma_arr.fits")[1])
-    bhws = read(FITS(pkgdir(SSOF) *"/NEID/boxhalfwidth_arr.fits")[1]) ./ 2 # Sam's formula has an extra factor of 2
+    σs = read(FITS(pkgdir(SSOF) *"/examples/data/sigma_arr.fits")[1])
+    bhws = read(FITS(pkgdir(SSOF) *"/examples/data/boxhalfwidth_arr.fits")[1]) ./ 2 # Sam's formula has an extra factor of 2
     no_lsf_orders = [all(iszero.(view(bhws, :, i))) for i in axes(bhws,2)]
     @assert all(no_lsf_orders .== [all(iszero.(view(σs, :, i))) for i in axes(σs,2)])
 
