@@ -15,7 +15,7 @@ using StaticArrays
 using Nabla
 import StatsBase: winsor
 using Base.Threads
-using ThreadsX
+# using ThreadsX
 import ExpectationMaximizationPCA as EMPCA
 
 abstract type OrderModel end
