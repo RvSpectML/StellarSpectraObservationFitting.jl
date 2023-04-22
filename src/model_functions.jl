@@ -181,6 +181,8 @@ function Nabla.∇(::typeof(spectra_interp), ::Type{Arg{1}}, _, y, ȳ, model_fl
 end
 
 
+allequal(x) = all(y->y==x[1],x)
+
 """
 	LSFData
 
@@ -202,21 +204,30 @@ struct LSFData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
 	"Pixel boundaries of the observed log wavelengths (after barycentric correction)"
 	log_λ_star_bounds::M
 	"Matrix that approximates convolution with the instrument line spread function"
-	lsf::SparseMatrixCSC
-	function LSFData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_star::AM, lsf::SparseMatrixCSC) where {T<:Real, AM<:AbstractMatrix{T}}
+	lsf::Union{Vector{<:SparseMatrixCSC},SparseMatrixCSC}
+	function LSFData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_obs_bounds::M, log_λ_star::AM, log_λ_star_bounds::M, lsf::Union{Vector{<:SparseMatrixCSC},SparseMatrixCSC}) where {T<:Real, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}}
 		@assert size(flux) == size(var) == size(var_s) == size(log_λ_obs) == size(log_λ_star)
-		@assert size(lsf, 1) == size(lsf, 2) == size(flux, 1)
-		log_λ_obs_bounds = bounds_generator(log_λ_obs)
-		log_λ_star_bounds = bounds_generator(log_λ_star)
-		return new{T, AM, typeof(log_λ_obs_bounds)}(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds, lsf)
+		if typeof(lsf) <: Vector
+			@assert size(lsf[1], 1) == size(lsf[1], 2) == size(flux, 1)
+			@assert allequal([size(l, 1) for l in lsf])
+			@assert allequal([size(l, 2) for l in lsf])
+		else
+			@assert size(lsf, 1) == size(lsf, 2) == size(flux, 1)
+		end
+		return new{T, AM, M}(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_obs_bounds::M, log_λ_star::AM, log_λ_star_bounds::M, lsf)
 	end
+end
+function LSFData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_star::AM, lsf::Union{Vector{<:SparseMatrixCSC},SparseMatrixCSC}) where {T<:Real, AM<:AbstractMatrix{T}}
+	log_λ_obs_bounds = bounds_generator(log_λ_obs)
+	log_λ_star_bounds = bounds_generator(log_λ_star)
+	return LSFData{T, AM, typeof(log_λ_obs_bounds)}(flux, var, var_s, log_λ_obs, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds, lsf)
 end
 LSFData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_star::AM, lsf::Nothing) where {T<:Real, AM<:AbstractMatrix{T}} =
 	GenericData(flux, var, var_s, log_λ_obs, log_λ_star)
 (d::LSFData)(inds::AbstractVecOrMat) =
 	LSFData(view(d.flux, :, inds), view(d.var, :, inds), view(d.var_s, :, inds),
 	view(d.log_λ_obs, :, inds), view(d.log_λ_star, :, inds), d.lsf)
-Base.copy(d::LSFData) = LSFData(copy(d.flux), copy(d.var), copy(d.var_s), copy(d.log_λ_obs), copy(d.log_λ_star), copy(d.lsf))
+Base.copy(d::LSFData) = LSFData(copy(d.flux), copy(d.var), copy(d.var_s), copy(d.log_λ_obs), copy(d.log_λ_obs_bounds), copy(d.log_λ_star), copy(d.log_λ_star_bounds), copy(d.lsf))
 
 
 """
@@ -922,7 +933,7 @@ downsize_view(m::OrderModelWobble, n_comp_tel::Int, n_comp_star::Int) =
 
 Interpolates `model` using the interoplation described by `interp_helper`
 """
-spectra_interp(model::AbstractVector, interp_helper::SparseMatrixCSC) =
+spectra_interp(model, interp_helper::SparseMatrixCSC) =
 	interp_helper * model
 spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:SparseMatrixCSC}) =
 	hcat([spectra_interp(view(model, :, i), interp_helper[i]) for i in axes(model, 2)]...)
@@ -1321,8 +1332,7 @@ end
 OutputDPCA(tel, star, rv, d::GenericData) =
 	OutputDPCA(tel, star, rv, total_model(tel, star, rv))
 OutputDPCA(tel, star, rv, d::LSFData) =
-	OutputDPCA(tel, star, rv, d.lsf * total_model(tel, star, rv))
-
+	OutputDPCA(tel, star, rv, spectra_interp(total_model(tel, star, rv), d.lsf))
 
 Base.copy(o::OutputDPCA) = OutputDPCA(copy(tel), copy(star), copy(rv))
 
@@ -1336,7 +1346,7 @@ function recalc_total!(o::OutputDPCA, d::GenericData)
 	o.total .= total_model(o.tel, o.star, o.rv)
 end
 function recalc_total!(o::OutputDPCA, d::LSFData)
-	o.total .= d.lsf * total_model(o.tel, o.star, o.rv)
+	o.total .= spectra_interp(total_model(o.tel, o.star, o.rv), d.lsf)
 end
 
 
@@ -1379,7 +1389,7 @@ end
 OutputWobble(tel, star, d::GenericData) =
 	OutputWobble(tel, star, total_model(tel, star))
 OutputWobble(tel, star, d::LSFData) =
-	OutputWobble(tel, star, d.lsf * total_model(tel, star))
+	OutputWobble(tel, star, spectra_interp(total_model(tel, star), d.lsf))
 
 
 Base.copy(o::OutputWobble) = OutputWobble(copy(tel), copy(star))
@@ -1389,7 +1399,7 @@ function recalc_total!(o::OutputWobble, d::GenericData)
 	o.total .= total_model(o.tel, o.star)
 end
 function recalc_total!(o::OutputWobble, d::LSFData)
-	o.total .= d.lsf * total_model(o.tel, o.star)
+	o.total .= spectra_interp(total_model(o.tel, o.star), d.lsf)
 end
 
 

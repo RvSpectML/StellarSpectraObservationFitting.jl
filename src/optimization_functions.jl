@@ -20,11 +20,11 @@ _χ²_loss(model, data::Data; use_var_s::Bool=false) = use_var_s ? _χ²_loss(mo
 __loss_diagnostic(tel, star, rv, d::GenericData; kwargs...) =
 	_χ²_loss(total_model(tel, star, rv), d; kwargs...)
 __loss_diagnostic(tel, star, rv, d::LSFData; kwargs...) =
-	_χ²_loss(d.lsf * total_model(tel, star, rv), d; kwargs...)
+	_χ²_loss(spectra_interp(total_model(tel, star, rv), d.lsf), d; kwargs...)
 __loss_diagnostic(tel, star, d::GenericData; kwargs...) =
 	_χ²_loss(total_model(tel, star), d; kwargs...)
 __loss_diagnostic(tel, star, d::LSFData; kwargs...) =
-	_χ²_loss(d.lsf * total_model(tel, star), d; kwargs...)
+	_χ²_loss(spectra_interp(total_model(tel, star), d.lsf), d; kwargs...)
 function _loss_diagnostic(o::Output, om::OrderModel, d::Data;
 	tel=nothing, star=nothing, rv=nothing, kwargs...)
     !isnothing(tel) ? tel_o = spectra_interp(_eval_lm_vec(om, tel; log_lm=log_lm(om.tel.lm)), om.t2o) : tel_o = o.tel
@@ -1247,7 +1247,7 @@ function calculate_initial_model(data::Data;
 	comp2ind(n_tel::Int, n_star::Int) = (n_tel+2, n_star+1)  # converts number of components to storage matrix index
 	n_obs = size(d.flux, 2)
 
-	om = OrderModel(d; instrument=instrument, order=desired_order, star=star, n_comp_tel=max_n_tel, n_comp_star=max_n_star, log_λ_gp_star=log_λ_gp_star, log_λ_gp_tel=log_λ_gp_tel, kwargs...)
+	om = OrderModel(d; instrument=instrument, order=desired_order, star_str=star, n_comp_tel=max_n_tel, n_comp_star=max_n_star, log_λ_gp_star=log_λ_gp_star, log_λ_gp_tel=log_λ_gp_tel, kwargs...)
 	
 	# get the stellar model wavelengths in observed frame as a function of time
 	star_log_λ_tel = _shift_log_λ_model(d.log_λ_obs, d.log_λ_star, om.star.log_λ)
