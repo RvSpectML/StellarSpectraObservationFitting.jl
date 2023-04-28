@@ -220,7 +220,7 @@ end
 function LSFData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_star::AM, lsf::Union{Vector{<:SparseMatrixCSC},SparseMatrixCSC}) where {T<:Real, AM<:AbstractMatrix{T}}
 	log_λ_obs_bounds = bounds_generator(log_λ_obs)
 	log_λ_star_bounds = bounds_generator(log_λ_star)
-	return LSFData{T, AM, typeof(log_λ_obs_bounds)}(flux, var, var_s, log_λ_obs, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds, lsf)
+	return LSFData(flux, var, var_s, log_λ_obs, log_λ_obs_bounds, log_λ_star, log_λ_star_bounds, lsf)
 end
 LSFData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_star::AM, lsf::Nothing) where {T<:Real, AM<:AbstractMatrix{T}} =
 	GenericData(flux, var, var_s, log_λ_obs, log_λ_star)
