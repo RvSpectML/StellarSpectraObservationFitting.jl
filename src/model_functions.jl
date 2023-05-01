@@ -1426,4 +1426,4 @@ end
 
 Figure out whether a `model` uses its telluric model
 """
-no_tellurics(model::OrderModel) = all(isone.(model.tel.lm.μ)) && !SSOF.is_time_variable(model.tel)
+no_tellurics(model::OrderModel) = all(isone.(model.tel.lm.μ)) && !is_time_variable(model.tel)
