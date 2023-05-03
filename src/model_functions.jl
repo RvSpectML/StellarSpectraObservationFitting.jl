@@ -805,6 +805,29 @@ end
 
 
 """
+	rm_dict!(d, key_start)
+
+Remove all keys starting with `key_start` in a Dict
+"""
+function rm_dict!(d::Dict, key_start::String)
+	for (key, value) in d
+		if string(key)[1:length(key_start)] == key_start; delete!(d, key) end
+	end
+end
+
+
+"""
+	rm_GP_regularization!(om)
+
+Remove all of the GP keys in the regularization Dicts
+"""
+function rm_GP_regularization!(om::OrderModel)
+	rm_dict!(om.reg_tel, "GP_")
+	rm_dict!(om.reg_star, "GP_")
+end
+
+
+"""
 	zero_regularization(om; include_L1_factor=false)
 
 Zero-out all of the keys in the regularization Dicts
