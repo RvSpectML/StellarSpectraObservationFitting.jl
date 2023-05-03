@@ -17,7 +17,7 @@ This package is in rapid development so do not expect any stability yet, but the
 
 ```julia
 using Pkg
-Pkg.add(;url = "https://github.com/christiangil/StellarSpectraObservationFitting.jl")
+Pkg.add("StellarSpectraObservationFitting")
 # Pkg.develop(;url = "https://github.com/christiangil/StellarSpectraObservationFitting.jl")  # if you wanted to be able to locally edit the code easily
 ```
 
