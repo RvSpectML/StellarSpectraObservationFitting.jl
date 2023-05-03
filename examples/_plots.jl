@@ -265,8 +265,8 @@ function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool
     o = mws.o
 	d = mws.d
 	obs_mask = vec(all(.!(isinf.(d.var)); dims=2))
-    obs_λ = time_average(exp.(d.log_λ_obs))
-    plot_star_λs = time_average(exp.(d.log_λ_star))
+    obs_λ = exp.(time_average(d.log_λ_obs))
+    # plot_star_λs = exp.(time_average(d.log_λ_star))
 	include_χ² ?
 		plt = plot_spectrum(; legend = :bottomright, layout = grid(3, 1, heights=[0.6, 0.2, 0.2]), ylabel="Flux + Constant Shift", kwargs...) :
 		plt = plot_spectrum(; legend = :bottomright, layout = grid(2, 1, heights=[0.85, 0.15]), kwargs...)
@@ -292,9 +292,11 @@ function status_plot(mws::SSOF.ModelWorkspace; tracker::Int=0, display_plt::Bool
     # plot!(plt[1], obs_λ, time_average(o.total) .- shift, label="Mean Full Model", color=base_color)
 
     _scatter!(plt[2], obs_λ[obs_mask], time_average(abs.(view(d.flux, obs_mask, :) - view(o.total, obs_mask, :))), ylabel="MAD", label="", alpha=0.5, color=base_color, xlabel="", ms=1.5)
+	plot!(plt[2], obs_λ, sqrt(2/π) .* mean(sqrt.(d.var); dims=2); label="", c=plt_colors[3], lw=2);
 
 	if include_χ²
 		_scatter!(plt[3], obs_λ, -sum(SSOF._loss_diagnostic(mws); dims=2), ylabel="Remaining χ²", label="", alpha=0.5, color=base_color, xlabel="", ms=1.5)
+		hline!(plt[3], [-size(d.var, 2)]; label="", c=plt_colors[3], lw=2)
 	end
 
     if display_plt; display(plt) end
