@@ -14,5 +14,6 @@ include("Nabla_extension.jl")
 include("prior_gp_functions.jl")
 include("rassine.jl")
 include("error_estimation.jl")
+include("telluric_functions.jl")
 
 end # module

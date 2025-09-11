@@ -79,12 +79,12 @@ function estimate_σ_curvature_helper_finalizer!(σs::AbstractVecOrMat, _ℓs::A
 	# fit a parabola (or line if using gradient) to `_ℓs` and convert to uncertainties
 	if use_gradient
 		poly_f = ordinary_lst_sq_f(_ℓs, 1; x=x_test)
-		σs[i] = sqrt(1 / poly_f.w[2])
+		σs[i] = poly_f.w[2] > 0 ? sqrt(1 / poly_f.w[2]) : 0			# KM: added check for negative values
 		max_dif = maximum(abs.((poly_f.(x_test)./_ℓs) .- 1))
 		if verbose; println("∇_$i: $(poly_f.w[1] + poly_f.w[2] * x[i])") end
 	else
 		poly_f = ordinary_lst_sq_f(_ℓs, 2; x=x_test)
-		σs[i] = sqrt(1 / (2 * poly_f.w[3]))
+		σs[i] = poly_f.w[3] > 0 ? sqrt(1 / (2 * poly_f.w[3])) : 0	# KM: added check for negative values
 		max_dif = maximum(abs.((poly_f.(x_test)./_ℓs) .- 1))
 		if verbose; println("∇_$i: $(poly_f.w[2] + 2 * poly_f.w[3] * x[i])") end
 	end

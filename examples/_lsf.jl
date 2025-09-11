@@ -61,7 +61,8 @@ module NEIDLSF
         return ans
     end
 
-    function neid_lsf(order::Int, log_λ_neid_order::AbstractVector, log_λ_obs::AbstractVector)
+    # KM: Adding the option to extrapolate
+    function neid_lsf(order::Int, log_λ_neid_order::AbstractVector, log_λ_obs::AbstractVector; extrapolate::Bool=false)
         @assert 1 <= order <= length(no_lsf_orders)
         if no_lsf_orders[order]; return nothing end
         n = length(log_λ_obs)
@@ -72,7 +73,7 @@ module NEIDLSF
         pixel_separation_ratio = SSOF.simple_derivative(log_λ_neid_order) ./ pixel_separation_log_λ_obs.(log_λ_neid_order)
         # make the linear_interpolation object and evaluate it
         # converter(vals) = linear_interpolation(log_λ_neid_order, pixel_separation_ratio .* vals; extrapolation_bc=Line())(log_λ_obs)
-        converter(vals) = (DataInterpolations.LinearInterpolation(pixel_separation_ratio .* vals, log_λ_neid_order)).(log_λ_obs)
+        converter(vals) = (DataInterpolations.LinearInterpolation(pixel_separation_ratio .* vals, log_λ_neid_order; extrapolate=extrapolate)).(log_λ_obs)
         σs_converted = converter(σs[:, order])
         bhws_converted = converter(bhws[:, order])
         threeish_sigma_converted = converter(threeish_sigma.(σs[:, order], bhws[:, order]))
