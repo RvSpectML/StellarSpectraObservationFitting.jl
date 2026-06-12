@@ -15,8 +15,8 @@ function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int
 		ℓs = Array{Float64}(undef, n)
 	end
 
-	# use nabla to get autodiff gradient function, if desired (slightly more precise but much slower)
-	if use_gradient; g = ∇(ℓ) end
+	# use AD to get gradient function, if desired (slightly more precise but much slower)
+	if use_gradient; _cache = prepare_gradient(MooncakeBackend(), ℓ, Array{Float64}(undef, size(x))) end
 
 	# use this to scale size of curvature probe
 	_std = std(x)
@@ -32,13 +32,15 @@ function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int
 			local _x = copy(x)
 			local _x_test = Array{Float64}(undef, n)
 			local _ℓs = Array{Float64}(undef, n)
+			local _thread_cache = use_gradient ? prepare_gradient(MooncakeBackend(), ℓ, _x) : nothing
 			for ii in eachindex(_todo)
 				k = _todo[ii]
 				_x_test .= _x[k] .+ LinRange(-_std, _std, n)
 				for j in 1:n
 					_x[k] = _x_test[j]
 					if use_gradient
-						_ℓs[j] = only(g(_x))[k]
+						_, ∂x = value_and_gradient!(_thread_cache, ℓ, _x)
+						_ℓs[j] = ∂x[k]
 					else
 						_ℓs[j] = ℓ(_x)
 					end
@@ -55,7 +57,8 @@ function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int
 			for j in 1:n
 				x[i] = x_test[j]
 				if use_gradient
-					ℓs[j] = only(g(x))[i]
+					_, ∂x = value_and_gradient!(_cache, ℓ, x)
+					ℓs[j] = ∂x[i]
 				else
 					ℓs[j] = ℓ(x)
 				end

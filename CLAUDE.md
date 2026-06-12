@@ -41,8 +41,8 @@ Key types:
 
 ## Constraints worth knowing
 
-- Automatic differentiation uses Nabla.jl, not Zygote or ForwardDiff. Custom sensitivities (e.g. for `spectra_interp`) live in `Nabla_extension.jl` and `model_functions.jl`; tests verify them against finite differences and pure-Nabla versions. The compat bound `Nabla = "< 0.13"` is intentional.
-- `TemporalGPs = "0.5 - 0.6.7"` is pinned to avoid precompilation warnings (see commit dd34be2). `prior_gp_functions.jl` reimplements the state-space GP likelihood (and analytic gradients, optionally sparse/precalculated) rather than calling TemporalGPs directly, for speed and Nabla compatibility.
+- Automatic differentiation uses Mooncake.jl. The AD seam is `src/ad_backend.jl`: `prepare_gradient(b, l, θ)` + `value_and_gradient!(cache, l, θ)`. Custom sensitivities for `spectra_interp` and `gp_ℓ_precalc` are registered via `ChainRulesCore.rrule` (in `model_functions.jl` and `prior_gp_functions.jl` respectively) and imported into Mooncake with `@from_rrule`. `src/Nabla_extension.jl` is an orphaned file (no longer included in the module) pending deletion.
+- `TemporalGPs = "0.5 - 0.6.7"` is pinned to avoid precompilation warnings (see commit dd34be2). `prior_gp_functions.jl` reimplements the state-space GP likelihood (and analytic gradients, optionally sparse/precalculated) rather than calling TemporalGPs directly, for speed.
 - `continuum_functions.jl` and `rassine.jl` (a port of RASSINE) handle continuum normalization; `mask_functions.jl` handles bad-pixel/edge masking (e.g. `mask_bad_edges!`).
 - Wavelengths are handled as log-wavelength almost everywhere (`log_λ`), and Doppler shifts as `rv_to_D` factors.
 - This is Christian Gilbertson's package; docs deploy from `master` via GitHub Actions to christiangil.github.io. Docstring markdown pages live in `docs/src/` and are organized by source file (e.g. `opt.md` ↔ `optimization_functions.jl`).

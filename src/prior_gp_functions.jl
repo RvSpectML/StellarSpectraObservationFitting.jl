@@ -125,7 +125,7 @@ end
     gp_ℓ_nabla(y, A_k, Σ_k; σ²_meas=_σ²_meas_def, H_k=H_k, P∞=P∞)
 
 Getting the posterior likelihood that `y` is from a LTISDE described by `A_k` and `Σ_k`, equivalent to a GP.
-Same as `gp_ℓ()` but removing things that Nabla doesn't like
+Index-based reference implementation of `gp_ℓ()` (no StaticArray in-place ops)
 """
 function gp_ℓ_nabla(y, A_k::AbstractMatrix, Σ_k::AbstractMatrix; σ²_meas::Real=_σ²_meas_def, H_k::AbstractMatrix=H_k, P∞::AbstractMatrix=P∞)
 
@@ -278,12 +278,7 @@ Calculate the gradient of `gp_ℓ_precalc()` w.r.t. `y`
     Δℓ_coeff * gp_Δℓ_helper_γ(x, A_k, Σ_k, H_k, P∞; kwargs...)
 
 
-# Tell Nabla that `Δℓ_precalc()` is the gradient of `gp_ℓ_precalc()`
-# BE EXTREMELY CAREFUL! AS WE CANT PASS kwargs... THIS WILL ONLY WORK FOR THE DEFAULT VALUES OF H_k, P∞, F, AND σ²_meas
-using Nabla
-@explicit_intercepts gp_ℓ_precalc Tuple{AbstractMatrix, AbstractVector, AbstractMatrix, AbstractMatrix}
-Nabla.∇(::typeof(gp_ℓ_precalc), ::Type{Arg{2}}, _, y, ȳ, Δℓ_coeff, x, A_k, Σ_k) =
-    ȳ .* Δℓ_precalc(Δℓ_coeff, x, A_k, Σ_k, H_k, P∞)
+
 
 # BE EXTREMELY CAREFUL! THIS IS ONLY VALID FOR THE DEFAULT VALUES OF H_k, P∞, AND σ²_meas.
 using ChainRulesCore
@@ -296,6 +291,8 @@ function ChainRulesCore.rrule(::typeof(gp_ℓ_precalc),
     end
     return y, gp_ℓ_precalc_pullback
 end
+Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(gp_ℓ_precalc), Matrix{Float64}, Vector{Float64}, Matrix{Float64}, Matrix{Float64}}
+Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(gp_ℓ_precalc), Matrix{Float64}, Vector{Float64}, SMatrix{3,3,Float64,9}, SMatrix{3,3,Float64,9}}
 
 
 # sm = mws.om.tel

@@ -1,7 +1,6 @@
 # using LineSearches
 using ParameterHandling
 using Optim
-using Nabla
 import Base.println
 using DataInterpolations
 import ExpectationMaximizationPCA as EMPCA
@@ -380,7 +379,7 @@ _g_L∞tol_def_s = 1e-8
 
 Holds a set of model parameters and the ADAM optimizer and functions used to optimize them
 """
-struct AdamSubWorkspace{T}
+struct AdamSubWorkspace{T,C}
 	"Model parameters to optimize"
 	θ::T
 	"Adam optimizer parameters"
@@ -389,17 +388,16 @@ struct AdamSubWorkspace{T}
 	as::AdamState
 	"Loss function"
 	l::Function
-	"Loss and gradient function"
-	gl::Function
-	function AdamSubWorkspace(θ::T, opt, as, l, gl) where T
+	"AD gradient cache"
+	cache::C
+	function AdamSubWorkspace(θ::T, opt, as, l, cache::C) where {T,C}
 		@assert typeof(l(θ)) <: Real
-		return new{T}(θ, opt, as, l, gl)
+		return new{T,C}(θ, opt, as, l, cache)
 	end
 end
-function AdamSubWorkspace(θ, l::Function)
-	gl = ∇(l; get_output=true)
-	gl(θ)  # compile it
-	return AdamSubWorkspace(θ, Adams(θ), AdamState(), l, gl)
+function AdamSubWorkspace(θ, l::Function; backend::ADBackend=MooncakeBackend())
+	cache = prepare_gradient(backend, l, θ)
+	return AdamSubWorkspace(θ, Adams(θ), AdamState(), l, cache)
 end
 
 
@@ -410,13 +408,12 @@ Perform an ADAM optimization step for the model parameters in `aws`
 """
 function update!(aws::AdamSubWorkspace; careful_first_step::Bool=true, speed_up::Bool=false)
 
-    val, Δ = aws.gl(aws.θ)
-	Δ = only(Δ)
-	AdamState!(aws.as, val.val, Δ)
+    val, Δ = value_and_gradient!(aws.cache, aws.l, aws.θ)
+	AdamState!(aws.as, val, Δ)
 
 	# if you want to make sure the learning rate doesn't start too big
 	if careful_first_step && aws.as.iter==1
-		first_iterate!(aws.l, val.val, aws.θ, aws.θ, Δ, aws.opt)
+		first_iterate!(aws.l, val, aws.θ, aws.θ, Δ, aws.opt)
 	# if you want to make sure the learning rate isn't too small (much more dangerous)
 	elseif speed_up && (aws.as.iter > 10 && aws.as.iter%20==5)
 		speed_up_iterate!(aws.l, aws.θ, aws.θ, Δ, aws.opt)
@@ -775,22 +772,19 @@ Output!(mws::ModelWorkspace) = Output!(mws.o, mws.om, mws.d)
 
 Create an objective object for Optim from `loss` that uses a flattened verison of `pars`
 """
-function opt_funcs(loss::Function, pars::AbstractVecOrMat)
+function opt_funcs(loss::Function, pars::AbstractVecOrMat; backend::ADBackend=MooncakeBackend())
     flat_initial_params, unflatten = flatten(pars)  # unflatten returns Vector of untransformed params
     f = loss ∘ unflatten
-	g_nabla = ∇(loss)
-	g_val_nabla = ∇(loss; get_output=true)
-	g_nabla(pars)  # compile it
-	g_val_nabla(pars)  # compile it
+	cache = prepare_gradient(backend, f, flat_initial_params)
     function g!(G, θ)
-        G[:], _ = flatten(g_nabla(unflatten(θ)))
+        G .= value_and_gradient!(cache, f, θ)[2]
     end
     function fg_obj!(G, θ)
-		l, g = g_val_nabla(unflatten(θ))
-		G[:], _ = flatten(g)
-        return l.val
+		val, ∂θ = value_and_gradient!(cache, f, θ)
+		G .= ∂θ
+        return val
     end
-    return flat_initial_params, OnceDifferentiable(f, g!, fg_obj!, flat_initial_params), unflatten, g_nabla, g_val_nabla
+    return flat_initial_params, OnceDifferentiable(f, g!, fg_obj!, flat_initial_params), unflatten
 end
 
 
@@ -812,7 +806,7 @@ struct OptimSubWorkspace
     unflatten::Union{Function,DataType}
 end
 function OptimSubWorkspace(θ::AbstractVecOrMat, loss::Function; use_cg::Bool=true)
-	p0, obj, unflatten, _, _ = opt_funcs(loss, θ)
+	p0, obj, unflatten = opt_funcs(loss, θ)
 	# opt = LBFGS(alphaguess = LineSearches.InitialHagerZhang(α0=NaN))
 	# use_cg ? opt = ConjugateGradient() : opt = LBFGS()
 	opt = LBFGS()
