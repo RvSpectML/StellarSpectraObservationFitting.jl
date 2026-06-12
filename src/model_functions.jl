@@ -13,6 +13,7 @@ using SparseArrays
 using SpecialFunctions
 using StaticArrays
 using Nabla
+using ChainRulesCore
 import StatsBase: winsor
 using Base.Threads
 # using ThreadsX
@@ -178,6 +179,31 @@ function Nabla.∇(::typeof(spectra_interp), ::Type{Arg{1}}, _, y, ȳ, model_fl
 		end
 	end
 	return ȳnew
+end
+
+function ChainRulesCore.rrule(::typeof(spectra_interp),
+		model_flux::AbstractMatrix, rvs::AbstractVector, sih::StellarInterpolationHelper)
+	ratios = (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)') ./ sih.model_log_λ_step
+	y = (view(model_flux, sih.lower_inds) .* (1 .- ratios)) .+ (view(model_flux, sih.lower_inds_p1) .* ratios)
+	function spectra_interp_sih_pullback(ȳ)
+		ȳ = ChainRulesCore.unthunk(ȳ)
+		# model_flux tangent: scatter upstream gradient back to model grid
+		ȳmodel = zeros(size(model_flux))
+		n_model = size(model_flux, 1)
+		for k in axes(ȳ, 1)
+			for j in axes(ȳ, 2)
+				lo = sih.lower_inds[k, j] - n_model * (j - 1)
+				ȳmodel[lo, j] += (1 - ratios[k, j]) * ȳ[k, j]
+				ȳmodel[lo + 1, j] += ratios[k, j] * ȳ[k, j]
+			end
+		end
+		# rvs tangent: D(v)=log1p(-v/c), so D′(v) = -1/(light_speed_nu*(1-v/light_speed_nu))
+		slopes = model_flux[sih.lower_inds_p1] .- model_flux[sih.lower_inds]
+		Dprimes = @. -1 / (light_speed_nu * (1 - rvs / light_speed_nu))
+		ȳrvs = dropdims(sum(ȳ .* slopes .* (Dprimes ./ sih.model_log_λ_step)', dims=1), dims=1)
+		return NoTangent(), ȳmodel, ȳrvs, NoTangent()
+	end
+	return y, spectra_interp_sih_pullback
 end
 
 
@@ -967,6 +993,17 @@ spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:SparseMatr
 @explicit_intercepts spectra_interp Tuple{AbstractMatrix, AbstractVector{<:SparseMatrixCSC}} [true, false]
 Nabla.∇(::typeof(spectra_interp), ::Type{Arg{1}}, _, y, ȳ, model, interp_helper) =
 	hcat([interp_helper[i]' * view(ȳ, :, i) for i in axes(model, 2)]...)
+
+function ChainRulesCore.rrule(::typeof(spectra_interp),
+		model::AbstractMatrix, interp_helper::AbstractVector{<:SparseMatrixCSC})
+	y = hcat([spectra_interp(view(model, :, i), interp_helper[i]) for i in axes(model, 2)]...)
+	function spectra_interp_sparse_pullback(ȳ)
+		ȳ = ChainRulesCore.unthunk(ȳ)
+		ȳmodel = hcat([interp_helper[i]' * view(ȳ, :, i) for i in axes(model, 2)]...)
+		return NoTangent(), ȳmodel, NoTangent()
+	end
+	return y, spectra_interp_sparse_pullback
+end
 
 
 """
