@@ -285,6 +285,18 @@ using Nabla
 Nabla.∇(::typeof(gp_ℓ_precalc), ::Type{Arg{2}}, _, y, ȳ, Δℓ_coeff, x, A_k, Σ_k) =
     ȳ .* Δℓ_precalc(Δℓ_coeff, x, A_k, Σ_k, H_k, P∞)
 
+# BE EXTREMELY CAREFUL! THIS IS ONLY VALID FOR THE DEFAULT VALUES OF H_k, P∞, AND σ²_meas.
+using ChainRulesCore
+function ChainRulesCore.rrule(::typeof(gp_ℓ_precalc),
+        Δℓ_coeff::AbstractMatrix, x::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix)
+    y = gp_ℓ(x, A_k, Σ_k)
+    function gp_ℓ_precalc_pullback(ȳ)
+        x̄ = ChainRulesCore.unthunk(ȳ) .* Δℓ_precalc(Δℓ_coeff, x, A_k, Σ_k, H_k, P∞)
+        return NoTangent(), NoTangent(), x̄, NoTangent(), NoTangent()
+    end
+    return y, gp_ℓ_precalc_pullback
+end
+
 
 # sm = mws.om.tel
 # μ_mod = sm.lm.μ .- 1
