@@ -1,13 +1,12 @@
 using Test
 import TemporalGPs; TGP = TemporalGPs
-using Nabla
 using SparseArrays
 import StellarSpectraObservationFitting as SSOF
 using LinearAlgebra
 
 println("Testing...")
 
-function est_∇(f::Function, inputs; dif::Real=1e-7, inds::UnitRange=eachindex(inputs))
+function est_∇(f::Function, inputs; dif::Real=1e-7, inds::AbstractUnitRange=eachindex(inputs))
     val = f(inputs)
     grad = Array{Float64}(undef, length(inds))
     for i in inds
@@ -56,10 +55,17 @@ end
     As = [sparse(rand(2,3)) for i in axes(B, 2)]
     C = rand(5,6)
 
-    f_custom_sensitivity(x) = sum(SSOF.spectra_interp(x.^2, As) * C)
-    f_nabla(x) = sum(SSOF.spectra_interp_nabla(x.^2, As) * C)
+    f_custom_sensitivity(x) = sum(SSOF.spectra_interp(x .^ 2, As) * C)
 
-    @test ∇(f_custom_sensitivity)(B) == ∇(f_nabla)(B)
+    # Numerical gradient via finite differences
+    B_vec = copy(vec(B))
+    numer = est_∇(xv -> f_custom_sensitivity(reshape(xv, size(B))), B_vec; dif=1e-7)
+
+    # Analytic gradient via Mooncake (exercises the ChainRulesCore rrule)
+    cache = SSOF.prepare_gradient(SSOF.MooncakeBackend(), f_custom_sensitivity, copy(B))
+    _, ∂B = SSOF.value_and_gradient!(cache, f_custom_sensitivity, copy(B))
+
+    @test isapprox(vec(∂B), numer; rtol=1e-4)
 
     println()
 end
@@ -69,28 +75,28 @@ end
 
     flux_star = rand(100, 20)
     weights = sqrt.(flux_star)
-    μ = make_template(flux_star, weights; min=0, max=1.2, use_mean=true)
-    doppler_comp = doppler_component(LinRange(5000,6000,100), μ)
+    μ = SSOF.make_template(flux_star, weights; min=0, max=1.2, use_mean=true)
+    doppler_comp = SSOF.doppler_component(LinRange(5000,6000,100), μ)
     M = zeros(100, 3)
-    s = zeros(3, 20)
+    s = zeros(20)
 
     data_tmp = copy(flux_star)
     data_tmp .-= μ
-    rvs1 = SSOF.project_doppler_comp!(M, s, data_tmp, doppler_comp)
-    s1 = s[1, :]
-    M1 = M[:, 1]
+    rvs1 = SSOF.project_doppler_comp!(M, s, data_tmp, doppler_comp, ones(size(data_tmp)))
+    s1 = copy(s)
+    M1 = copy(M[:, 1])
 
     data_tmp = copy(flux_star)
     data_tmp .-= μ
     rvs2 = SSOF.project_doppler_comp!(M, s, data_tmp, doppler_comp, ones(size(data_tmp)))
-    s2 = s[1, :]
-    M2 = M[:, 1]
+    s2 = copy(s)
+    M2 = copy(M[:, 1])
 
     data_tmp = copy(flux_star)
     data_tmp .-= μ
     rvs3 = SSOF.project_doppler_comp!(M, s, data_tmp, doppler_comp, weights)
-    s3 = s[1, :]
-    M3 = M[:, 1]
+    s3 = copy(s)
+    M3 = copy(M[:, 1])
 
     @test M1 == M2 == M3
     @test rvs1 == rvs2
