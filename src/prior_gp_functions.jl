@@ -282,8 +282,11 @@ Calculate the gradient of `gp_ℓ_precalc()` w.r.t. `y`
 
 # BE EXTREMELY CAREFUL! THIS IS ONLY VALID FOR THE DEFAULT VALUES OF H_k, P∞, AND σ²_meas.
 using ChainRulesCore
+# Δℓ_coeff declared AbstractArray (not AbstractMatrix) so the rrule accepts the abstract type
+# that Mooncake infers from Submodel's unparameterized Δℓ_coeff::AA field. The pullback returns
+# NoTangent() for Δℓ_coeff so it does not matter whether the actual value is a Matrix or Sparse.
 function ChainRulesCore.rrule(::typeof(gp_ℓ_precalc),
-        Δℓ_coeff::AbstractMatrix, x::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix)
+        Δℓ_coeff::AbstractArray, x::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix)
     y = gp_ℓ(x, A_k, Σ_k)
     function gp_ℓ_precalc_pullback(ȳ)
         x̄ = ChainRulesCore.unthunk(ȳ) .* Δℓ_precalc(Δℓ_coeff, x, A_k, Σ_k, H_k, P∞)
@@ -293,6 +296,11 @@ function ChainRulesCore.rrule(::typeof(gp_ℓ_precalc),
 end
 Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(gp_ℓ_precalc), Matrix{Float64}, Vector{Float64}, Matrix{Float64}, Matrix{Float64}}
 Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(gp_ℓ_precalc), Matrix{Float64}, Vector{Float64}, SMatrix{3,3,Float64,9}, SMatrix{3,3,Float64,9}}
+# Abstract-type fallback: sm.Δℓ_coeff has static type AbstractArray (from Submodel's unparameterized
+# AA field), and sm.A_sde/Σ_sde have type StaticMatrix (abstract). The is_primitive check fires for
+# AbstractArray ⊆ AbstractArray and StaticMatrix ⊆ AbstractMatrix, and ChainRulesCore dispatches
+# correctly at runtime since the concrete primal type (Matrix{Float64}) satisfies AbstractMatrix.
+Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(gp_ℓ_precalc), AbstractArray, AbstractVector, AbstractMatrix, AbstractMatrix}
 
 
 # sm = mws.om.tel

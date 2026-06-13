@@ -43,13 +43,24 @@ import Mooncake
 # No copy() method exists for it, but Mooncake needs one when traversing OrderModel.
 Base.copy(x::Base.TwicePrecision) = x
 
-# Import the three ChainRulesCore rrules into Mooncake with concrete types.
-# Abstract-type rrules live in model_functions.jl / prior_gp_functions.jl for
-# portability; these concrete-type imports are what Mooncake dispatches on.
-# If @from_rrule rejects a signature (kwarg or abstract-type restriction), fall
-# back to a native Mooncake.@is_primitive + rrule!! wrapper — the math is the same.
+# Import the three ChainRulesCore rrules into Mooncake.
+# Concrete-type registrations are most efficient when the static call-site types are
+# concrete. Abstract-type registrations serve as fallbacks for call sites where struct
+# field type declarations (e.g. t2o::AbstractVector{<:SparseMatrixCSC} in OrderModelWobble)
+# prevent Mooncake from inferring the concrete type. Julia's method dispatch picks the
+# most-specific matching rule, so both registrations coexist without ambiguity.
 Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(spectra_interp), Matrix{Float64}, Vector{Float64}, StellarInterpolationHelper}
+# Stellar path: om.star.lm is declared LinearModel (abstract) in Submodel, so _eval_lm_vec
+# returns an abstract-typed matrix at the call site. Register an abstract fallback.
+Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(spectra_interp), AbstractMatrix{Float64}, AbstractVector{<:Real}, StellarInterpolationHelper}
+# Telluric path: om.t2o is declared AbstractVector{<:SparseMatrixCSC} in OrderModelWobble,
+# so the static type at the call site is abstract. Register for both the abstract case
+# and the concrete case (the concrete registration takes precedence when types are known).
 Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(spectra_interp), Matrix{Float64}, Vector{SparseMatrixCSC{Float64,Int64}}}
+Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(spectra_interp), AbstractMatrix{Float64}, AbstractVector{<:SparseMatrixCSC}}
+# LSF path: d.lsf may be a single SparseMatrixCSC (same LSF for all observations).
+# With the L type parameter on LSFData, d.lsf gets a concrete static type here.
+Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(spectra_interp), AbstractMatrix{Float64}, SparseMatrixCSC{Float64,Int64}}
 # gp_ℓ_precalc registration is deferred to prior_gp_functions.jl (defined there)
 
 # Recursive helper: Mooncake tangents for SubArrays may not be plain Arrays.
@@ -62,6 +73,7 @@ Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(spectra_interp), Matrix{Fl
 # retype to Vector{AbstractArray} so iterate!/first_iterate! dispatch works.
 tangent_to_arrays(x::Array{<:Real}) = x                           # leaf: plain float array
 tangent_to_arrays(x::AbstractArray{<:Real}) = collect(x)          # leaf: SubArray → plain Array
+tangent_to_arrays(x::Tuple) = map(tangent_to_arrays, x)           # Tuple tangent (typed θ path)
 tangent_to_arrays(x::AbstractVector{<:AbstractArray}) =            # typed container
     AbstractArray[tangent_to_arrays(xi) for xi in x]
 tangent_to_arrays(x::AbstractArray{Any}) =                         # Any-typed container (Mooncake erasure)
