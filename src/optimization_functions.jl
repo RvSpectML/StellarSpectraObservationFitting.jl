@@ -409,8 +409,10 @@ struct AdamSubWorkspace{T,C,L<:Function}
 		return new{T,C,L}(θ, opt, as, l, cache)
 	end
 end
-function AdamSubWorkspace(θ, l::Function; backend::ADBackend=MooncakeBackend())
-	cache = prepare_gradient(backend, l, θ)
+function AdamSubWorkspace(θ, l::Function; backend::ADBackend=MooncakeBackend(), kwargs...)
+	# kwargs (om, build_θ, build_l, o, d) carry aliasing info needed by the
+	# EnzymeBackend nested-tuple path. Mooncake's prepare_gradient ignores them.
+	cache = prepare_gradient(backend, l, θ; kwargs...)
 	return AdamSubWorkspace(θ, Adams(θ), AdamState(), l, cache)
 end
 
@@ -610,27 +612,35 @@ struct TotalWorkspace <: AdamWorkspace
 	only_s::Bool
 end
 
-function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def)
+function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def, backend::ADBackend=MooncakeBackend())
 	l_total, l_total_s = loss_funcs_total(o, om, d)
 	α_ratio = α * sqrt(length(om.tel.lm.μ)) # = α / rel_step_size(om.tel.lm.M) assuming M starts as L2 normalized basis vectors. Need to use this instead because TemplateModels don't have basis vectors
 	is_tel_time_variable = is_time_variable(om.tel)
 	is_star_time_variable = is_time_variable(om.star)
-	typeof(om) <: OrderModelDPCA ? rvs = om.rv.lm.s : rvs = om.rv
+	# Builders capture the four-way (only_s, is_tel_time_variable, is_star_time_variable)
+	# branching so the EnzymeBackend nested-tuple path can rebuild a shadow θ
+	# matching the primal's aliasing structure into ∂om. Mooncake ignores them.
+	rvs_of(om2) = typeof(om2) <: OrderModelDPCA ? om2.rv.lm.s : om2.rv
 	if only_s
 		if is_tel_time_variable
 			if is_star_time_variable
-				total = AdamSubWorkspace((om.tel.lm.s, om.star.lm.s, rvs), l_total_s)
+				build_θ = om2 -> (om2.tel.lm.s, om2.star.lm.s, rvs_of(om2))
 			else
-				total = AdamSubWorkspace((om.tel.lm.s, rvs), l_total_s)
+				build_θ = om2 -> (om2.tel.lm.s, rvs_of(om2))
 			end
 		elseif is_star_time_variable
-			total = AdamSubWorkspace((om.star.lm.s, rvs), l_total_s)
+			build_θ = om2 -> (om2.star.lm.s, rvs_of(om2))
 		else
-			total = AdamSubWorkspace((rvs,), l_total_s)
+			build_θ = om2 -> (rvs_of(om2),)
 		end
+		loss = l_total_s
+		build_l = (om2, o2, d2) -> loss_funcs_total(o2, om2, d2)[2]
 	else
-		total = AdamSubWorkspace((_lm_tuple(om.tel.lm), _lm_tuple(om.star.lm), rvs), l_total)
+		build_θ = om2 -> (_lm_tuple(om2.tel.lm), _lm_tuple(om2.star.lm), rvs_of(om2))
+		loss = l_total
+		build_l = (om2, o2, d2) -> loss_funcs_total(o2, om2, d2)[1]
 	end
+	total = AdamSubWorkspace(build_θ(om), loss; backend=backend, om=om, build_θ=build_θ, build_l=build_l, o=o, d=d)
 	if is_tel_time_variable || is_star_time_variable
 		scale_α_helper!(total.opt[1:(is_tel_time_variable+is_star_time_variable)], α_ratio, total.θ, α, scale_α)
 	end
@@ -663,29 +673,37 @@ struct FrozenTelWorkspace <: AdamWorkspace
 end
 
 
-function FrozenTelWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def)
+function FrozenTelWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def, backend::ADBackend=MooncakeBackend())
 	l_frozen_tel, l_frozen_tel_s = loss_funcs_frozen_tel(o, om, d)
 	α_ratio = α * sqrt(length(om.tel.lm.μ)) # = α / rel_step_size(om.tel.lm.M) assuming M starts as L2 normalized basis vectors. Need to use this instead because TemplateModels don't have basis vectors
 	is_tel_time_variable = is_time_variable(om.tel)
 	is_star_time_variable = is_time_variable(om.star)
-	typeof(om) <: OrderModelDPCA ? rvs = om.rv.lm.s : rvs = om.rv
+	# See TotalWorkspace for the builder rationale.
+	rvs_of(om2) = typeof(om2) <: OrderModelDPCA ? om2.rv.lm.s : om2.rv
 	if only_s
 		if is_tel_time_variable
 			if is_star_time_variable
-				total = AdamSubWorkspace((om.tel.lm.s, om.star.lm.s, rvs), l_frozen_tel_s)
+				build_θ = om2 -> (om2.tel.lm.s, om2.star.lm.s, rvs_of(om2))
 			else
-				total = AdamSubWorkspace((om.tel.lm.s, rvs), l_frozen_tel_s)
+				build_θ = om2 -> (om2.tel.lm.s, rvs_of(om2))
 			end
 		elseif is_star_time_variable
-			total = AdamSubWorkspace((om.star.lm.s, rvs), l_frozen_tel_s)
+			build_θ = om2 -> (om2.star.lm.s, rvs_of(om2))
 		else
-			total = AdamSubWorkspace((rvs,), l_frozen_tel_s)
+			build_θ = om2 -> (rvs_of(om2),)
 		end
+		loss = l_frozen_tel_s
+		build_l = (om2, o2, d2) -> loss_funcs_frozen_tel(o2, om2, d2)[2]
 	else
-		is_tel_time_variable ?
-			total = AdamSubWorkspace((om.tel.lm.s, _lm_tuple(om.star.lm), rvs), l_frozen_tel) :
-			total = AdamSubWorkspace((_lm_tuple(om.star.lm), rvs), l_frozen_tel)
+		if is_tel_time_variable
+			build_θ = om2 -> (om2.tel.lm.s, _lm_tuple(om2.star.lm), rvs_of(om2))
+		else
+			build_θ = om2 -> (_lm_tuple(om2.star.lm), rvs_of(om2))
+		end
+		loss = l_frozen_tel
+		build_l = (om2, o2, d2) -> loss_funcs_frozen_tel(o2, om2, d2)[1]
 	end
+	total = AdamSubWorkspace(build_θ(om), loss; backend=backend, om=om, build_θ=build_θ, build_l=build_l, o=o, d=d)
 	if is_tel_time_variable || is_star_time_variable
 		scale_α_helper!(total.opt[1:(is_tel_time_variable+is_star_time_variable)], α_ratio, total.θ, α, scale_α)
 	end
@@ -705,11 +723,11 @@ FrozenTelWorkspace(om::OrderModel, d::Data; kwargs...) =
 Create a workspace for optimizing `model` with `data`
 Creates a FrozenTelWorkspace if the model has no telluric feature vectors and an empty telluric template
 """
-function ModelWorkspace(model::OrderModel, data::Data)
+function ModelWorkspace(model::OrderModel, data::Data; kwargs...)
 	if no_tellurics(model)
-		return FrozenTelWorkspace(model, data)
+		return FrozenTelWorkspace(model, data; kwargs...)
 	else
-		return TotalWorkspace(model, data)
+		return TotalWorkspace(model, data; kwargs...)
 	end
 end
 
