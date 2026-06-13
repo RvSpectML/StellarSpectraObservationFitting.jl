@@ -880,6 +880,14 @@ function _eval_lm_vec(om::OrderModel, v; log_lm::Bool=_log_lm_default)
 	end
 end
 
+# Non-keyword helpers called by _eval_lm_vec. Using Val{log_lm} instead of a keyword
+# argument allows ChainRulesCore rrules to be registered and imported into Mooncake via
+# @from_rrule (which does not support Core.kwcall dispatch for keyword functions).
+_eval_lm_inner(M, s, μ, ::Val{false}) = muladd(M, s, μ)
+_eval_lm_inner(M, s, μ, ::Val{true})  = exp.(M * s) .* μ
+_eval_lm_inner(M, s, ::Val{false})    = M * s
+_eval_lm_inner(M, s, ::Val{true})     = exp.(M * s)
+
 
 """
 	rvs(model)
@@ -985,6 +993,60 @@ function ChainRulesCore.rrule(::typeof(spectra_interp),
 		return NoTangent(), interp_helper' * ȳ, NoTangent()
 	end
 	return y, spectra_interp_single_sparse_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(_eval_lm_inner),
+		M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector, ::Val{false})
+	y = muladd(M, s, μ)
+	function _eval_lm_inner_3_linear_pullback(ȳ)
+		ȳ = ChainRulesCore.unthunk(ȳ)
+		return NoTangent(), ȳ * s', M' * ȳ, vec(sum(ȳ; dims=2)), NoTangent()
+	end
+	return y, _eval_lm_inner_3_linear_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(_eval_lm_inner),
+		M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector, ::Val{true})
+	z = M * s
+	expz = exp.(z)
+	y = expz .* μ
+	function _eval_lm_inner_3_log_pullback(ȳ)
+		ȳ = ChainRulesCore.unthunk(ȳ)
+		δ = ȳ .* expz .* μ
+		return NoTangent(), δ * s', M' * δ, vec(sum(ȳ .* expz; dims=2)), NoTangent()
+	end
+	return y, _eval_lm_inner_3_log_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(_eval_lm_inner),
+		M::AbstractMatrix, s::AbstractMatrix, ::Val{false})
+	y = M * s
+	function _eval_lm_inner_2_linear_pullback(ȳ)
+		ȳ = ChainRulesCore.unthunk(ȳ)
+		return NoTangent(), ȳ * s', M' * ȳ, NoTangent()
+	end
+	return y, _eval_lm_inner_2_linear_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(_eval_lm_inner),
+		M::AbstractMatrix, s::AbstractMatrix, ::Val{true})
+	z = M * s
+	expz = exp.(z)
+	function _eval_lm_inner_2_log_pullback(ȳ)
+		ȳ = ChainRulesCore.unthunk(ȳ)
+		δ = ȳ .* expz
+		return NoTangent(), δ * s', M' * δ, NoTangent()
+	end
+	return expz, _eval_lm_inner_2_log_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(_eval_lm), μ::AbstractVector, n::Int)
+	y = μ * ones(n)'
+	function _eval_lm_template_pullback(ȳ)
+		ȳ = ChainRulesCore.unthunk(ȳ)
+		return NoTangent(), vec(sum(ȳ; dims=2)), NoTangent()
+	end
+	return y, _eval_lm_template_pullback
 end
 
 

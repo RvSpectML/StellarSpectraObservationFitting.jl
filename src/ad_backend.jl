@@ -62,6 +62,18 @@ Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(spectra_interp), AbstractM
 # With the L type parameter on LSFData, d.lsf gets a concrete static type here.
 Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(spectra_interp), AbstractMatrix{Float64}, SparseMatrixCSC{Float64,Int64}}
 # gp_ℓ_precalc registration is deferred to prior_gp_functions.jl (defined there)
+# _eval_lm_inner: covers the M*s+μ and exp(M*s).*μ paths called by _eval_lm_vec.
+# Concrete Matrix{Float64} registrations only — the Adam path owns concrete arrays.
+# The Optim path passes SubArrays (ParameterHandling.unflatten returns views), and
+# Mooncake's SubArray tangent is an FData struct, not a plain Array; an AbstractMatrix
+# fallback would misfire there and produce a tangent type mismatch. Mooncake falls
+# through to generic tracing for SubArray inputs, which is correct but unoptimized.
+Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(_eval_lm_inner), Matrix{Float64}, Matrix{Float64}, Vector{Float64}, Val{false}}
+Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(_eval_lm_inner), Matrix{Float64}, Matrix{Float64}, Vector{Float64}, Val{true}}
+Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(_eval_lm_inner), Matrix{Float64}, Matrix{Float64}, Val{false}}
+Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(_eval_lm_inner), Matrix{Float64}, Matrix{Float64}, Val{true}}
+# TemplateModel path: _eval_lm(μ, n) = μ * ones(n)'. Same constraint applies.
+Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(_eval_lm), Vector{Float64}, Int}
 
 # Recursive helper: Mooncake tangents for SubArrays may not be plain Arrays.
 # The Adam θ can contain SubArrays (from downsize_view / vec(lm) on views);
