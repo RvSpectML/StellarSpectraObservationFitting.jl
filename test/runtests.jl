@@ -6,6 +6,11 @@ using LinearAlgebra
 
 println("Testing...")
 
+@testset "AD backends load" begin
+    @test SSOF.MooncakeBackend() isa SSOF.ADBackend
+    @test SSOF.EnzymeBackend() isa SSOF.ADBackend
+end
+
 function est_∇(f::Function, inputs; dif::Real=1e-7, inds::AbstractUnitRange=eachindex(inputs))
     val = f(inputs)
     grad = Array{Float64}(undef, length(inds))
@@ -66,6 +71,73 @@ end
     _, ∂B = SSOF.value_and_gradient!(cache, f_custom_sensitivity, copy(B))
 
     @test isapprox(vec(∂B), numer; rtol=1e-4)
+
+    println()
+end
+
+@testset "EnzymeBackend flat-vector path (spectra_interp via SIH)" begin
+    # Exercises the flat-Vector{Float64} EnzymeBackend path against a loss that
+    # captures a StellarInterpolationHelper — representative of the closures
+    # built by the optimizer paths. FD is the gold-standard correctness gate;
+    # Mooncake↔Enzyme agreement is the secondary check.
+    n_model, n_obs, n_epochs = 20, 8, 3
+    log_λ_obs = collect(LinRange(1.0, 2.0, n_obs)) .+ 0.0 .* (1:n_epochs)'
+    log_λ_obs = collect(reshape(log_λ_obs, n_obs, n_epochs))
+    model_log_λ = range(0.5, 2.5; length=n_model)
+    rvs = randn(n_epochs) .* 0.01
+    sih = SSOF.StellarInterpolationHelper(model_log_λ, rvs, log_λ_obs)
+
+    # Flat-vector loss: model_flux flattened to a Vector{Float64}.
+    n_flux = n_model * n_epochs
+    function ℓ(x::AbstractVector{Float64})
+        M = reshape(x, n_model, n_epochs)
+        return sum(SSOF.spectra_interp(M, rvs, sih) .^ 2)
+    end
+
+    x0 = collect(LinRange(0.5, 1.5, n_flux))
+
+    # Finite-difference reference
+    fd = est_∇(ℓ, copy(x0); dif=1e-6)
+
+    # Mooncake
+    mcache = SSOF.prepare_gradient(SSOF.MooncakeBackend(), ℓ, copy(x0))
+    val_mc, ∂_mc = SSOF.value_and_gradient!(mcache, ℓ, copy(x0))
+
+    # Enzyme (flat-vector path)
+    ecache = SSOF.prepare_gradient(SSOF.EnzymeBackend(), ℓ, copy(x0))
+    val_en, ∂_en = SSOF.value_and_gradient!(ecache, ℓ, copy(x0))
+
+    @test isapprox(val_mc, val_en; rtol=1e-10)
+    @test isapprox(∂_mc, ∂_en; rtol=1e-6)
+    @test isapprox(∂_en, fd; rtol=1e-3)
+
+    println()
+end
+
+@testset "EnzymeBackend on loss ∘ unflatten composition" begin
+    # opt_funcs (optimization_functions.jl:804) differentiates `f = loss ∘ unflatten`
+    # where unflatten rebuilds a nested parameter structure from a flat vector.
+    # Phase 5 will switch the default backend to Enzyme via this exact composition,
+    # so Phase 2's done-gate must exercise it — a hand-written ℓ on a flat input
+    # does not capture the closure shape (the unflatten closure carries its own
+    # captured shape info) that production code uses.
+    pars0 = [rand(3, 2), rand(2, 3), rand(5)]
+    loss(pars) = sum(pars[1]) + sum(pars[2] .^ 2) + sum(pars[3] .^ 3)
+
+    p0, unflatten = SSOF.flatten(pars0)
+    f = loss ∘ unflatten
+
+    cache_mc = SSOF.prepare_gradient(SSOF.MooncakeBackend(), f, copy(p0))
+    val_mc, ∂_mc = SSOF.value_and_gradient!(cache_mc, f, copy(p0))
+
+    cache_en = SSOF.prepare_gradient(SSOF.EnzymeBackend(), f, copy(p0))
+    val_en, ∂_en = SSOF.value_and_gradient!(cache_en, f, copy(p0))
+
+    fd = est_∇(f, copy(p0); dif=1e-6)
+
+    @test isapprox(val_mc, val_en; rtol=1e-10)
+    @test isapprox(∂_mc, ∂_en; rtol=1e-6)
+    @test isapprox(∂_en, fd; rtol=1e-3)
 
     println()
 end
