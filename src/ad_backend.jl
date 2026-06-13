@@ -104,3 +104,71 @@ function value_and_gradient!(c::MooncakeCache, l, θ)
     val, (_, ∂θ) = Mooncake.value_and_gradient!!(c.rule, l, θ)
     return val, tangent_to_arrays(∂θ)
 end
+
+# ── Enzyme implementation ─────────────────────────────────────────────────────
+#
+# Flat-vector path (Optim + error_estimation) implemented. Nested-θ path (Adam)
+# is Phase 3 in enzyme-migration-plan.md and not yet implemented — calling
+# prepare_gradient(EnzymeBackend(), l, θ) with θ::Vector{<:AbstractArray}
+# falls through to a no-method error by design until Phase 3 lands.
+
+import Enzyme
+
+struct EnzymeBackend <: ADBackend end
+
+# Cache for the flat-vector path. `∂l` is the shadow closure (preserves any
+# alias-into-captured-state structure via Enzyme.make_zero's IdDict tracking).
+# `∂θ` is pre-allocated; zeroed in-place each call.
+struct EnzymeFlatCache{L, T<:AbstractVector{<:Real}}
+    ∂l::L
+    ∂θ::T
+end
+
+function prepare_gradient(::EnzymeBackend, l, θ::AbstractVector{<:Real})
+    ∂l = Enzyme.make_zero(l)
+    ∂θ = zero(θ)
+    return EnzymeFlatCache(∂l, ∂θ)
+end
+
+function value_and_gradient!(c::EnzymeFlatCache, l, θ::AbstractVector{<:Real})
+    # remake_zero! (not make_zero!) is required when the captured closure
+    # contains differentiable Float64 values in immutable struct positions —
+    # e.g. StellarInterpolationHelper's AbstractMatrix{Float64} field. The
+    # shadow ∂l was built via make_zero, so those positions are already zero;
+    # remake_zero! preserves that without re-checking. make_zero! would error.
+    Enzyme.remake_zero!(c.∂l)
+    fill!(c.∂θ, 0)
+    # set_runtime_activity is required for the Optim/error_estimation path,
+    # where `l = loss ∘ unflatten` and unflatten is ParameterHandling's
+    # Vector_from_vec closure. Enzyme's static activity analysis cannot prove
+    # the array-of-views inside Vector_from_vec is fully active, so it errors
+    # with EnzymeRuntimeActivityError without this flag. The runtime check
+    # has a small per-call cost but is unconditionally correct. If Phase 7
+    # profiling shows it dominating, the alternative is to rewrite the
+    # affected losses to not flow constants into differentiable storage.
+    _, val = Enzyme.autodiff(
+        Enzyme.set_runtime_activity(Enzyme.ReverseWithPrimal),
+        Enzyme.Duplicated(l, c.∂l),
+        Enzyme.Active,
+        Enzyme.Duplicated(θ, c.∂θ),
+    )
+    return val, c.∂θ
+end
+
+# ChainRulesCore rrule import: BLOCKED on Julia 1.12.
+#
+# Enzyme.@import_rrule's generated reverse function uses the `japi3` calling
+# convention which Enzyme 0.13's LLVM bridge does not yet support on Julia
+# 1.12 (CallingConventionMismatchError; tracking issue EnzymeAD/Enzyme.jl#2707).
+# Until that is resolved, the EnzymeBackend differentiates through
+# spectra_interp / gp_ℓ_precalc / _eval_lm_inner / _eval_lm directly via
+# native Enzyme AD (correct but slower than the imported rrules would be).
+#
+# Phase 7 perf path forward (in priority order):
+#   1. Reassess after upgrading Enzyme (issue #2707).
+#   2. Write native Enzyme.EnzymeRules.augmented_primal / reverse for the four
+#      hot rules (spectra_interp ×2, gp_ℓ_precalc, _eval_lm_inner). The math
+#      is in the ChainRulesCore rrule bodies; only the activity-shadow
+#      bookkeeping needs translation.
+#   3. Downgrade benchmarking to Julia 1.11, where @import_rrule is reported
+#      working. Not a fix — just a baseline.
