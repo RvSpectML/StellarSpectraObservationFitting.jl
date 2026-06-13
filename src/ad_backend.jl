@@ -95,7 +95,9 @@ struct MooncakeCache{R}
     rule::R
 end
 
-function prepare_gradient(::MooncakeBackend, l, θ)
+function prepare_gradient(::MooncakeBackend, l, θ; kwargs...)
+    # Mooncake doesn't need aliasing info; kwargs (om, build_θ, build_l, o, d)
+    # passed by Enzyme's nested-θ call sites are silently ignored here.
     rule = Mooncake.build_rrule(l, θ)
     return MooncakeCache(rule)
 end
@@ -107,10 +109,10 @@ end
 
 # ── Enzyme implementation ─────────────────────────────────────────────────────
 #
-# Flat-vector path (Optim + error_estimation) implemented. Nested-θ path (Adam)
-# is Phase 3 in enzyme-migration-plan.md and not yet implemented — calling
-# prepare_gradient(EnzymeBackend(), l, θ) with θ::Vector{<:AbstractArray}
-# falls through to a no-method error by design until Phase 3 lands.
+# Flat-vector path (Optim + error_estimation) and nested-tuple path (Adam) both
+# implemented. The nested path requires the caller to pass `om`, `build_θ`,
+# `build_l`, `o`, `d` as kwargs to prepare_gradient so the cache can build
+# shadow copies whose aliasing structure matches the primal.
 
 import Enzyme
 
@@ -146,6 +148,48 @@ function value_and_gradient!(c::EnzymeFlatCache, l, θ::AbstractVector{<:Real})
     # has a small per-call cost but is unconditionally correct. If Phase 7
     # profiling shows it dominating, the alternative is to rewrite the
     # affected losses to not flow constants into differentiable storage.
+    _, val = Enzyme.autodiff(
+        Enzyme.set_runtime_activity(Enzyme.ReverseWithPrimal),
+        Enzyme.Duplicated(l, c.∂l),
+        Enzyme.Active,
+        Enzyme.Duplicated(θ, c.∂θ),
+    )
+    return val, c.∂θ
+end
+
+# Cache for the nested-tuple path used by the Adam optimizer. The Adam path's
+# θ entries alias arrays inside a captured OrderModel — e.g. when the caller
+# constructs `θ = (om.tel.lm.s, om.star.lm.s, om.rv)`, the array `θ[1]` is
+# the same object as `om.tel.lm.s`. To get correct gradients under Enzyme we
+# need the shadow `∂θ` to alias `∂l`'s captured `∂om` arrays in exactly the
+# same way; otherwise Enzyme's per-pointer tangent tracking double-counts or
+# misses gradient contributions.
+#
+# Construction recipe: deepcopy-zero `om` into `∂om` (Enzyme.make_zero
+# preserves shared-structure identity via IdDict), then call the caller's
+# `build_l(∂om, o, d)` and `build_θ(∂om)` functions to reconstruct the
+# shadow closure and shadow tuple. Because both `build_l` and `build_θ`
+# read array fields from the same `∂om`, the resulting `∂l`-captures and
+# `∂θ`-leaves naturally share identity within `∂om`.
+#
+# `remake_zero!(c.∂om)` at the start of each gradient call zeros every
+# Float64 array reachable from `∂om`. Since `∂l`'s captures and `∂θ`'s
+# leaves all alias into `∂om`, that single in-place zeroing prepares both.
+struct EnzymeNestedCache{∂L, ∂T, ∂OM}
+    ∂l::∂L
+    ∂θ::∂T
+    ∂om::∂OM  # held alive so ∂l and ∂θ aliases stay valid
+end
+
+function prepare_gradient(::EnzymeBackend, l, θ::Tuple; om, build_θ, build_l, o, d)
+    ∂om = Enzyme.make_zero(om)
+    ∂l  = build_l(∂om, o, d)
+    ∂θ  = build_θ(∂om)
+    return EnzymeNestedCache(∂l, ∂θ, ∂om)
+end
+
+function value_and_gradient!(c::EnzymeNestedCache, l, θ::Tuple)
+    Enzyme.remake_zero!(c.∂om)
     _, val = Enzyme.autodiff(
         Enzyme.set_runtime_activity(Enzyme.ReverseWithPrimal),
         Enzyme.Duplicated(l, c.∂l),
