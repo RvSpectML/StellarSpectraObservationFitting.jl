@@ -114,6 +114,79 @@ end
     println()
 end
 
+@testset "EnzymeBackend nested-tuple θ with aliasing into captured om" begin
+    # Phase 3: the Adam path. Production calls look like:
+    #   AdamSubWorkspace((om.tel.lm.s, om.star.lm.s, om.rv), l_total)
+    # where each θ entry is identity-equal to an array inside `om`, and the
+    # loss closure captures `om`. The shadow ∂θ must alias ∂l's captured ∂om
+    # in the same way. Tested here with a minimal synthetic struct that mimics
+    # the relevant aspects.
+    mutable struct MiniOM
+        M::Matrix{Float64}
+        s::Vector{Float64}
+        μ::Vector{Float64}
+        bias::Matrix{Float64}    # captured-only context (not in θ)
+    end
+    om = MiniOM(rand(4, 3), rand(3), rand(4), rand(4, 5))
+
+    # Aliasing invariant: θ[1] === om.M, θ[2] === om.s, θ[3] === om.μ.
+    # The loss reads BOTH θ AND om.bias (captured); correctness requires
+    # gradients to flow through θ even though the same arrays are reachable
+    # via captured om.
+    build_θ_minimini(om) = (om.M, om.s, om.μ)
+    build_l_minimini(om, _, _) = function (θ)
+        # Reads θ AND captured om.bias; computes loss = ||θ[1]*θ[2]+θ[3] − col_means(om.bias)||²
+        pred = θ[1] * θ[2] .+ θ[3]
+        target = vec(sum(om.bias; dims=2)) ./ size(om.bias, 2)
+        return sum((pred .- target) .^ 2)
+    end
+
+    θ = build_θ_minimini(om)
+    l = build_l_minimini(om, nothing, nothing)
+
+    # Aliasing assertions on the primal (sanity check that the test setup is right)
+    @test pointer(θ[1]) === pointer(om.M)
+    @test pointer(θ[2]) === pointer(om.s)
+    @test pointer(θ[3]) === pointer(om.μ)
+
+    # Enzyme cache
+    cache = SSOF.prepare_gradient(
+        SSOF.EnzymeBackend(), l, θ;
+        om=om, build_θ=build_θ_minimini, build_l=build_l_minimini,
+        o=nothing, d=nothing,
+    )
+
+    # Aliasing assertions on the shadow (the Phase 3 step 3 verification step)
+    @test pointer(cache.∂θ[1]) === pointer(cache.∂om.M)
+    @test pointer(cache.∂θ[2]) === pointer(cache.∂om.s)
+    @test pointer(cache.∂θ[3]) === pointer(cache.∂om.μ)
+
+    val_en, ∂θ_en = SSOF.value_and_gradient!(cache, l, θ)
+
+    # FD reference: differentiate the closure w.r.t. a flat parameterization
+    function ℓ_flat(x)
+        M = reshape(view(x, 1:12),   4, 3)
+        s = view(x, 13:15)
+        μ = view(x, 16:19)
+        pred = M * s .+ μ
+        target = vec(sum(om.bias; dims=2)) ./ size(om.bias, 2)
+        return sum((pred .- target) .^ 2)
+    end
+    x_flat = vcat(vec(om.M), om.s, om.μ)
+    fd = est_∇(ℓ_flat, copy(x_flat); dif=1e-6)
+
+    ∂_flat = vcat(vec(∂θ_en[1]), ∂θ_en[2], ∂θ_en[3])
+    @test isapprox(val_en, ℓ_flat(x_flat); rtol=1e-10)
+    @test isapprox(∂_flat, fd; rtol=1e-3)
+
+    # Second call uses the same cache; verify remake_zero! correctly resets
+    val_en2, ∂θ_en2 = SSOF.value_and_gradient!(cache, l, θ)
+    @test isapprox(val_en2, val_en; rtol=1e-12)
+    @test isapprox(∂θ_en2[1], ∂θ_en[1]; rtol=1e-12)
+
+    println()
+end
+
 @testset "EnzymeBackend on loss ∘ unflatten composition" begin
     # opt_funcs (optimization_functions.jl:804) differentiates `f = loss ∘ unflatten`
     # where unflatten rebuilds a nested parameter structure from a flat vector.
