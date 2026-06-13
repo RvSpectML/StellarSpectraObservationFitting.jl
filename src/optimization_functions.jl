@@ -142,17 +142,17 @@ function loss_funcs_total(o::Output, om::OrderModelDPCA, d::Data)
     function l_total_s(total_s)
 		prior = 0.
 		if is_tel_time_variable
-			tel = [om.tel.lm.M, total_s[1], om.tel.lm.μ]
+			tel = (om.tel.lm.M, total_s[1], om.tel.lm.μ)
 			prior += model_s_prior(total_s[1], om.reg_tel)
 			if is_star_time_variable
-				star = [om.star.lm.M, total_s[2], om.star.lm.μ]
+				star = (om.star.lm.M, total_s[2], om.star.lm.μ)
 				prior += model_s_prior(total_s[2], om.reg_star)
 			else
 				star = nothing
 			end
 		elseif is_star_time_variable
 			tel = nothing
-			star = [om.star.lm.M, total_s[1], om.star.lm.μ]
+			star = (om.star.lm.M, total_s[1], om.star.lm.μ)
 			prior += model_s_prior(total_s[1], om.reg_star)
 		else
 			tel = nothing
@@ -172,17 +172,17 @@ function loss_funcs_total(o::Output, om::OrderModelWobble, d::Data)
     function l_total_s(total_s)
 		prior = 0.
 		if is_tel_time_variable
-			tel = [om.tel.lm.M, total_s[1], om.tel.lm.μ]
+			tel = (om.tel.lm.M, total_s[1], om.tel.lm.μ)
 			prior += model_s_prior(total_s[1], om.reg_tel)
 			if is_star_time_variable
-				star = [om.star.lm.M, total_s[2], om.star.lm.μ]
+				star = (om.star.lm.M, total_s[2], om.star.lm.μ)
 				prior += model_s_prior(total_s[2], om.reg_star)
 			else
 				star = nothing
 			end
 		elseif is_star_time_variable
 			tel = nothing
-			star = [om.star.lm.M, total_s[1], om.star.lm.μ]
+			star = (om.star.lm.M, total_s[1], om.star.lm.μ)
 			prior += model_s_prior(total_s[1], om.reg_star)
 		else
 			tel = nothing
@@ -210,7 +210,7 @@ function loss_funcs_frozen_tel(o::Output, om::OrderModel, d::Data)
 	is_tel_time_variable = is_time_variable(om.tel)
 	is_star_time_variable = is_time_variable(om.star)
 	function l_frozen_tel(total)
-		is_tel_time_variable ? tel = [om.tel.lm.M, total[1], om.tel.lm.μ] : tel = nothing
+		is_tel_time_variable ? tel = (om.tel.lm.M, total[1], om.tel.lm.μ) : tel = nothing
 		star = total[1+is_tel_time_variable]
 		rv = total[2+is_tel_time_variable]
 		return _loss(o, om, d; tel=tel, star=star, rv=rv) + star_prior(total[1+is_tel_time_variable], om)
@@ -218,16 +218,16 @@ function loss_funcs_frozen_tel(o::Output, om::OrderModel, d::Data)
     function l_frozen_tel_s(total_s)
 		prior = 0.
 		if is_tel_time_variable
-			tel = [om.tel.lm.M, total_s[1], om.tel.lm.μ]
+			tel = (om.tel.lm.M, total_s[1], om.tel.lm.μ)
 			if is_star_time_variable
-				star = [om.star.lm.M, total_s[2], om.star.lm.μ]
+				star = (om.star.lm.M, total_s[2], om.star.lm.μ)
 				prior += model_s_prior(total_s[2], om.reg_star)
 			else
 				star = nothing
 			end
 		elseif is_star_time_variable
 			tel = nothing
-			star = [om.star.lm.M, total_s[1], om.star.lm.μ]
+			star = (om.star.lm.M, total_s[1], om.star.lm.μ)
 			prior += model_s_prior(total_s[1], om.reg_star)
 		else
 			tel = nothing
@@ -242,6 +242,13 @@ loss_funcs_frozen_tel(mws::ModelWorkspace) = loss_funcs_frozen_tel(mws.o, mws.om
 
 ## ADAM things
 α, β1, β2, ϵ = 2e-3, 0.9, 0.999, 1e-8
+
+# Return a concretely-typed Tuple of the parameter arrays in a LinearModel.
+# Using a Tuple (rather than a Vector) lets Mooncake infer concrete element types
+# throughout the loss body, enabling rule dispatch and efficient compiled code.
+_lm_tuple(lm::FullLinearModel) = (lm.M, lm.s, lm.μ)
+_lm_tuple(lm::BaseLinearModel) = (lm.M, lm.s)
+_lm_tuple(lm::TemplateModel) = (lm.μ,)
 
 
 """
@@ -277,6 +284,8 @@ Adams(θ0s; α::Float64=α, β1::Float64=β1, β2::Float64=β2, ϵ::Float64=ϵ) 
 	Adams(θ0s, α, β1, β2, ϵ)
 Adams(θ0::AbstractVecOrMat{<:Real}, α::Float64, β1::Float64, β2::Float64, ϵ::Float64) =
 	Adam(θ0, α, β1, β2, ϵ)
+Adams(θ0s::Tuple; α::Float64=α, β1::Float64=β1, β2::Float64=β2, ϵ::Float64=ϵ) =
+	map(t -> Adams(t; α=α, β1=β1, β2=β2, ϵ=ϵ), θ0s)
 Base.copy(opt::Adam) = Adam(opt.α, opt.β1, opt.β2, opt.m, opt.v, opt.β1_acc, opt.β2_acc, opt.ϵ)
 
 
@@ -317,6 +326,11 @@ function iterate!(θs::Vector{<:AbstractArray}, ∇θs::Vector{<:AbstractArray},
     @assert length(θs) == length(∇θs) == length(opts)
 	@inbounds for i in eachindex(θs)
 		iterate!(θs[i], ∇θs[i], opts[i])
+    end
+end
+function iterate!(θs::Tuple, ∇θs, opts)
+    @inbounds for i in eachindex(θs)
+        iterate!(θs[i], ∇θs[i], opts[i])
     end
 end
 
@@ -379,7 +393,7 @@ _g_L∞tol_def_s = 1e-8
 
 Holds a set of model parameters and the ADAM optimizer and functions used to optimize them
 """
-struct AdamSubWorkspace{T,C}
+struct AdamSubWorkspace{T,C,L<:Function}
 	"Model parameters to optimize"
 	θ::T
 	"Adam optimizer parameters"
@@ -387,12 +401,12 @@ struct AdamSubWorkspace{T,C}
 	"Optimization state"
 	as::AdamState
 	"Loss function"
-	l::Function
+	l::L
 	"AD gradient cache"
 	cache::C
-	function AdamSubWorkspace(θ::T, opt, as, l, cache::C) where {T,C}
+	function AdamSubWorkspace(θ::T, opt, as, l::L, cache::C) where {T,C,L<:Function}
 		@assert typeof(l(θ)) <: Real
-		return new{T,C}(θ, opt, as, l, cache)
+		return new{T,C,L}(θ, opt, as, l, cache)
 	end
 end
 function AdamSubWorkspace(θ, l::Function; backend::ADBackend=MooncakeBackend())
@@ -429,7 +443,7 @@ end
 
 Perform an ADAM optimization step based on the contents of `opt` on `θ` and decreases the learning rate to ensure the loss actually decreases
 """
-function first_iterate!(l::Function, l0::Real, θs::Vector{<:AbstractArray}, θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt::Adam; ind=[], verbose::Bool=false)
+function first_iterate!(l::Function, l0::Real, θs, θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt::Adam; ind=[], verbose::Bool=false)
 	β1=opt.β1; β2=opt.β2; ϵ=opt.ϵ; β1_acc=opt.β1_acc; β2_acc=opt.β2_acc; m=opt.m; v=opt.v
 	one_minus_β1 = 1.0 - β1
 	one_minus_β2 = 1.0 - β2
@@ -465,6 +479,11 @@ function first_iterate!(l::Function, l0::Real, θs_unchanging::Vector{<:Abstract
 		first_iterate!(l, l0, θs_unchanging, θs[i], ∇θs[i], opts[i]; ind=append!(copy(ind),[i]), kwargs...)
     end
 end
+function first_iterate!(l::Function, l0::Real, θs_unchanging::Tuple, θs::Tuple, ∇θs, opts; ind=Int[], kwargs...)
+    @inbounds for i in eachindex(θs)
+        first_iterate!(l, l0, θs_unchanging, θs[i], ∇θs[i], opts[i]; ind=append!(copy(ind),[i]), kwargs...)
+    end
+end
 
 
 
@@ -473,7 +492,7 @@ end
 
 Perform an ADAM optimization step based on the contents of `opt` on `θ` and increases the learning rate to attempt to speed up the optimization
 """
-function speed_up_iterate!(l::Function, θs::Vector{<:AbstractArray}, θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt::Adam; ind=[], verbose::Bool=false)
+function speed_up_iterate!(l::Function, θs, θ::AbstractArray{Float64}, ∇θ::AbstractArray{Float64}, opt::Adam; ind=[], verbose::Bool=false)
 	β1=opt.β1; β2=opt.β2; ϵ=opt.ϵ; β1_acc=opt.β1_acc; β2_acc=opt.β2_acc; m=opt.m; v=opt.v
 	one_minus_β1 = 1.0 - β1
 	one_minus_β2 = 1.0 - β2
@@ -511,6 +530,11 @@ function speed_up_iterate!(l::Function, θs_unchanging::Vector{<:AbstractArray},
     @assert length(θs) == length(∇θs) == length(opts)
 	@inbounds for i in eachindex(θs)
 		speed_up_iterate!(l, θs_unchanging, θs[i], ∇θs[i], opts[i]; ind=append!(copy(ind),[i]), kwargs...)
+    end
+end
+function speed_up_iterate!(l::Function, θs_unchanging::Tuple, θs::Tuple, ∇θs, opts; ind=Int[], kwargs...)
+    @inbounds for i in eachindex(θs)
+        speed_up_iterate!(l, θs_unchanging, θs[i], ∇θs[i], opts[i]; ind=append!(copy(ind),[i]), kwargs...)
     end
 end
 
@@ -558,6 +582,11 @@ function scale_α_helper!(opts::Vector, α_ratio::Real, θs, α::Real, scale_α:
 		scale_α_helper!(opts[i], α_ratio, θs[i], α, scale_α)
 	end
 end
+function scale_α_helper!(opts::Tuple, α_ratio::Real, θs, α::Real, scale_α::Bool)
+    @inbounds for i in eachindex(opts)
+        scale_α_helper!(opts[i], α_ratio, θs[i], α, scale_α)
+    end
+end
 rel_step_size(θ::AbstractVecOrMat) = sqrt(mean(abs2, θ))
 _scale_α_def = false
 
@@ -590,17 +619,17 @@ function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, 
 	if only_s
 		if is_tel_time_variable
 			if is_star_time_variable
-				total = AdamSubWorkspace([om.tel.lm.s, om.star.lm.s, rvs], l_total_s)
+				total = AdamSubWorkspace((om.tel.lm.s, om.star.lm.s, rvs), l_total_s)
 			else
-				total = AdamSubWorkspace([om.tel.lm.s, rvs], l_total_s)
+				total = AdamSubWorkspace((om.tel.lm.s, rvs), l_total_s)
 			end
 		elseif is_star_time_variable
-			total = AdamSubWorkspace([om.star.lm.s, rvs], l_total_s)
+			total = AdamSubWorkspace((om.star.lm.s, rvs), l_total_s)
 		else
-			total = AdamSubWorkspace([rvs], l_total_s)
+			total = AdamSubWorkspace((rvs,), l_total_s)
 		end
 	else
-		total = AdamSubWorkspace([vec(om.tel.lm), vec(om.star.lm), rvs], l_total)
+		total = AdamSubWorkspace((_lm_tuple(om.tel.lm), _lm_tuple(om.star.lm), rvs), l_total)
 	end
 	if is_tel_time_variable || is_star_time_variable
 		scale_α_helper!(total.opt[1:(is_tel_time_variable+is_star_time_variable)], α_ratio, total.θ, α, scale_α)
@@ -643,19 +672,19 @@ function FrozenTelWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=fal
 	if only_s
 		if is_tel_time_variable
 			if is_star_time_variable
-				total = AdamSubWorkspace([om.tel.lm.s, om.star.lm.s, rvs], l_frozen_tel_s)
+				total = AdamSubWorkspace((om.tel.lm.s, om.star.lm.s, rvs), l_frozen_tel_s)
 			else
-				total = AdamSubWorkspace([om.tel.lm.s, rvs], l_frozen_tel_s)
+				total = AdamSubWorkspace((om.tel.lm.s, rvs), l_frozen_tel_s)
 			end
 		elseif is_star_time_variable
-			total = AdamSubWorkspace([om.star.lm.s, rvs], l_frozen_tel_s)
+			total = AdamSubWorkspace((om.star.lm.s, rvs), l_frozen_tel_s)
 		else
-			total = AdamSubWorkspace([rvs], l_frozen_tel_s)
+			total = AdamSubWorkspace((rvs,), l_frozen_tel_s)
 		end
 	else
 		is_tel_time_variable ?
-			total = AdamSubWorkspace([om.tel.lm.s, vec(om.star.lm), rvs], l_frozen_tel) :
-			total = AdamSubWorkspace([vec(om.star.lm), rvs], l_frozen_tel)
+			total = AdamSubWorkspace((om.tel.lm.s, _lm_tuple(om.star.lm), rvs), l_frozen_tel) :
+			total = AdamSubWorkspace((_lm_tuple(om.star.lm), rvs), l_frozen_tel)
 	end
 	if is_tel_time_variable || is_star_time_variable
 		scale_α_helper!(total.opt[1:(is_tel_time_variable+is_star_time_variable)], α_ratio, total.θ, α, scale_α)

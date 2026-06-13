@@ -191,7 +191,7 @@ allequal(x) = all(y->y==x[1],x)
 
 Holds preprocessed data used to optimize SSOF models (including a matrix that approximates convolution with the instrument line spread function)
 """
-struct LSFData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
+struct LSFData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}, L<:Union{Vector{<:SparseMatrixCSC},SparseMatrixCSC}} <: Data
     "Observed normalized flux"
 	flux::AM
 	"Observed normalized variance"
@@ -207,8 +207,8 @@ struct LSFData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
 	"Pixel boundaries of the observed log wavelengths (after barycentric correction)"
 	log_λ_star_bounds::M
 	"Matrix that approximates convolution with the instrument line spread function"
-	lsf::Union{Vector{<:SparseMatrixCSC},SparseMatrixCSC}
-	function LSFData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_obs_bounds::M, log_λ_star::AM, log_λ_star_bounds::M, lsf::Union{Vector{<:SparseMatrixCSC},SparseMatrixCSC}) where {T<:Real, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}}
+	lsf::L
+	function LSFData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_obs_bounds::M, log_λ_star::AM, log_λ_star_bounds::M, lsf::L) where {T<:Real, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}, L<:Union{Vector{<:SparseMatrixCSC},SparseMatrixCSC}}
 		@assert size(flux) == size(var) == size(var_s) == size(log_λ_obs) == size(log_λ_star)
 		if typeof(lsf) <: Vector
 			@assert size(lsf[1], 1) == size(lsf[1], 2) == size(flux, 1)
@@ -217,7 +217,7 @@ struct LSFData{T<:Number, AM<:AbstractMatrix{T}, M<:Matrix{<:Number}} <: Data
 		else
 			@assert size(lsf, 1) == size(lsf, 2) == size(flux, 1)
 		end
-		return new{T, AM, M}(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_obs_bounds::M, log_λ_star::AM, log_λ_star_bounds::M, lsf)
+		return new{T, AM, M, L}(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_obs_bounds::M, log_λ_star::AM, log_λ_star_bounds::M, lsf)
 	end
 end
 function LSFData(flux::AM, var::AM, var_s::AM, log_λ_obs::AM, log_λ_star::AM, lsf::Union{Vector{<:SparseMatrixCSC},SparseMatrixCSC}) where {T<:Real, AM<:AbstractMatrix{T}}
@@ -977,6 +977,15 @@ function ChainRulesCore.rrule(::typeof(spectra_interp),
 	end
 	return y, spectra_interp_sparse_pullback
 end
+function ChainRulesCore.rrule(::typeof(spectra_interp),
+		model::AbstractMatrix, interp_helper::SparseMatrixCSC)
+	y = interp_helper * model
+	function spectra_interp_single_sparse_pullback(ȳ)
+		ȳ = ChainRulesCore.unthunk(ȳ)
+		return NoTangent(), interp_helper' * ȳ, NoTangent()
+	end
+	return y, spectra_interp_single_sparse_pullback
+end
 
 
 """
@@ -1253,13 +1262,13 @@ end
 
 
 """
-	model_prior(lm, om, key)
+	model_prior(lm, reg, sm)
 
-Calulate the model prior on `lm` with the regularization terms in `om.reg_` * `key`
+Calulate the model prior on `lm` with regularization coefficients `reg` and submodel `sm`.
+Taking `reg` and `sm` as direct arguments (rather than deriving them via dynamic getfield)
+keeps the argument types concrete so Mooncake can dispatch @from_rrule for gp_ℓ_precalc.
 """
-function model_prior(lm, om::OrderModel, key::Symbol)
-	reg = getfield(om, Symbol(:reg_, key))
-	sm = getfield(om, key)
+function model_prior(lm, reg::Dict, sm::Submodel)
 	isFullLinearModel = length(lm) > 2
 	val = 0.
 
@@ -1289,6 +1298,7 @@ function model_prior(lm, om::OrderModel, key::Symbol)
 	end
 	return val
 end
+model_prior(lm, om::OrderModel, key::Symbol) = model_prior(lm, getfield(om, Symbol(:reg_, key)), getfield(om, key))
 model_prior(lm::Union{FullLinearModel, TemplateModel}, om::OrderModel, key::Symbol) = model_prior(vec(lm), om, key)
 
 nonzero_key(reg, key) = haskey(reg, key) && reg[key] != 0
@@ -1311,16 +1321,16 @@ end
 
 Calulate the telluric model prior on `om.tel.lm` with the regularization terms in `om.reg_tel`
 """
-tel_prior(om::OrderModel) = tel_prior(om.tel.lm, om)
-tel_prior(lm, om::OrderModel) = model_prior(lm, om, :tel)
+tel_prior(om::OrderModel) = model_prior(om.tel.lm, om.reg_tel, om.tel)
+tel_prior(lm, om::OrderModel) = model_prior(lm, om.reg_tel, om.tel)
 
 """
 	star_prior(om)
 
 Calulate the stellar model prior on `om.star.lm` with the regularization terms in `om.star_tel`
 """
-star_prior(om::OrderModel) = star_prior(om.star.lm, om)
-star_prior(lm, om::OrderModel) = model_prior(lm, om, :star)
+star_prior(om::OrderModel) = model_prior(om.star.lm, om.reg_star, om.star)
+star_prior(lm, om::OrderModel) = model_prior(lm, om.reg_star, om.star)
 
 
 """
