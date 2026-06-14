@@ -246,3 +246,55 @@ end
 
     println()
 end
+
+@testset "EnzymeBackend nested-tuple θ for OrderModelDPCA (l_total)" begin
+    # Build a minimal DPCA model. l_total for DPCA inlines the spectral computation
+    # (tel_o, star_o, rv_o via positional args) so Enzyme sees all active variables
+    # through positional arguments rather than kwargs, ensuring correct activity tracking.
+    n_obs = 20
+    n_epochs = 4
+    log_λ_obs = collect(LinRange(8.78535, 8.78602, n_obs)) .+ 1e-5 .* (0:n_epochs-1)'
+    log_λ_star = log_λ_obs
+    flux = ones(n_obs, n_epochs) .+ 0.1 .* randn(n_obs, n_epochs)
+    flux = max.(flux, 1e-6)
+    var = fill(1e-4, n_obs, n_epochs)
+    d = SSOF.GenericData(flux, var, var, log_λ_obs, log_λ_star)
+    om = SSOF.OrderModel(d; dpca=true, n_comp_tel=1, n_comp_star=1, oversamp=false)
+    # initialize templates on the model grid (length differs from n_obs)
+    om.star.lm.μ .= 1 .+ 0.1 .* sin.(om.star.λ)
+    om.tel.lm.μ .= one(eltype(om.tel.lm.μ))
+    om.rv.lm.M[:, 1] .= SSOF.doppler_component(om.star.λ, om.star.lm.μ)
+    o = SSOF.Output(om, d)
+
+    l_total, _ = SSOF.loss_funcs_total(o, om, d)
+    θ = (SSOF._lm_tuple(om.tel.lm), SSOF._lm_tuple(om.star.lm), om.rv.lm.s)
+
+    cache_mc = SSOF.prepare_gradient(SSOF.MooncakeBackend(), l_total, θ)
+    val_mc, ∂θ_mc = SSOF.value_and_gradient!(cache_mc, l_total, θ)
+
+    cache_en = SSOF.prepare_gradient(SSOF.EnzymeBackend(), l_total, θ)
+    val_en, ∂θ_en = SSOF.value_and_gradient!(cache_en, l_total, θ)
+
+    @test isapprox(val_mc, val_en; rtol=1e-8)
+
+    # gradient w.r.t. star μ must include the doppler-basis path
+    ∂μ_mc = ∂θ_mc[2][3]
+    ∂μ_en = ∂θ_en[2][3]
+    @test isapprox(∂μ_mc, ∂μ_en; rtol=1e-4)
+
+    # finite-difference sanity on star μ gradient
+    function l_total_flat_μ(μ_flat)
+        tel_t, star_t, rv_s = θ
+        return l_total((tel_t, (star_t[1], star_t[2], μ_flat), rv_s))
+    end
+    fd_μ = est_∇(l_total_flat_μ, copy(om.star.lm.μ); dif=1e-6)
+
+    @test isapprox(∂μ_en, fd_μ; rtol=1e-3)
+    @test isapprox(∂μ_mc, fd_μ; rtol=1e-3)
+
+    ∂rv_en = ∂θ_en[3]
+    ∂rv_mc = ∂θ_mc[3]
+    @test isapprox(∂rv_mc, ∂rv_en; rtol=1e-4)
+
+    println()
+end

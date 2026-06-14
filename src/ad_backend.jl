@@ -2,7 +2,6 @@
 # Two functions form the full contract; implementing both is sufficient to add a backend.
 #
 # Remaining work (future PRs):
-# - DPCA mutation hoist: _eval_lm_vec in DPCA uses mutation; needs Const annotation or refactor.
 # - Enzyme.@import_rrule blocked by japi3 CallingConventionMismatchError (#2707);
 #   _eval_lm_inner uses @from_rrule for Mooncake only — Enzyme traces through correctly.
 # - Package extension (ext/ + weakdep) so Mooncake users don't pay Enzyme's compile cost.

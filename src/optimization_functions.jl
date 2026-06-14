@@ -25,11 +25,17 @@ __loss_diagnostic(tel, star, d::GenericData; kwargs...) =
 __loss_diagnostic(tel, star, d::LSFData; kwargs...) =
 	_χ²_loss(spectra_interp(total_model(tel, star), d.lsf), d; kwargs...)
 function _loss_diagnostic(o::Output, om::OrderModel, d::Data;
-	tel=nothing, star=nothing, rv=nothing, kwargs...)
+	tel=nothing, star=nothing, rv=nothing, doppler_basis=nothing, kwargs...)
     !isnothing(tel) ? tel_o = spectra_interp(_eval_lm_vec(om, tel; log_lm=log_lm(om.tel.lm)), om.t2o) : tel_o = o.tel
 	if typeof(om) <: OrderModelDPCA
 		!isnothing(star) ? star_o = spectra_interp(_eval_lm_vec(om, star; log_lm=log_lm(om.star.lm)), om.b2o) : star_o = o.star
-		!isnothing(rv) ? rv_o = spectra_interp(_eval_lm(om.rv.lm.M, rv), om.b2o) : rv_o = o.rv
+		if !isnothing(doppler_basis) && !isnothing(rv)
+			rv_o = spectra_interp(doppler_basis * rv, om.b2o)
+		elseif !isnothing(rv)
+			rv_o = spectra_interp(_eval_lm(om.rv.lm.M, rv), om.b2o)
+		else
+			rv_o = o.rv
+		end
 		return __loss_diagnostic(tel_o, star_o, rv_o, d; kwargs...)
 	end
 	if !isnothing(star)
@@ -54,14 +60,28 @@ _loss(o::Output, om::OrderModel, d::Data; kwargs...) = sum(_loss_diagnostic(o, o
 _loss(mws::ModelWorkspace; kwargs...) = _loss(mws.o, mws.om, mws.d; kwargs...)
 
 
+# Extract the star template μ from the `star` kwarg passed to loss functions.
+# The kwarg follows _lm_tuple / vec(lm) conventions:
+#   TemplateModel  → (μ,) or [μ]         → first element
+#   FullLinearModel → (M, s, μ) or [M,s,μ] → third element
+#   BaseLinearModel → (M, s) or [M,s]     → no μ, fall back to `fallback`
+_get_star_μ(::Nothing, fallback) = fallback
+_get_star_μ(t::Tuple{<:Any}, fallback) = t[1]
+_get_star_μ(t::Tuple{<:Any,<:Any,<:Any}, fallback) = t[3]
+_get_star_μ(t::Tuple{<:Any,<:Any}, fallback) = fallback
+_get_star_μ(v::AbstractVector, fallback) = length(v) == 3 ? v[3] : (length(v) == 1 ? v[1] : fallback)
+
 """
 	_loss_recalc_rv_basis(o, om, d; kwargs...)
 
-`_loss()` but including an AD-compliant way to recalcuate the Doppler basic vector 
+`_loss()` with a fresh Doppler basis computed from the current star template.
+The basis is passed as a `doppler_basis` kwarg (no mutation of `om.rv.lm.M`),
+so AD engines can differentiate correctly through μ → doppler basis → loss.
 """
-function _loss_recalc_rv_basis(o::Output, om::OrderModel, d::Data; kwargs...)
-	om.rv.lm.M .= doppler_component_AD(om.star.λ, om.star.lm.μ)
-	return _loss(o, om, d; kwargs...)
+function _loss_recalc_rv_basis(o::Output, om::OrderModel, d::Data; star=nothing, rv=nothing, kwargs...)
+	star_μ = _get_star_μ(star, om.star.lm.μ)
+	doppler_M = doppler_component_AD(om.star.λ, star_μ)
+	return _loss(o, om, d; star=star, rv=rv, doppler_basis=doppler_M, kwargs...)
 end
 _loss_recalc_rv_basis(mws::ModelWorkspace; kwargs...) = _loss_recalc_rv_basis(mws.o, mws.om, mws.d; kwargs...)
 
@@ -134,9 +154,22 @@ Create loss functions for changing
 Used to fit models with ADAM
 """
 function loss_funcs_total(o::Output, om::OrderModelDPCA, d::Data)
-    l_total(total) =
-		_loss_recalc_rv_basis(o, om, d; tel=total[1], star=total[2], rv=total[3]) +
-		tel_prior(total[1], om) + star_prior(total[2], om)
+    # Enzyme-safe: all active variables (tel_lm, star_lm, rv_s, doppler_M, *_o) flow
+    # through positional arguments, not kwargs. kwargs routing loses activity for
+    # freshly-allocated intermediate arrays (like doppler_M) under Enzyme's runtime
+    # activity check, which only tracks pointers in the original θ shadow.
+    function l_total(total)
+        tel_lm  = total[1]
+        star_lm = total[2]
+        rv_s    = total[3]
+        star_μ    = _get_star_μ(star_lm, om.star.lm.μ)
+        doppler_M = doppler_component_AD(om.star.λ, star_μ)
+        tel_o  = spectra_interp(_eval_lm_vec(om, tel_lm;  log_lm=log_lm(om.tel.lm)),  om.t2o)
+        star_o = spectra_interp(_eval_lm_vec(om, star_lm; log_lm=log_lm(om.star.lm)), om.b2o)
+        rv_o   = spectra_interp(doppler_M .* rv_s, om.b2o)
+        return sum(__loss_diagnostic(tel_o, star_o, rv_o, d)) +
+               tel_prior(tel_lm, om) + star_prior(star_lm, om)
+    end
 	is_tel_time_variable = is_time_variable(om.tel)
 	is_star_time_variable = is_time_variable(om.star)
     function l_total_s(total_s)
@@ -775,7 +808,7 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
 		end
 
 		# optionally make the stellar feature vectors orthagonal to a doppler shift
-		if rm_doppler && is_time_variable(mws.om.star.lm)  
+		if rm_doppler && is_time_variable(mws.om.star.lm)
 			if mws.om.star.lm.log
 				dop_comp_holder[:] = doppler_component_log(mws.om.star.λ, mws.om.star.lm.μ)
 			else
@@ -784,6 +817,13 @@ function train_OrderModel!(mws::AdamWorkspace; ignore_regularization::Bool=false
 			for i in axes(mws.om.star.lm.M, 2)
 				EMPCA._reorthogonalize_no_renorm!(view(mws.om.star.lm.M, :, i), dop_comp_holder)
 			end
+		end
+
+		# keep the stored doppler basis current; _loss_recalc_rv_basis no longer
+		# mutates om.rv.lm.M, so refresh it here for downstream consumers
+		# (rv_model, Output!, and score-only loss paths read om.rv.lm.M directly)
+		if typeof(mws.om) <: OrderModelDPCA
+			mws.om.rv.lm.M[:, 1] .= doppler_component(mws.om.star.λ, mws.om.star.lm.μ)
 		end
 
 		# make sure the interpolation locations are still correct
