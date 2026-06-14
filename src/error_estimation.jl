@@ -6,7 +6,7 @@ using Base.Threads
 
 Estimate the uncertainties for the best-fit parameters `x` for ~Gaussian function `ℓ` based on the local curvature
 """
-function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int=7, use_gradient::Bool=false, multithread::Bool=nthreads() > 3, print_every::Int=10, kwargs...)
+function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int=7, use_gradient::Bool=false, multithread::Bool=nthreads() > 3, print_every::Int=10, backend::ADBackend=EnzymeBackend(), kwargs...)
 	
 	# intialize arrays
 	σs = Array{Float64}(undef, length(x))
@@ -16,7 +16,7 @@ function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int
 	end
 
 	# use AD to get gradient function, if desired (slightly more precise but much slower)
-	if use_gradient; _cache = prepare_gradient(MooncakeBackend(), ℓ, Array{Float64}(undef, size(x))) end
+	if use_gradient; _cache = prepare_gradient(backend, ℓ, Array{Float64}(undef, size(x))) end
 
 	# use this to scale size of curvature probe
 	_std = std(x)
@@ -32,7 +32,7 @@ function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int
 			local _x = copy(x)
 			local _x_test = Array{Float64}(undef, n)
 			local _ℓs = Array{Float64}(undef, n)
-			local _thread_cache = use_gradient ? prepare_gradient(MooncakeBackend(), ℓ, _x) : nothing
+			local _thread_cache = use_gradient ? prepare_gradient(backend, ℓ, _x) : nothing
 			for ii in eachindex(_todo)
 				k = _todo[ii]
 				_x_test .= _x[k] .+ LinRange(-_std, _std, n)

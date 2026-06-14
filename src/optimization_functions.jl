@@ -153,6 +153,11 @@ Create loss functions for changing
 
 Used to fit models with ADAM
 """
+# Migration note (Nabla → Enzyme):
+# The Doppler basis is recomputed inline from `om.star.lm.μ` inside
+# `l_total`, so the gradient flows ∂loss/∂μ → ∂doppler_basis. This
+# differs from the pre-port Nabla path, which treated the basis as a
+# constant. The Wobble path is unaffected.
 function loss_funcs_total(o::Output, om::OrderModelDPCA, d::Data)
     # Enzyme-safe: all active variables (tel_lm, star_lm, rv_s, doppler_M, *_o) flow
     # through positional arguments, not kwargs. kwargs routing loses activity for
@@ -442,7 +447,7 @@ struct AdamSubWorkspace{T,C,L<:Function}
 		return new{T,C,L}(θ, opt, as, l, cache)
 	end
 end
-function AdamSubWorkspace(θ, l::Function; backend::ADBackend=MooncakeBackend(), kwargs...)
+function AdamSubWorkspace(θ, l::Function; backend::ADBackend=EnzymeBackend(), kwargs...)
 	# kwargs (om, build_θ, build_l, o, d) carry aliasing info needed by the
 	# EnzymeBackend nested-tuple path. Mooncake's prepare_gradient ignores them.
 	cache = prepare_gradient(backend, l, θ; kwargs...)
@@ -859,7 +864,7 @@ Output!(mws::ModelWorkspace) = Output!(mws.o, mws.om, mws.d)
 
 Create an objective object for Optim from `loss` that uses a flattened verison of `pars`
 """
-function opt_funcs(loss::Function, pars::AbstractVecOrMat; backend::ADBackend=MooncakeBackend())
+function opt_funcs(loss::Function, pars::AbstractVecOrMat; backend::ADBackend=EnzymeBackend())
     flat_initial_params, unflatten = flatten(pars)  # unflatten returns Vector of untransformed params
     f = loss ∘ unflatten
 	cache = prepare_gradient(backend, f, flat_initial_params)
