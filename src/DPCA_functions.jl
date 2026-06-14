@@ -73,8 +73,8 @@ function doppler_component_AD(λ::Vector{T}, flux::Vector{T}) where {T<:Real}
 end
 doppler_component_AD(λ::Vector{T}, flux::Matrix{T}, kwargs...) where {T<:Real} = 
 	doppler_component_AD(λ, vec(mean(flux, dims=2)), kwargs...)
-doppler_component_log_AD(λ::AbstractVector{T}, flux::Vector{T}) where {T<:Real} = 
-	doppler_component_log_AD(λ, flux) ./ flux
+doppler_component_log_AD(λ::AbstractVector{T}, flux::Vector{T}) where {T<:Real} =
+	doppler_component_AD(λ, flux) ./ flux
 
 
 """
