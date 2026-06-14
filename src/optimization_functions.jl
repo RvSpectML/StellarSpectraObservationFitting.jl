@@ -612,7 +612,7 @@ struct TotalWorkspace <: AdamWorkspace
 	only_s::Bool
 end
 
-function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def, backend::ADBackend=MooncakeBackend())
+function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def, backend::ADBackend=EnzymeBackend())
 	l_total, l_total_s = loss_funcs_total(o, om, d)
 	α_ratio = α * sqrt(length(om.tel.lm.μ)) # = α / rel_step_size(om.tel.lm.M) assuming M starts as L2 normalized basis vectors. Need to use this instead because TemplateModels don't have basis vectors
 	is_tel_time_variable = is_time_variable(om.tel)
@@ -673,7 +673,7 @@ struct FrozenTelWorkspace <: AdamWorkspace
 end
 
 
-function FrozenTelWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def, backend::ADBackend=MooncakeBackend())
+function FrozenTelWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def, backend::ADBackend=EnzymeBackend())
 	l_frozen_tel, l_frozen_tel_s = loss_funcs_frozen_tel(o, om, d)
 	α_ratio = α * sqrt(length(om.tel.lm.μ)) # = α / rel_step_size(om.tel.lm.M) assuming M starts as L2 normalized basis vectors. Need to use this instead because TemplateModels don't have basis vectors
 	is_tel_time_variable = is_time_variable(om.tel)
