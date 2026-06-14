@@ -1,11 +1,10 @@
 # Backend seam: isolates the AD engine from the optimizers.
 # Two functions form the full contract; implementing both is sufficient to add a backend.
 #
-# Remaining EnzymeBackend work (out of scope for this PR):
-# - DPCA mutation hoist (nabla-removal-plan.md Phase 2 step 6).
+# Remaining work (future PRs):
+# - DPCA mutation hoist: _eval_lm_vec in DPCA uses mutation; needs Const annotation or refactor.
 # - Enzyme.@import_rrule blocked by japi3 CallingConventionMismatchError (#2707);
-#   native EnzymeRules for spectra_interp / gp_ℓ_precalc / _eval_lm_inner pending.
-# - EnzymeBackend() added to backends_to_test in the Phase 3 gradient cross-check testset.
+#   _eval_lm_inner uses @from_rrule for Mooncake only — Enzyme traces through correctly.
 # - Package extension (ext/ + weakdep) so Mooncake users don't pay Enzyme's compile cost.
 
 abstract type ADBackend end
