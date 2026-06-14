@@ -3,6 +3,7 @@ import TemporalGPs; TGP = TemporalGPs
 using SparseArrays
 import StellarSpectraObservationFitting as SSOF
 using LinearAlgebra
+import Optim
 
 println("Testing...")
 
@@ -328,6 +329,94 @@ end
 
     expected = log_doppler_fd(λ, flux)
     @test isapprox(result, expected; rtol=1e-10)
+
+    println()
+end
+
+# Shared tiny Wobble dataset used by Tasks 3a, 3b, 3c
+function _make_tiny_wobble_data(n_obs, n_epochs)
+    log_λ_obs = collect(LinRange(8.78535, 8.78602, n_obs)) .+ 1e-5 .* (0:n_epochs-1)'
+    log_λ_star = log_λ_obs
+    flux = ones(n_obs, n_epochs) .+ 0.1 .* randn(n_obs, n_epochs)
+    flux = max.(flux, 1e-6)
+    var = fill(1e-4, n_obs, n_epochs)
+    return SSOF.GenericData(flux, var, var, log_λ_obs, log_λ_star)
+end
+
+@testset "Task 3a: opt_funcs + Optim.optimize with EnzymeBackend" begin
+    # Verifies that opt_funcs with EnzymeBackend drives L-BFGS to the same minimum
+    # as MooncakeBackend, confirming the Enzyme flat-vector gradient is correct for
+    # the loss ∘ unflatten composition used by all Optim workspaces.
+    d = _make_tiny_wobble_data(20, 4)
+    om = SSOF.OrderModel(d; n_comp_tel=1, n_comp_star=1, oversamp=false)
+    o = SSOF.Output(om, d)
+
+    l_telstar, _, _ = SSOF.loss_funcs_telstar(o, om, d)
+    pars = [vec(om.tel.lm), vec(om.star.lm)]
+    loss_init = l_telstar(pars)
+
+    p0_en, obj_en, _ = SSOF.opt_funcs(l_telstar, pars; backend=SSOF.EnzymeBackend())
+    result_en = Optim.optimize(obj_en, copy(p0_en), Optim.LBFGS(), Optim.Options(iterations=5))
+
+    p0_mc, obj_mc, _ = SSOF.opt_funcs(l_telstar, pars; backend=SSOF.MooncakeBackend())
+    result_mc = Optim.optimize(obj_mc, copy(p0_en), Optim.LBFGS(), Optim.Options(iterations=5))
+
+    @test Optim.minimum(result_en) < loss_init
+    @test isapprox(Optim.minimum(result_en), Optim.minimum(result_mc); rtol=1e-8)
+
+    println()
+end
+
+@testset "Task 3b: improve_model! end-to-end smoke test with EnzymeBackend" begin
+    # Checks that improve_model! on a TotalWorkspace (EnzymeBackend default) decreases
+    # the loss and leaves finite RVs — exercises the full Adam + finalize_scores! path.
+    d = _make_tiny_wobble_data(30, 4)
+    om = SSOF.OrderModel(d; n_comp_tel=1, n_comp_star=1, oversamp=false)
+    mws = SSOF.TotalWorkspace(om, d)  # EnzymeBackend() by default
+
+    loss_before = SSOF._loss(mws)
+    SSOF.improve_model!(mws; iter=20, verbose=false)
+    loss_after = SSOF._loss(mws)
+
+    @test loss_after < loss_before
+    @test all(isfinite, mws.om.rv)
+
+    println()
+end
+
+@testset "Task 3c: LSFData Enzyme gradient through spectra_interp sparse rule" begin
+    # Exercises the Enzyme rule at ad_backend.jl:266-291 for spectra_interp with a
+    # SparseMatrixCSC. The LSF is a tridiagonal smoothing kernel; d.lsf is captured
+    # as Const inside the loss closure, and the gradient flows through lsf' * ∂Y.
+    n_obs = 15
+    n_epochs = 3
+    log_λ_obs = collect(LinRange(8.78535, 8.78590, n_obs)) .+ 1e-5 .* (0:n_epochs-1)'
+    log_λ_star = log_λ_obs
+    flux = ones(n_obs, n_epochs) .+ 0.05 .* randn(n_obs, n_epochs)
+    flux = max.(flux, 1e-6)
+    var = fill(1e-4, n_obs, n_epochs)
+    lsf = spdiagm(0 => fill(0.6, n_obs), -1 => fill(0.2, n_obs-1), 1 => fill(0.2, n_obs-1))
+    d = SSOF.LSFData(flux, var, var, log_λ_obs, log_λ_star, lsf)
+    om = SSOF.OrderModel(d; n_comp_tel=1, n_comp_star=1, oversamp=false)
+    o = SSOF.Output(om, d)
+
+    l_telstar, _, _ = SSOF.loss_funcs_telstar(o, om, d)
+    pars = [vec(om.tel.lm), vec(om.star.lm)]
+    p0_flat, unflatten = SSOF.flatten(pars)
+    f = l_telstar ∘ unflatten
+
+    cache_mc = SSOF.prepare_gradient(SSOF.MooncakeBackend(), f, copy(p0_flat))
+    val_mc, ∂_mc = SSOF.value_and_gradient!(cache_mc, f, copy(p0_flat))
+
+    cache_en = SSOF.prepare_gradient(SSOF.EnzymeBackend(), f, copy(p0_flat))
+    val_en, ∂_en = SSOF.value_and_gradient!(cache_en, f, copy(p0_flat))
+
+    @test isapprox(val_mc, val_en; rtol=1e-8)
+    @test isapprox(∂_mc, ∂_en; rtol=1e-6)
+
+    # FD check on a small slice to confirm the gradients are correct
+    fd = est_∇(f, copy(p0_flat); dif=1e-6, inds=1:min(10, length(p0_flat)))
+    @test isapprox(∂_en[1:min(10, length(p0_flat))], fd; rtol=1e-3)
 
     println()
 end
