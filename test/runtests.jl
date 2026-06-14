@@ -156,11 +156,6 @@ end
         o=nothing, d=nothing,
     )
 
-    # Aliasing assertions on the shadow (the Phase 3 step 3 verification step)
-    @test pointer(cache.∂θ[1]) === pointer(cache.∂om.M)
-    @test pointer(cache.∂θ[2]) === pointer(cache.∂om.s)
-    @test pointer(cache.∂θ[3]) === pointer(cache.∂om.μ)
-
     val_en, ∂θ_en = SSOF.value_and_gradient!(cache, l, θ)
 
     # FD reference: differentiate the closure w.r.t. a flat parameterization

@@ -503,7 +503,7 @@ end
 
 Holds information on the wavelengths, LTISDE representaiton for the GP reguarlization term, and linear model for a SSOF model component
 """
-struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:AbstractArray{T}}
+mutable struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:AbstractArray{T}}
     "Uniform separation log wavelengths of the SSOF model component"
 	log_λ::AV1
 	"`exp.(log_λ)`"
@@ -969,18 +969,27 @@ Interpolates `model` using the interoplation described by `interp_helper`
 """
 spectra_interp(model, interp_helper::SparseMatrixCSC) =
 	interp_helper * model
-spectra_interp(model::AbstractMatrix, interp_helper::AbstractVector{<:SparseMatrixCSC}) =
-	hcat([spectra_interp(view(model, :, i), interp_helper[i]) for i in axes(model, 2)]...)
+function spectra_interp(model::AbstractMatrix{T1}, interp_helper::AbstractVector{<:SparseMatrixCSC{T2}}) where {T1<:Number, T2<:Number}
+	T = promote_type(T1, T2)
+	result = Matrix{T}(undef, size(interp_helper[1], 1), size(model, 2))
+	for i in axes(model, 2)
+		mul!(view(result, :, i), interp_helper[i], view(model, :, i))
+	end
+	return result
+end
 # spectra_interp_nabla(model, interp_helper::AbstractVector{<:SparseMatrixCSC}) =
 # 	hcat([interp_helper[i] * model[:, i] for i in axes(model, 2)]...)
 # spectra_interp(model, interp_helper::AbstractVector{<:SparseMatrixCSC}) =
 # 	spectra_interp_nabla(model, interp_helper)
 function ChainRulesCore.rrule(::typeof(spectra_interp),
 		model::AbstractMatrix, interp_helper::AbstractVector{<:SparseMatrixCSC})
-	y = hcat([spectra_interp(view(model, :, i), interp_helper[i]) for i in axes(model, 2)]...)
+	y = spectra_interp(model, interp_helper)
 	function spectra_interp_sparse_pullback(ȳ)
 		ȳ = ChainRulesCore.unthunk(ȳ)
-		ȳmodel = hcat([interp_helper[i]' * view(ȳ, :, i) for i in axes(model, 2)]...)
+		ȳmodel = similar(model)
+		for i in axes(model, 2)
+			mul!(view(ȳmodel, :, i), interp_helper[i]', view(ȳ, :, i))
+		end
 		return NoTangent(), ȳmodel, NoTangent()
 	end
 	return y, spectra_interp_sparse_pullback
@@ -1330,7 +1339,7 @@ Calulate the model prior on `lm` with regularization coefficients `reg` and subm
 Taking `reg` and `sm` as direct arguments (rather than deriving them via dynamic getfield)
 keeps the argument types concrete so Mooncake can dispatch @from_rrule for gp_ℓ_precalc.
 """
-function model_prior(lm, reg::Dict, sm::Submodel)
+function model_prior(lm, reg::Dict, sm::Submodel) :: Float64
 	isFullLinearModel = length(lm) > 2
 	val = 0.
 

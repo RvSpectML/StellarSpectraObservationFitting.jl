@@ -267,6 +267,12 @@ A version of `gp_ℓ()` using the coefficients calculated by `gp_Δℓ_coefficie
 """
 gp_ℓ_precalc(Δℓ_coeff::AbstractMatrix, x::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix; kwargs...) =
     gp_ℓ(x, A_k, Σ_k; kwargs...)
+# No-kwargs overload: Enzyme requires a non-kwcall dispatch target for the native
+# augmented_primal rule below. Without this, Julia routes no-kwarg calls through the
+# kwfunc machinery (because the kwargs... method exists), causing Enzyme's custom-rule
+# lookup to use the kwfunc path and miss the native rule.
+gp_ℓ_precalc(Δℓ_coeff::AbstractMatrix, x::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix) :: Float64 =
+    gp_ℓ(x, A_k, Σ_k)
 
 
 """
@@ -301,6 +307,136 @@ Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(gp_ℓ_precalc), Matrix{Fl
 # AbstractArray ⊆ AbstractArray and StaticMatrix ⊆ AbstractMatrix, and ChainRulesCore dispatches
 # correctly at runtime since the concrete primal type (Matrix{Float64}) satisfies AbstractMatrix.
 Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(gp_ℓ_precalc), AbstractArray, AbstractVector, AbstractMatrix, AbstractMatrix}
+# Native Enzyme rule for gp_ℓ_precalc: bypasses the Union-type issue in gp_ℓ's range
+# iteration (for k in 1:n → iterate returns Union{Nothing,Tuple} that Enzyme cannot
+# type-analyze). Enzyme.@import_rrule cannot be used: it generates a japi3 reverse
+# function that Enzyme 0.13 does not support on any Julia version yet
+# (EnzymeAD/Enzyme.jl#2707). The math here mirrors the ChainRulesCore rrule above.
+function Enzyme.EnzymeRules.augmented_primal(
+    config::Enzyme.EnzymeRules.RevConfig,
+    ::Enzyme.Const{typeof(gp_ℓ_precalc)},
+    RT::Type,
+    Δℓ_coeff::Enzyme.Annotation,
+    x::Enzyme.Annotation,
+    A_k::Enzyme.Annotation,
+    Σ_k::Enzyme.Annotation,
+)
+    primal_val = gp_ℓ_precalc(Δℓ_coeff.val, x.val, A_k.val, Σ_k.val)::Float64
+    shadow_val = Enzyme.EnzymeRules.needs_shadow(config) ? zero(primal_val) : nothing
+    # gp_ℓ_precalc's untyped args cause Julia to infer Any, so Enzyme passes
+    # RT=Duplicated{Any}. Override with Active{Float64} for a concrete isbits struct.
+    return Enzyme.EnzymeRules.augmented_rule_return_type(typeof(config), Enzyme.Active{Float64}, Nothing)(
+        Enzyme.EnzymeRules.needs_primal(config) ? primal_val : nothing,
+        shadow_val,
+        nothing)
+end
+function Enzyme.EnzymeRules.reverse(
+    ::Enzyme.EnzymeRules.RevConfig,
+    ::Enzyme.Const{typeof(gp_ℓ_precalc)},
+    dret::Enzyme.Active,
+    ::Nothing,
+    Δℓ_coeff::Enzyme.Annotation,
+    x::Enzyme.Annotation,
+    A_k::Enzyme.Annotation,
+    Σ_k::Enzyme.Annotation,
+)
+    if !(x isa Enzyme.Const)
+        x.dval .+= dret.val .* Δℓ_precalc(Δℓ_coeff.val, x.val, A_k.val, Σ_k.val, H_k, P∞)
+    end
+    return (nothing, nothing, nothing, nothing)
+end
+
+# Native Enzyme rule for model_prior: bypasses Dict access inside the function body.
+# Dict access at the LLVM level involves pointer operations (stored as
+# Base.RefValue{Float64} in Enzyme's generic tape), which causes
+# EnzymeNonScalarReturnException in runtime_generic_rev for *.
+# reg and sm are always Const (never functions of optimized parameters);
+# lm is the only active argument. Math mirrors the existing ChainRulesCore
+# rrule for gp_ℓ_precalc and uses Δℓ_precalc for the GP gradient terms.
+function Enzyme.EnzymeRules.augmented_primal(
+    config::Enzyme.EnzymeRules.RevConfig,
+    ::Enzyme.Const{typeof(model_prior)},
+    RT::Type,
+    lm::Enzyme.Annotation,
+    reg::Enzyme.Annotation,
+    sm::Enzyme.Annotation,
+)
+    primal_val = model_prior(lm.val, reg.val, sm.val)::Float64
+    shadow_val = Enzyme.EnzymeRules.needs_shadow(config) ? zero(primal_val) : nothing
+    # model_prior's lm arg is untyped, so Julia infers Any for its return.
+    # Enzyme passes RT=Duplicated{Any}, which would produce AugmentedReturn{Any,...}
+    # (non-isbits). Override with Active{Float64} to force an isbits struct so
+    # Enzyme can extract the scalar primal directly without pointer indirection.
+    return Enzyme.EnzymeRules.augmented_rule_return_type(typeof(config), Enzyme.Active{Float64}, Nothing)(
+        Enzyme.EnzymeRules.needs_primal(config) ? primal_val : nothing,
+        shadow_val,
+        nothing)
+end
+
+function Enzyme.EnzymeRules.reverse(
+    ::Enzyme.EnzymeRules.RevConfig,
+    ::Enzyme.Const{typeof(model_prior)},
+    dret::Enzyme.Active,
+    ::Nothing,
+    lm::Enzyme.Annotation,
+    reg::Enzyme.Annotation,
+    sm::Enzyme.Annotation,
+)
+    if !(lm isa Enzyme.Const)
+        _model_prior_∂lm!(lm.dval, lm.val, reg.val, sm.val, dret.val)
+    end
+    return (nothing, nothing, nothing)
+end
+
+# Accumulate ∂model_prior/∂lm into ∂lm, evaluated at the taped primal lm_val.
+# Gradient derivations:
+#   L2(x) = sum(x²)      → ∂/∂x = 2x
+#   L1(x) = sum(|x|)     → ∂/∂x = sign(x)
+#   gp_ℓ_precalc(Δℓ, x, A, Σ) → ∂/∂x = Δℓ_precalc(Δℓ, x, A, Σ, H_k, P∞)
+#   shared_attention(M) = sum(M'M) - sum(diag(M'M))
+#                      → ∂/∂M = 2*(row_sum(M)*ones' - M)  where row_sum = sum(M;dims=2)
+function _model_prior_∂lm!(∂lm, lm_val, reg, sm, dr)
+    isFullLinearModel = length(lm_val) > 2
+    μ_idx = 1 + 2 * isFullLinearModel  # 3 for FullLinearModel, 1 otherwise
+
+    if haskey(reg, :GP_μ) || haskey(reg, :L2_μ) || haskey(reg, :L1_μ)
+        μ_mod = lm_val[μ_idx] .- 1
+        if haskey(reg, :L2_μ)
+            ∂lm[μ_idx] .+= (dr * 2 * reg[:L2_μ]) .* μ_mod
+        end
+        if haskey(reg, :L1_μ)
+            ∂lm[μ_idx] .+= (dr * reg[:L1_μ]) .* sign.(μ_mod)
+            if haskey(reg, :L1_μ₊_factor)
+                ∂lm[μ_idx] .+= (dr * reg[:L1_μ₊_factor] * reg[:L1_μ]) .* Float64.(μ_mod .> 0)
+            end
+        end
+        if haskey(reg, :GP_μ)
+            ∂lm[μ_idx] .+= (dr * (-reg[:GP_μ])) .* Δℓ_precalc(sm.Δℓ_coeff, μ_mod, sm.A_sde, sm.Σ_sde, H_k, P∞)
+        end
+    end
+
+    if isFullLinearModel
+        M = lm_val[1]
+        s = lm_val[2]
+        if haskey(reg, :shared_M)
+            ∂lm[1] .+= (dr * 2 * reg[:shared_M]) .* (sum(M; dims=2) .* ones(1, size(M, 2)) .- M)
+        end
+        if haskey(reg, :L2_M)
+            ∂lm[1] .+= (dr * 2 * reg[:L2_M]) .* M
+        end
+        if haskey(reg, :L1_M)
+            ∂lm[1] .+= (dr * reg[:L1_M]) .* sign.(M)
+        end
+        if haskey(reg, :GP_M)
+            for i in 1:size(M, 2)
+                ∂lm[1][:, i] .+= (dr * (-reg[:GP_M])) .* Δℓ_precalc(sm.Δℓ_coeff, M[:, i], sm.A_sde, sm.Σ_sde, H_k, P∞)
+            end
+        end
+        if nonzero_key(reg, :L1_M) || nonzero_key(reg, :L2_M) || nonzero_key(reg, :GP_M)
+            ∂lm[2] .+= (dr * 2) .* s
+        end
+    end
+end
 
 
 # sm = mws.om.tel
