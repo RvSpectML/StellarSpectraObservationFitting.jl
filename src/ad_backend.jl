@@ -120,7 +120,7 @@ Enzyme.EnzymeRules.inactive_type(::Type{<:StellarInterpolationHelper}) = true
 # that are never a function of the optimized parameters. Declaring Dict as
 # inactive prevents Enzyme from attempting to construct shadows for dict
 # internals when activity analysis fails to propagate Const through field access.
-Enzyme.EnzymeRules.inactive_type(::Type{<:AbstractDict}) = true
+Enzyme.EnzymeRules.inactive_type(::Type{<:Dict{Symbol, <:Real}}) = true
 
 # Cache for the flat-vector path. `∂l` is the shadow closure (preserves any
 # alias-into-captured-state structure via Enzyme.make_zero's IdDict tracking).

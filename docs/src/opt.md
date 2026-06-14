@@ -10,3 +10,10 @@ This object can be passed to a function like [`StellarSpectraObservationFitting.
 StellarSpectraObservationFitting.improve_model!
 ```
 
+## DPCA loss semantics (migration note)
+
+For `OrderModelDPCA` models, `loss_funcs_total` recomputes the Doppler basis inline from `om.star.lm.μ` on every call.
+This means the gradient flows ∂loss/∂μ → ∂doppler\_basis, so optimizing μ automatically updates the Doppler component.
+The pre-port Nabla implementation treated the Doppler basis as a constant (no gradient through μ → basis).
+The Wobble path (`OrderModelWobble`) is unaffected by this change.
+
