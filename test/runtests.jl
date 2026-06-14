@@ -298,3 +298,36 @@ end
 
     println()
 end
+
+@testset "doppler_component_log_AD agrees with finite differences" begin
+    # Verifies the fix to the infinite-recursion bug (was: called itself instead of
+    # doppler_component_AD). Checks that the log-space variant equals
+    # doppler_component_AD(λ, flux) ./ flux, consistent with doppler_component_log.
+    λ = collect(LinRange(5000.0, 6000.0, 30))
+    flux = 1.0 .+ 0.2 .* sin.(λ ./ 500)
+
+    result = SSOF.doppler_component_log_AD(λ, flux)
+
+    # FD reference: numerical derivative of log(flux) w.r.t. log(λ)
+    function log_doppler_fd(λv, fv)
+        log_fv = log.(fv)
+        dlog_fdpix = similar(fv)
+        dlog_fdpix[1] = log_fv[2] - log_fv[1]
+        dlog_fdpix[end] = log_fv[end] - log_fv[end-1]
+        for i in 2:(length(fv)-1)
+            dlog_fdpix[i] = (log_fv[i+1] - log_fv[i-1]) / 2
+        end
+        dλdpix = similar(λv)
+        dλdpix[1] = λv[2] - λv[1]
+        dλdpix[end] = λv[end] - λv[end-1]
+        for i in 2:(length(λv)-1)
+            dλdpix[i] = (λv[i+1] - λv[i-1]) / 2
+        end
+        return dlog_fdpix .* (λv ./ dλdpix)
+    end
+
+    expected = log_doppler_fd(λ, flux)
+    @test isapprox(result, expected; rtol=1e-10)
+
+    println()
+end
