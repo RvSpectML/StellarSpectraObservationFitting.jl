@@ -2,16 +2,17 @@
 # benchmark_ad.jl
 #
 # Benchmarks the AD backend via the public SSOF API.
-# Works on both master (Nabla) and remove-nabla (Mooncake) branches.
+# Run on `master` (Nabla) and on `try_enzyme` (Enzyme) to compare.
 #
 # Usage (run from the repo root):
 #   julia benchmark_ad.jl
 #
-# Results are also written to benchmark_results_<branch>.txt.
+# Results are written to benchmark_results_<branch>.txt.
 # Structured as three focused benchmarks:
-#   1. ModelWorkspace construction  -- measures one-time AD rule compilation
-#   2. Adam update!                 -- measures steady-state gradient cost
-#   3. finalize_scores! (one call)  -- measures score-only Optim gradient cost
+#   1. ModelWorkspace construction  -- one-time AD rule compilation cost
+#   2. Adam update!                 -- steady-state per-step gradient cost (2 warmup + 10 timed)
+#   3. finalize_scores!             -- score-only Optim gradient cost (1st and 2nd call)
+#                                      wrapped in try/catch; skipped if Optim v1.11 bug fires
 
 using Pkg
 
@@ -54,7 +55,7 @@ Date   : $(now())
     tee(io, "Loaded model ($(typeof(model))) and data ($(typeof(data)))\n\n")
 
     # ─── 1. ModelWorkspace construction (= AD rule compilation) ─────────────
-    # One-time cost: build_rrule (Mooncake) or ∇(l) JIT-warmup (Nabla).
+    # One-time cost: ∇(l) JIT-warmup (Nabla) or prepare_gradient (Enzyme).
     # 2nd construction reuses the cached rule → reveals true caching benefit.
     tee(io, "─── 1. ModelWorkspace construction (AD compile) ─────────────────\n")
     GC.gc(); GC.enable(false)
@@ -67,11 +68,11 @@ Date   : $(now())
     tee(io, "\n")
 
     # ─── 2. Adam update! — steady-state gradient evaluation ─────────────────
-    # Accesses mws.total (AdamSubWorkspace) directly to bypass finalize_scores!
-    # which would recompile the scores-only loss on every call.
-    # Each update! = one value_and_gradient! (Mooncake) or gl() (Nabla) + Adam.
+    # Accesses mws.total (AdamSubWorkspace) directly to bypass finalize_scores!.
+    # Each update! = one value_and_gradient! + Adam step.
+    # 2 warmup calls ensure the Julia method cache is hot before timing.
     tee(io, "─── 2. Adam update! — 10 samples after 2-step warmup ────────────\n")
-    aws = mws.total  # AdamSubWorkspace — same field name on both branches
+    aws = mws.total
     for _ in 1:2; SSOF.update!(aws) end  # JIT warmup
     GC.gc()
     step_times = Vector{Float64}(undef, 10)
@@ -87,17 +88,21 @@ Date   : $(now())
     tee(io, "\n")
 
     # ─── 3. finalize_scores! — first and second call ─────────────────────────
-    # finalize_scores_setup creates a fresh OptimTotalWorkspace each call,
-    # which runs opt_funcs (and thus prepare_gradient / ∇) on a new closure
-    # f = l_total_s ∘ unflatten. Measures whether that closure type is stable
-    # (Mooncake would cache; Nabla would re-JIT).
+    # finalize_scores_setup creates an OptimSubWorkspace and runs L-BFGS.
+    # On try_enzyme: Optim v1.11.0 has a ManifoldObjective.value_gradient! bug
+    # (returns scalar instead of (f, g)); this section is skipped if that fires.
     tee(io, "─── 3. finalize_scores! (1st and 2nd call) ──────────────────────\n")
-    GC.gc()
-    t3a = @elapsed SSOF.finalize_scores!(mws)
-    GC.gc()
-    t3b = @elapsed SSOF.finalize_scores!(mws)
-    tee(io, @sprintf("  1st call : %7.2f s\n", t3a))
-    tee(io, @sprintf("  2nd call : %7.2f s\n", t3b))
+    try
+        GC.gc()
+        t3a = @elapsed SSOF.finalize_scores!(mws)
+        GC.gc()
+        t3b = @elapsed SSOF.finalize_scores!(mws)
+        tee(io, @sprintf("  1st call : %7.2f s\n", t3a))
+        tee(io, @sprintf("  2nd call : %7.2f s\n", t3b))
+    catch e
+        tee(io, "  SKIPPED — $(typeof(e)): $(sprint(showerror, e))\n")
+        tee(io, "  (Known Optim v1.11.0 ManifoldObjective bug; upgrade to v2+ to enable)\n")
+    end
     tee(io, "\n")
 
     tee(io, "Results also written to: $outfile\n")

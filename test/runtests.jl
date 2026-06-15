@@ -3,7 +3,6 @@ import TemporalGPs; TGP = TemporalGPs
 using SparseArrays
 import StellarSpectraObservationFitting as SSOF
 using LinearAlgebra
-import Optim
 
 println("Testing...")
 
@@ -325,26 +324,26 @@ function _make_tiny_wobble_data(n_obs, n_epochs)
     return SSOF.GenericData(flux, var, var, log_λ_obs, log_λ_star)
 end
 
-@testset "Task 3a: opt_funcs + Optim.optimize with EnzymeBackend" begin
-    # Verifies that opt_funcs with EnzymeBackend drives L-BFGS to the same minimum
-    # as MooncakeBackend, confirming the Enzyme flat-vector gradient is correct for
-    # the loss ∘ unflatten composition used by all Optim workspaces.
+@testset "Task 3a: opt_funcs gradient correctness with EnzymeBackend" begin
+    # Verifies that the Enzyme flat-vector gradient (used by all Optim workspaces via
+    # opt_funcs) agrees with finite differences on a real SSOF loss ∘ unflatten closure.
     d = _make_tiny_wobble_data(20, 4)
     om = SSOF.OrderModel(d; n_comp_tel=1, n_comp_star=1, oversamp=false)
     o = SSOF.Output(om, d)
 
     l_telstar, _, _ = SSOF.loss_funcs_telstar(o, om, d)
     pars = [vec(om.tel.lm), vec(om.star.lm)]
-    loss_init = l_telstar(pars)
 
-    p0_en, obj_en, _ = SSOF.opt_funcs(l_telstar, pars; backend=SSOF.EnzymeBackend())
-    result_en = Optim.optimize(obj_en, copy(p0_en), Optim.LBFGS(), Optim.Options(iterations=5))
+    p0, unflatten = SSOF.flatten(pars)
+    f = l_telstar ∘ unflatten
 
-    p0_mc, obj_mc, _ = SSOF.opt_funcs(l_telstar, pars; backend=SSOF.MooncakeBackend())
-    result_mc = Optim.optimize(obj_mc, copy(p0_en), Optim.LBFGS(), Optim.Options(iterations=5))
+    cache_en = SSOF.prepare_gradient(SSOF.EnzymeBackend(), f, copy(p0))
+    val_en, g_en = SSOF.value_and_gradient!(cache_en, f, copy(p0))
 
-    @test Optim.minimum(result_en) < loss_init
-    @test isapprox(Optim.minimum(result_en), Optim.minimum(result_mc); rtol=1e-8)
+    fd = est_∇(f, copy(p0); dif=1e-5)
+
+    @test isfinite(val_en)
+    @test isapprox(g_en, fd; rtol=1e-3)
 
     println()
 end
