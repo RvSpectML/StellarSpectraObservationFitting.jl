@@ -153,16 +153,25 @@ Create loss functions for changing
 
 Used to fit models with ADAM
 """
-# Migration note (Nabla → Enzyme):
-# The Doppler basis is recomputed inline from `om.star.lm.μ` inside
-# `l_total`, so the gradient flows ∂loss/∂μ → ∂doppler_basis. This
-# differs from the pre-port Nabla path, which treated the basis as a
-# constant. The Wobble path is unaffected.
+# Migration note (Nabla → Enzyme), DPCA path only:
+#
+# Nabla precomputed `doppler_M` outside the loss closure (in the outer Adam loop)
+# and captured it as a constant. Gradient therefore only flowed through the stellar
+# spectrum path: ∂loss/∂μ = ∂loss/∂star_o · ∂star_o/∂μ.
+#
+# Enzyme traces through `doppler_M = doppler_component_AD(om.star.λ, star_μ)`
+# inside `l_total`, so the gradient also flows through the Doppler basis:
+#   ∂loss/∂μ += ∂loss/∂rv_o · ∂rv_o/∂doppler_M · ∂doppler_M/∂μ
+# where ∂doppler_M/∂μ = ∂(simple_derivative_AD(μ) .* (λ ./ dλdpix))/∂μ.
+# This second term is physically correct: a change in the stellar template changes
+# the log-wavelength derivative used as the Doppler basis vector.
+#
+# The Wobble path is unaffected (no Doppler basis derived from μ).
 function loss_funcs_total(o::Output, om::OrderModelDPCA, d::Data)
-    # Enzyme-safe: all active variables (tel_lm, star_lm, rv_s, doppler_M, *_o) flow
-    # through positional arguments, not kwargs. kwargs routing loses activity for
-    # freshly-allocated intermediate arrays (like doppler_M) under Enzyme's runtime
-    # activity check, which only tracks pointers in the original θ shadow.
+    # Enzyme requires all active intermediates to flow through positional arguments,
+    # not kwargs. `doppler_M` is freshly allocated inside `l_total` and has no entry
+    # in Enzyme's shadow for θ; routing it through kwargs loses its activity
+    # (Enzyme's runtime check only tracks pointers present in the original θ shadow).
     function l_total(total)
         tel_lm  = total[1]
         star_lm = total[2]
