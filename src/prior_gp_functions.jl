@@ -300,13 +300,7 @@ function ChainRulesCore.rrule(::typeof(gp_ℓ_precalc),
     end
     return y, gp_ℓ_precalc_pullback
 end
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(gp_ℓ_precalc), Matrix{Float64}, Vector{Float64}, Matrix{Float64}, Matrix{Float64}}
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(gp_ℓ_precalc), Matrix{Float64}, Vector{Float64}, SMatrix{3,3,Float64,9}, SMatrix{3,3,Float64,9}}
-# Abstract-type fallback: sm.Δℓ_coeff has static type AbstractArray (from Submodel's unparameterized
-# AA field), and sm.A_sde/Σ_sde have type StaticMatrix (abstract). The is_primitive check fires for
-# AbstractArray ⊆ AbstractArray and StaticMatrix ⊆ AbstractMatrix, and ChainRulesCore dispatches
-# correctly at runtime since the concrete primal type (Matrix{Float64}) satisfies AbstractMatrix.
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(gp_ℓ_precalc), AbstractArray, AbstractVector, AbstractMatrix, AbstractMatrix}
+# gp_ℓ_precalc Mooncake @from_rrule registrations are in ext/SSOFMooncakeExt.jl.
 # Native Enzyme rule for gp_ℓ_precalc: bypasses the Union-type issue in gp_ℓ's range
 # iteration (for k in 1:n → iterate returns Union{Nothing,Tuple} that Enzyme cannot
 # type-analyze). Enzyme.@import_rrule cannot be used: it generates a japi3 reverse

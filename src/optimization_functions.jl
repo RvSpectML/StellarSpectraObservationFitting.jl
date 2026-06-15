@@ -1014,24 +1014,20 @@ function _OSW_optimize!(osw::OptimSubWorkspace, options::Optim.Options)
     return result
 end
 
-function optim_print(x::OptimizationState)
+function optim_print(x)
 	println()
-	if x.iteration > 0
-		println("Iter:  ", x.iteration)
-		println("Time:  ", x.metadata["time"], " s")
-		println("ℓ:     ", x.value)
-		println("L∞(∇): ", x.g_norm)
-		println()
-	end
+	println("ℓ:     ", x.f_x)
+	println("L∞(∇): ", maximum(abs, x.g_x))
+	println()
 	# ends optimization if true
 	return false
 end
 
 function optim_cb_f(; verbose::Bool=true)
     if verbose
-		return (x::OptimizationState) -> optim_print(x::OptimizationState)
+		return x -> optim_print(x)
     else
-		return (x::OptimizationState) -> false
+		return x -> false
     end
 end
 
@@ -1055,7 +1051,7 @@ function train_OrderModel!(ow::OptimTelStarWorkspace; verbose::Bool=_verbose_def
 
 	# train the telluric and stellar parameters if desired
     if train_telstar
-        options = Optim.Options(;iterations=iter, f_tol=f_tol, g_tol=g_tol, callback=optim_cb, kwargs...)
+        options = Optim.Options(;iterations=iter, f_reltol=f_tol, g_tol=g_tol, callback=optim_cb, kwargs...)
         # optimize tellurics and star
         result_telstar = _OSW_optimize!(ow.telstar, options)
 		lm_vec = ow.telstar.unflatten(ow.telstar.p0)
@@ -1110,7 +1106,7 @@ function train_OrderModel!(ow::OptimTotalWorkspace; verbose::Bool=_verbose_def, 
         rm_regularization!(ow.om)
     end
 
-    options = Optim.Options(;iterations=iter, f_tol=f_tol, g_tol=g_tol, callback=optim_cb, kwargs...)
+    options = Optim.Options(;iterations=iter, f_reltol=f_tol, g_tol=g_tol, callback=optim_cb, kwargs...)
     result_total = _OSW_optimize!(ow.total, options)
 	lm_vec = ow.total.unflatten(ow.total.p0)
 	is_tel_time_variable = is_time_variable(ow.om.tel)
@@ -1159,14 +1155,14 @@ Train the RVs from the `rv_ws` with Optim
 """
 function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::AbstractVector, optim_cb::Function; g_tol::Real=_g_L∞tol_def_s, f_tol::Real=_f_reltol_def_s, iter::Int=_iter_def, ignore_regularization::Bool=false, μ_positive::Bool=false, kwargs...)
 	# `μ_positive` and `ignore_regularization` are only included to prevent errors and do nothing
-	options = Optim.Options(; callback=optim_cb, g_tol=g_tol, f_tol=f_tol, iterations=iter, kwargs...)
+	options = Optim.Options(; callback=optim_cb, g_tol=g_tol, f_reltol=f_tol, iterations=iter, kwargs...)
 	result_rv = _OSW_optimize!(rv_ws, options)
 	rv[:] = rv_ws.unflatten(rv_ws.p0)
 	return result_rv
 end
 # same as above but for DPCA models
 function train_rvs_optim!(rv_ws::OptimSubWorkspace, rv::Submodel, star::Submodel, optim_cb::Function; g_tol::Real=_g_L∞tol_def_s, f_tol::Real=_f_reltol_def_s, iter::Int=_iter_def, kwargs...)
-	options = Optim.Options(; callback=optim_cb, g_tol=g_tol, f_tol=f_tol, iterations=iter, kwargs...)
+	options = Optim.Options(; callback=optim_cb, g_tol=g_tol, f_reltol=f_tol, iterations=iter, kwargs...)
 	rv.lm.M .= doppler_component(star.λ, star.lm.μ)
 	result_rv = _OSW_optimize!(rv_ws, options)
 	rv.lm.s[:] = rv_ws.unflatten(rv_ws.p0)

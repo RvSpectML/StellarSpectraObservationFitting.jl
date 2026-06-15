@@ -1,10 +1,12 @@
 # Backend seam: isolates the AD engine from the optimizers.
 # Two functions form the full contract; implementing both is sufficient to add a backend.
 #
+# MooncakeBackend is available as a weak dependency via ext/SSOFMooncakeExt.jl.
+# It is loaded automatically when the user also loads Mooncake.
+#
 # Remaining work (future PRs):
 # - Enzyme.@import_rrule blocked by japi3 CallingConventionMismatchError (#2707);
 #   _eval_lm_inner uses @from_rrule for Mooncake only — Enzyme traces through correctly.
-# - Package extension (ext/ + weakdep) so Mooncake users don't pay Enzyme's compile cost.
 
 abstract type ADBackend end
 struct MooncakeBackend <: ADBackend end
@@ -26,78 +28,6 @@ Return `(val, ∂θ)` where `∂θ` mirrors `θ` as plain nested Float64 arrays.
 Mutates the cache in-place; not thread-safe.
 """
 function value_and_gradient! end
-
-# ── Mooncake implementation ───────────────────────────────────────────────────
-
-import Mooncake
-
-# TwicePrecision is immutable (Julia's internal double-double for range() steps).
-# No copy() method exists for it, but Mooncake needs one when traversing OrderModel.
-Base.copy(x::Base.TwicePrecision) = x
-
-# Import the three ChainRulesCore rrules into Mooncake.
-# Concrete-type registrations are most efficient when the static call-site types are
-# concrete. Abstract-type registrations serve as fallbacks for call sites where struct
-# field type declarations (e.g. t2o::AbstractVector{<:SparseMatrixCSC} in OrderModelWobble)
-# prevent Mooncake from inferring the concrete type. Julia's method dispatch picks the
-# most-specific matching rule, so both registrations coexist without ambiguity.
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(spectra_interp), Matrix{Float64}, Vector{Float64}, StellarInterpolationHelper}
-# Stellar path: om.star.lm is declared LinearModel (abstract) in Submodel, so _eval_lm_vec
-# returns an abstract-typed matrix at the call site. Register an abstract fallback.
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(spectra_interp), AbstractMatrix{Float64}, AbstractVector{<:Real}, StellarInterpolationHelper}
-# Telluric path: om.t2o is declared AbstractVector{<:SparseMatrixCSC} in OrderModelWobble,
-# so the static type at the call site is abstract. Register for both the abstract case
-# and the concrete case (the concrete registration takes precedence when types are known).
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(spectra_interp), Matrix{Float64}, Vector{SparseMatrixCSC{Float64,Int64}}}
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(spectra_interp), AbstractMatrix{Float64}, AbstractVector{<:SparseMatrixCSC}}
-# LSF path: d.lsf may be a single SparseMatrixCSC (same LSF for all observations).
-# With the L type parameter on LSFData, d.lsf gets a concrete static type here.
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(spectra_interp), AbstractMatrix{Float64}, SparseMatrixCSC{Float64,Int64}}
-# gp_ℓ_precalc registration is deferred to prior_gp_functions.jl (defined there)
-# _eval_lm_inner: covers the M*s+μ and exp(M*s).*μ paths called by _eval_lm_vec.
-# Concrete Matrix{Float64} registrations only — the Adam path owns concrete arrays.
-# The Optim path passes SubArrays (ParameterHandling.unflatten returns views), and
-# Mooncake's SubArray tangent is an FData struct, not a plain Array; an AbstractMatrix
-# fallback would misfire there and produce a tangent type mismatch. Mooncake falls
-# through to generic tracing for SubArray inputs, which is correct but unoptimized.
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(_eval_lm_inner), Matrix{Float64}, Matrix{Float64}, Vector{Float64}, Val{false}}
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(_eval_lm_inner), Matrix{Float64}, Matrix{Float64}, Vector{Float64}, Val{true}}
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(_eval_lm_inner), Matrix{Float64}, Matrix{Float64}, Val{false}}
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(_eval_lm_inner), Matrix{Float64}, Matrix{Float64}, Val{true}}
-# TemplateModel path: _eval_lm(μ, n) = μ * ones(n)'. Same constraint applies.
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(_eval_lm), Vector{Float64}, Int}
-
-# Recursive helper: Mooncake tangents for SubArrays may not be plain Arrays.
-# The Adam θ can contain SubArrays (from downsize_view / vec(lm) on views);
-# this helper ensures callers always receive plain nested Float64 arrays.
-#
-# For Vector{Vector} θ (TotalWorkspace), Mooncake returns tangents with
-# Any-typed containers at multiple levels (Vector{Any} containing Vector{Any}
-# containing float arrays). The Any overloads handle these recursively and
-# retype to Vector{AbstractArray} so iterate!/first_iterate! dispatch works.
-tangent_to_arrays(x::Array{<:Real}) = x                           # leaf: plain float array
-tangent_to_arrays(x::AbstractArray{<:Real}) = collect(x)          # leaf: SubArray → plain Array
-tangent_to_arrays(x::Tuple) = map(tangent_to_arrays, x)           # Tuple tangent (typed θ path)
-tangent_to_arrays(x::AbstractVector{<:AbstractArray}) =            # typed container
-    AbstractArray[tangent_to_arrays(xi) for xi in x]
-tangent_to_arrays(x::AbstractArray{Any}) =                         # Any-typed container (Mooncake erasure)
-    AbstractArray[tangent_to_arrays(xi) for xi in x]
-
-struct MooncakeCache{R}
-    rule::R
-end
-
-function prepare_gradient(::MooncakeBackend, l, θ; kwargs...)
-    # Mooncake doesn't need aliasing info; kwargs (om, build_θ, build_l, o, d)
-    # passed by Enzyme's nested-θ call sites are silently ignored here.
-    rule = Mooncake.build_rrule(l, θ)
-    return MooncakeCache(rule)
-end
-
-function value_and_gradient!(c::MooncakeCache, l, θ)
-    val, (_, ∂θ) = Mooncake.value_and_gradient!!(c.rule, l, θ)
-    return val, tangent_to_arrays(∂θ)
-end
 
 # ── Enzyme implementation ─────────────────────────────────────────────────────
 #
