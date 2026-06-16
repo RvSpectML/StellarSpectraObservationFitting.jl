@@ -8,16 +8,22 @@ StellarSpectraObservationFitting.jl (SSOF, pronounced like "soufflé") measures 
 
 ## Commands
 
+Use julia v1.11.2 for code in this repository.  
+JULIA = /home/eford/.julia/juliaup/julia-1.11.2+0.x64.linux.gnu/bin/julia
+
 ```bash
 # Run tests (all tests live in test/runtests.jl; there is no runtests_slow.jl here)
-julia --project=. -e 'using Pkg; Pkg.test()'
+JULIA --project=. -e 'using Pkg; Pkg.test()'
+
+# Run only the tests that aren't slow:
+SSOF_SKIP_SLOW_TESTS=true JULIA --project=. -e 'using Pkg; Pkg.test()'
 
 # Build documentation (Documenter.jl)
-julia --project=docs -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
-julia --project=docs docs/make.jl
+JULIA --project=docs -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
+JULIA --project=docs docs/make.jl
 
 # Run the end-to-end example (activates examples/Project.toml itself; needs JLD2 data in examples/data/)
-julia examples/example.jl
+JULIA examples/example.jl
 ```
 
 ## Architecture
@@ -41,7 +47,7 @@ Key types:
 
 ## Constraints worth knowing
 
-- Automatic differentiation uses Mooncake.jl. The AD seam is `src/ad_backend.jl`: `prepare_gradient(b, l, θ)` + `value_and_gradient!(cache, l, θ)`. Custom sensitivities for `spectra_interp` and `gp_ℓ_precalc` are registered via `ChainRulesCore.rrule` (in `model_functions.jl` and `prior_gp_functions.jl` respectively) and imported into Mooncake with `@from_rrule`. `src/Nabla_extension.jl` is an orphaned file (no longer included in the module) pending deletion.
+- The default for Automatic differentiation recently changed to Enzyme.jl. The AD seam is `src/ad_backend.jl`: `prepare_gradient(b, l, θ)` + `value_and_gradient!(cache, l, θ)`.  `src/Nabla_extension.jl` is an orphaned file (no longer included in the module) pending deletion.
 - `TemporalGPs = "0.5 - 0.6.7"` is pinned to avoid precompilation warnings (see commit dd34be2). `prior_gp_functions.jl` reimplements the state-space GP likelihood (and analytic gradients, optionally sparse/precalculated) rather than calling TemporalGPs directly, for speed.
 - `continuum_functions.jl` and `rassine.jl` (a port of RASSINE) handle continuum normalization; `mask_functions.jl` handles bad-pixel/edge masking (e.g. `mask_bad_edges!`).
 - Wavelengths are handled as log-wavelength almost everywhere (`log_λ`), and Doppler shifts as `rv_to_D` factors.

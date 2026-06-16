@@ -52,6 +52,13 @@ Enzyme.EnzymeRules.inactive_type(::Type{<:StellarInterpolationHelper}) = true
 # internals when activity analysis fails to propagate Const through field access.
 Enzyme.EnzymeRules.inactive_type(::Type{<:Dict{Symbol, <:Real}}) = true
 
+# Data subtypes (GenericData, LSFData, GenericDatum) hold observational flux,
+# variance, and wavelength arrays that are never optimized parameters.
+# inactive_type prevents "constant memory stored to differentiable variable"
+# LLVM errors that arise when Enzyme fails to propagate Const through field
+# accesses on a Data value captured in a Const closure.
+Enzyme.EnzymeRules.inactive_type(::Type{<:Data}) = true
+
 # Cache for the flat-vector path. `∂l` is the shadow closure (preserves any
 # alias-into-captured-state structure via Enzyme.make_zero's IdDict tracking).
 # `∂θ` is pre-allocated; zeroed in-place each call.
@@ -74,20 +81,63 @@ function value_and_gradient!(c::EnzymeFlatCache, l, θ::AbstractVector{<:Real})
     # remake_zero! preserves that without re-checking. make_zero! would error.
     Enzyme.remake_zero!(c.∂l)
     fill!(c.∂θ, 0)
-    # set_runtime_activity is required for the Optim/error_estimation path,
-    # where `l = loss ∘ unflatten` and unflatten is ParameterHandling's
-    # Vector_from_vec closure. Enzyme's static activity analysis cannot prove
-    # the array-of-views inside Vector_from_vec is fully active, so it errors
-    # with EnzymeRuntimeActivityError without this flag. The runtime check
-    # has a small per-call cost but is unconditionally correct. If Phase 7
-    # profiling shows it dominating, the alternative is to rewrite the
-    # affected losses to not flow constants into differentiable storage.
+    # set_runtime_activity is required here for generic callables because Enzyme's
+    # static activity analysis may not be able to prove activity through heterogeneous
+    # containers. This path is hit by estimate_σ_curvature_helper and any direct
+    # prepare_gradient callers that do not use FlatLoss. opt_funcs uses FlatLoss
+    # (EnzymeFlatLossCache) which avoids this flag entirely.
     _, val = Enzyme.autodiff(
         Enzyme.set_runtime_activity(Enzyme.ReverseWithPrimal),
         Enzyme.Duplicated(l, c.∂l),
         Enzyme.Active,
         Enzyme.Duplicated(θ, c.∂θ),
     )
+    return val, c.∂θ
+end
+
+# ── FlatLoss: typed-nested path for opt_funcs ────────────────────────────────
+#
+# opt_funcs passes `f = loss ∘ unflatten` where unflatten is ParameterHandling's
+# Vector_from_vec closure that returns Vector{Any}.  Differentiating f(θ) directly
+# requires set_runtime_activity because Enzyme can't statically prove activity
+# through Vector{Any} elements.
+#
+# FlatLoss instead differentiates loss(nested) w.r.t. nested directly (typed arrays,
+# no Vector{Any}), then flattens the gradient. This reduces the number of runtime
+# activity checks Enzyme must perform.  set_runtime_activity is still required because
+# spectra_interp internally broadcasts Const SIH fields against Active RV arrays
+# (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)'), which Enzyme cannot prove
+# statically.  The gain vs. the original path is fewer checks overall.
+
+struct FlatLoss{L,U}
+    loss::L
+    unflatten::U
+end
+(f::FlatLoss)(x::AbstractVector) = f.loss(f.unflatten(x))
+
+struct EnzymeFlatLossCache{∂N, T<:AbstractVector{<:Real}}
+    ∂nested::∂N
+    ∂θ::T
+end
+
+function prepare_gradient(::EnzymeBackend, f::FlatLoss, θ::AbstractVector{<:Real})
+    nested = f.unflatten(θ)
+    ∂nested = Enzyme.make_zero(nested)
+    ∂θ = zero(θ)
+    return EnzymeFlatLossCache(∂nested, ∂θ)
+end
+
+function value_and_gradient!(c::EnzymeFlatLossCache, f::FlatLoss, θ::AbstractVector{<:Real})
+    nested = f.unflatten(θ)
+    Enzyme.make_zero!(c.∂nested)
+    _, val = Enzyme.autodiff(
+        Enzyme.set_runtime_activity(Enzyme.ReverseWithPrimal),
+        Enzyme.Const(f.loss),
+        Enzyme.Active,
+        Enzyme.Duplicated(nested, c.∂nested),
+    )
+    flat_grad, _ = ParameterHandling.flatten(c.∂nested)
+    c.∂θ .= flat_grad
     return val, c.∂θ
 end
 
@@ -150,20 +200,22 @@ function value_and_gradient!(c::EnzymeNestedCache, l, θ::Tuple)
     return val, c.∂θ
 end
 
-# Native EnzymeRules for spectra_interp (sparse-matrix interpolation).
-# Mooncake uses ChainRulesCore rrules via @from_rrule; Enzyme traces through
-# SparseMatrixCSC operations and produces wrong gradients without these rules.
+# Native EnzymeRules for spectra_interp (sparse-matrix signatures only).
+# Mooncake uses ChainRulesCore rrules via @from_rrule.
 # Math mirrors the ChainRulesCore rrule bodies in model_functions.jl.
-# These cover the two signatures actually used in the χ² loss:
+# Two signatures are covered:
 #   (1) column-wise vector-of-sparse (telluric path, om.t2o)
 #   (2) single sparse matrix (LSF path, d.lsf)
-# The stellar path spectra_interp(flux, rvs, SIH) is handled correctly by
-# Enzyme's native AD (StellarInterpolationHelper declared inactive above).
+# The stellar path spectra_interp(flux, rvs, SIH) is handled by Enzyme's native AD
+# via set_runtime_activity (StellarInterpolationHelper declared inactive above).
+# A custom SIH rule was tried but caused a 5× Adam regression because the Julia-level
+# scatter-add in reverse() replaced cheaper LLVM-level AD.
 
 # For Duplicated (array) return types, `dret` in `reverse` is a Type annotation,
 # not an instance. The upstream gradient lives in the shadow, which is stored on
 # the tape (same reference) so the reverse rule can read and zero it.
 
+# (1) column-wise vector-of-sparse path
 function Enzyme.EnzymeRules.augmented_primal(
     config::Enzyme.EnzymeRules.RevConfig,
     ::Enzyme.Const{typeof(spectra_interp)},
@@ -193,6 +245,7 @@ function Enzyme.EnzymeRules.reverse(
     return (nothing, nothing)
 end
 
+# (2) single sparse matrix path
 function Enzyme.EnzymeRules.augmented_primal(
     config::Enzyme.EnzymeRules.RevConfig,
     ::Enzyme.Const{typeof(spectra_interp)},
@@ -215,6 +268,40 @@ function Enzyme.EnzymeRules.reverse(
 )
     if !(model isa Enzyme.Const) && tape !== nothing
         model.dval .+= interp_helper.val' * tape
+        tape .= 0
+    end
+    return (nothing, nothing)
+end
+
+# _rv_shift: element-wise sum of an active RV vector and a Const barycentric offset.
+# The plain `rv .+ bary_rvs` would create Broadcasted{Tuple{Active,Const}}, which
+# Enzyme cannot analyze statically (mixed-activity homogeneous tuple).  This named
+# wrapper with an explicit Enzyme rule bypasses the Broadcasted intermediary.
+_rv_shift(rv::AbstractVector{<:Real}, bary_rvs::AbstractVector{<:Real}) = rv .+ bary_rvs
+
+function Enzyme.EnzymeRules.augmented_primal(
+    ::Enzyme.EnzymeRules.RevConfig,
+    ::Enzyme.Const{typeof(_rv_shift)},
+    ::Type,
+    rv::Enzyme.Annotation{<:AbstractVector{<:Real}},
+    bary_rvs::Enzyme.Annotation{<:AbstractVector{<:Real}},
+)
+    val = rv.val .+ bary_rvs.val
+    shadow = zero(val)
+    return Enzyme.EnzymeRules.AugmentedReturn(val, shadow, shadow)
+end
+
+function Enzyme.EnzymeRules.reverse(
+    ::Enzyme.EnzymeRules.RevConfig,
+    ::Enzyme.Const{typeof(_rv_shift)},
+    ::Type,
+    tape,
+    rv::Enzyme.Annotation{<:AbstractVector{<:Real}},
+    bary_rvs::Enzyme.Annotation{<:AbstractVector{<:Real}},
+)
+    if tape !== nothing
+        !(rv isa Enzyme.Const) && (rv.dval .+= tape)
+        !(bary_rvs isa Enzyme.Const) && (bary_rvs.dval .+= tape)
         tape .= 0
     end
     return (nothing, nothing)
