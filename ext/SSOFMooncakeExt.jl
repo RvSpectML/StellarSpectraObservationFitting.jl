@@ -30,11 +30,11 @@ Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(SSOF.spectra_interp), Abst
 Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(SSOF.spectra_interp), AbstractMatrix{Float64}, SparseMatrixCSC{Float64,Int64}}
 
 # _eval_lm_inner — M*s+μ and exp(M*s).*μ paths called by _eval_lm_vec.
-# Concrete Matrix{Float64} registrations only: the Optim path passes SubArrays
-# (ParameterHandling.unflatten returns views), and Mooncake's SubArray tangent
-# is an FData struct, not a plain Array; an AbstractMatrix fallback would
-# misfire and produce a tangent type mismatch.  Mooncake falls through to
-# generic tracing for SubArray inputs, which is correct but unoptimised.
+# Concrete Matrix{Float64} registrations only: the Optim path (via FlatLoss)
+# differentiates loss(nested) in nested space; ParameterHandling.flatten returns
+# owned Matrix/Vector elements (not SubArrays).  AbstractMatrix fallback is omitted
+# because Mooncake's tangent type for abstract containers may mismatch; concrete
+# registrations are sufficient for the arrays produced by unflatten.
 Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(SSOF._eval_lm_inner), Matrix{Float64}, Matrix{Float64}, Vector{Float64}, Val{false}}
 Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(SSOF._eval_lm_inner), Matrix{Float64}, Matrix{Float64}, Vector{Float64}, Val{true}}
 Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(SSOF._eval_lm_inner), Matrix{Float64}, Matrix{Float64}, Val{false}}

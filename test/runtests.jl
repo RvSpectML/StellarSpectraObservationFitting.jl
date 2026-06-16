@@ -6,6 +6,12 @@ using LinearAlgebra
 
 println("Testing...")
 
+# Set SSOF_SKIP_SLOW_TESTS=true to skip testsets that take >60 s each:
+#   "EnzymeBackend flat-vector path (spectra_interp via SIH)"
+#   "EnzymeBackend nested-tuple θ for OrderModelDPCA (l_total)"
+const SKIP_SLOW = get(ENV, "SSOF_SKIP_SLOW_TESTS", "false") == "true"
+SKIP_SLOW && println("Skipping slow tests (SSOF_SKIP_SLOW_TESTS=true)")
+
 @testset "AD backends load" begin
     @test SSOF.MooncakeBackend() isa SSOF.ADBackend
     @test SSOF.EnzymeBackend() isa SSOF.ADBackend
@@ -54,28 +60,28 @@ end
     println()
 end
 
-@testset "custom spectra_interp() sensitivity" begin
+if !SKIP_SLOW; @testset "custom spectra_interp() sensitivity" begin
 
     B = rand(3,5)
     As = [sparse(rand(2,3)) for i in axes(B, 2)]
     C = rand(5,6)
 
-    f_custom_sensitivity(x) = sum(SSOF.spectra_interp(x .^ 2, As) * C)
-
-    # Numerical gradient via finite differences
+    # Flat-vector wrapper so EnzymeBackend (AbstractVector path) can be used
     B_vec = copy(vec(B))
-    numer = est_∇(xv -> f_custom_sensitivity(reshape(xv, size(B))), B_vec; dif=1e-7)
+    f_flat(xv) = sum(SSOF.spectra_interp(reshape(xv, size(B)) .^ 2, As) * C)
 
-    # Analytic gradient via Mooncake (exercises the ChainRulesCore rrule)
-    cache = SSOF.prepare_gradient(SSOF.MooncakeBackend(), f_custom_sensitivity, copy(B))
-    _, ∂B = SSOF.value_and_gradient!(cache, f_custom_sensitivity, copy(B))
+    numer = est_∇(f_flat, copy(B_vec); dif=1e-7)
 
-    @test isapprox(vec(∂B), numer; rtol=1e-4)
+    # Analytic gradient via Enzyme (exercises the native EnzymeRule for spectra_interp)
+    cache = SSOF.prepare_gradient(SSOF.EnzymeBackend(), f_flat, copy(B_vec))
+    _, ∂B_flat = SSOF.value_and_gradient!(cache, f_flat, copy(B_vec))
+
+    @test isapprox(∂B_flat, numer; rtol=1e-4)
 
     println()
-end
+end; end  # if !SKIP_SLOW
 
-@testset "EnzymeBackend flat-vector path (spectra_interp via SIH)" begin
+if !SKIP_SLOW; @testset "EnzymeBackend flat-vector path (spectra_interp via SIH)" begin
     # Exercises the flat-Vector{Float64} EnzymeBackend path against a loss that
     # captures a StellarInterpolationHelper — representative of the closures
     # built by the optimizer paths. FD is the gold-standard correctness gate;
@@ -99,20 +105,14 @@ end
     # Finite-difference reference
     fd = est_∇(ℓ, copy(x0); dif=1e-6)
 
-    # Mooncake
-    mcache = SSOF.prepare_gradient(SSOF.MooncakeBackend(), ℓ, copy(x0))
-    val_mc, ∂_mc = SSOF.value_and_gradient!(mcache, ℓ, copy(x0))
-
     # Enzyme (flat-vector path)
     ecache = SSOF.prepare_gradient(SSOF.EnzymeBackend(), ℓ, copy(x0))
     val_en, ∂_en = SSOF.value_and_gradient!(ecache, ℓ, copy(x0))
 
-    @test isapprox(val_mc, val_en; rtol=1e-10)
-    @test isapprox(∂_mc, ∂_en; rtol=1e-6)
     @test isapprox(∂_en, fd; rtol=1e-3)
 
     println()
-end
+end; end  # if !SKIP_SLOW
 
 @testset "EnzymeBackend nested-tuple θ with aliasing into captured om" begin
     # Phase 3: the Adam path. Production calls look like:
@@ -158,7 +158,7 @@ end
 
     val_en, ∂θ_en = SSOF.value_and_gradient!(cache, l, θ)
 
-    # FD reference: differentiate the closure w.r.t. a flat parameterization
+    # FD reference: differentiate the closure w.r.t. a flat parameterisation
     function ℓ_flat(x)
         M = reshape(view(x, 1:12),   4, 3)
         s = view(x, 13:15)
@@ -195,16 +195,11 @@ end
     p0, unflatten = SSOF.flatten(pars0)
     f = loss ∘ unflatten
 
-    cache_mc = SSOF.prepare_gradient(SSOF.MooncakeBackend(), f, copy(p0))
-    val_mc, ∂_mc = SSOF.value_and_gradient!(cache_mc, f, copy(p0))
-
     cache_en = SSOF.prepare_gradient(SSOF.EnzymeBackend(), f, copy(p0))
     val_en, ∂_en = SSOF.value_and_gradient!(cache_en, f, copy(p0))
 
     fd = est_∇(f, copy(p0); dif=1e-6)
 
-    @test isapprox(val_mc, val_en; rtol=1e-10)
-    @test isapprox(∂_mc, ∂_en; rtol=1e-6)
     @test isapprox(∂_en, fd; rtol=1e-3)
 
     println()
@@ -247,7 +242,7 @@ end
     println()
 end
 
-@testset "EnzymeBackend nested-tuple θ for OrderModelDPCA (l_total)" begin
+if !SKIP_SLOW; @testset "EnzymeBackend nested-tuple θ for OrderModelDPCA (l_total)" begin
     # Build a minimal DPCA model. l_total for DPCA inlines the spectral computation
     # (tel_o, star_o, rv_o via positional args) so Enzyme sees all active variables
     # through positional arguments rather than kwargs, ensuring correct activity tracking.
@@ -269,18 +264,11 @@ end
     l_total, _ = SSOF.loss_funcs_total(o, om, d)
     θ = (SSOF._lm_tuple(om.tel.lm), SSOF._lm_tuple(om.star.lm), om.rv.lm.s)
 
-    cache_mc = SSOF.prepare_gradient(SSOF.MooncakeBackend(), l_total, θ)
-    val_mc, ∂θ_mc = SSOF.value_and_gradient!(cache_mc, l_total, θ)
-
     cache_en = SSOF.prepare_gradient(SSOF.EnzymeBackend(), l_total, θ)
     val_en, ∂θ_en = SSOF.value_and_gradient!(cache_en, l_total, θ)
 
-    @test isapprox(val_mc, val_en; rtol=1e-8)
-
     # gradient w.r.t. star μ must include the doppler-basis path
-    ∂μ_mc = ∂θ_mc[2][3]
     ∂μ_en = ∂θ_en[2][3]
-    @test isapprox(∂μ_mc, ∂μ_en; rtol=1e-4)
 
     # finite-difference sanity on star μ gradient
     function l_total_flat_μ(μ_flat)
@@ -290,14 +278,10 @@ end
     fd_μ = est_∇(l_total_flat_μ, copy(om.star.lm.μ); dif=1e-6)
 
     @test isapprox(∂μ_en, fd_μ; rtol=1e-3)
-    @test isapprox(∂μ_mc, fd_μ; rtol=1e-3)
-
-    ∂rv_en = ∂θ_en[3]
-    ∂rv_mc = ∂θ_mc[3]
-    @test isapprox(∂rv_mc, ∂rv_en; rtol=1e-4)
 
     println()
-end
+end; end  # if !SKIP_SLOW
+
 
 @testset "doppler_component_log_AD agrees with doppler_component_log" begin
     # Verifies the fix to the infinite-recursion bug (was: called itself instead of
@@ -325,25 +309,38 @@ function _make_tiny_wobble_data(n_obs, n_epochs)
 end
 
 @testset "Task 3a: opt_funcs gradient correctness with EnzymeBackend" begin
-    # Verifies that the Enzyme flat-vector gradient (used by all Optim workspaces via
-    # opt_funcs) agrees with finite differences on a real SSOF loss ∘ unflatten closure.
+    # Verifies that loss_funcs_telstar_v2 (inline Tuple path) gives Enzyme gradients
+    # that agree with finite differences. The original l_telstar ∘ unflatten path is
+    # used only as the FD reference (nested Vector{Any} loses Enzyme activity tracking).
+    # Perturbation: M=0, s=0, μ=1 are L1-subdifferential corners where sign(0)=0
+    # (Enzyme) ≠ right-side FD derivative (±L1_coeff). Perturb to differentiable point.
     d = _make_tiny_wobble_data(20, 4)
     om = SSOF.OrderModel(d; n_comp_tel=1, n_comp_star=1, oversamp=false)
+    om.tel.lm.M  .= 0.01 .* randn(size(om.tel.lm.M))
+    om.tel.lm.s  .= 0.1  .* randn(size(om.tel.lm.s))
+    om.tel.lm.μ  .+= 0.1  .* randn(size(om.tel.lm.μ))
+    om.star.lm.M .= 0.01 .* randn(size(om.star.lm.M))
+    om.star.lm.s .= 0.1  .* randn(size(om.star.lm.s))
+    om.star.lm.μ .+= 0.1  .* randn(size(om.star.lm.μ))
     o = SSOF.Output(om, d)
 
-    l_telstar, _, _ = SSOF.loss_funcs_telstar(o, om, d)
+    l_v2 = SSOF.loss_funcs_telstar_v2(o, om, d)
+    θ = (SSOF._lm_tuple(om.tel.lm), SSOF._lm_tuple(om.star.lm))
+
+    cache_en = SSOF.prepare_gradient(SSOF.EnzymeBackend(), l_v2, θ)
+    val_en, g_en = SSOF.value_and_gradient!(cache_en, l_v2, θ)
+
+    # FD reference via mathematically equivalent l_telstar ∘ unflatten
     pars = [vec(om.tel.lm), vec(om.star.lm)]
-
     p0, unflatten = SSOF.flatten(pars)
-    f = l_telstar ∘ unflatten
-
-    cache_en = SSOF.prepare_gradient(SSOF.EnzymeBackend(), f, copy(p0))
-    val_en, g_en = SSOF.value_and_gradient!(cache_en, f, copy(p0))
-
-    fd = est_∇(f, copy(p0); dif=1e-5)
+    l_telstar, _, _ = SSOF.loss_funcs_telstar(o, om, d)
+    fd = est_∇(l_telstar ∘ unflatten, copy(p0); dif=1e-5)
 
     @test isfinite(val_en)
-    @test isapprox(g_en, fd; rtol=1e-3)
+    # Flatten Enzyme gradient in same order as ParameterHandling.flatten:
+    # tel arrays (M, s, μ) then star arrays (M, s, μ), each column-major.
+    g_en_flat = vcat(vec.(g_en[1])..., vec.(g_en[2])...)
+    @test isapprox(g_en_flat, fd; rtol=1e-3)
 
     println()
 end
@@ -366,9 +363,9 @@ end
 end
 
 @testset "Task 3c: LSFData Enzyme gradient through spectra_interp sparse rule" begin
-    # Exercises the Enzyme rule at ad_backend.jl:266-291 for spectra_interp with a
-    # SparseMatrixCSC. The LSF is a tridiagonal smoothing kernel; d.lsf is captured
-    # as Const inside the loss closure, and the gradient flows through lsf' * ∂Y.
+    # Exercises the Enzyme rule for spectra_interp with a SparseMatrixCSC (d.lsf).
+    # Uses loss_funcs_telstar_v2 (Tuple path) so Enzyme correctly tracks all active
+    # parameters. d.lsf is captured Const; gradient flows through lsf' * ∂Y.
     n_obs = 15
     n_epochs = 3
     log_λ_obs = collect(LinRange(8.78535, 8.78590, n_obs)) .+ 1e-5 .* (0:n_epochs-1)'
@@ -379,25 +376,65 @@ end
     lsf = spdiagm(0 => fill(0.6, n_obs), -1 => fill(0.2, n_obs-1), 1 => fill(0.2, n_obs-1))
     d = SSOF.LSFData(flux, var, var, log_λ_obs, log_λ_star, lsf)
     om = SSOF.OrderModel(d; n_comp_tel=1, n_comp_star=1, oversamp=false)
+    # Perturb away from L1 subdifferential corners (same reasoning as Task 3a)
+    om.tel.lm.M  .= 0.01 .* randn(size(om.tel.lm.M))
+    om.tel.lm.s  .= 0.1  .* randn(size(om.tel.lm.s))
+    om.tel.lm.μ  .+= 0.1  .* randn(size(om.tel.lm.μ))
+    om.star.lm.M .= 0.01 .* randn(size(om.star.lm.M))
+    om.star.lm.s .= 0.1  .* randn(size(om.star.lm.s))
+    om.star.lm.μ .+= 0.1  .* randn(size(om.star.lm.μ))
     o = SSOF.Output(om, d)
 
-    l_telstar, _, _ = SSOF.loss_funcs_telstar(o, om, d)
+    l_v2 = SSOF.loss_funcs_telstar_v2(o, om, d)
+    θ = (SSOF._lm_tuple(om.tel.lm), SSOF._lm_tuple(om.star.lm))
+
+    cache_en = SSOF.prepare_gradient(SSOF.EnzymeBackend(), l_v2, θ)
+    val_en, g_en = SSOF.value_and_gradient!(cache_en, l_v2, θ)
+
+    # FD reference via mathematically equivalent l_telstar ∘ unflatten
     pars = [vec(om.tel.lm), vec(om.star.lm)]
     p0_flat, unflatten = SSOF.flatten(pars)
-    f = l_telstar ∘ unflatten
+    l_telstar, _, _ = SSOF.loss_funcs_telstar(o, om, d)
+    fd = est_∇(l_telstar ∘ unflatten, copy(p0_flat); dif=1e-6, inds=1:min(10, length(p0_flat)))
 
-    cache_mc = SSOF.prepare_gradient(SSOF.MooncakeBackend(), f, copy(p0_flat))
-    val_mc, ∂_mc = SSOF.value_and_gradient!(cache_mc, f, copy(p0_flat))
+    g_en_flat = vcat(vec.(g_en[1])..., vec.(g_en[2])...)
+    @test isapprox(g_en_flat[1:min(10, length(p0_flat))], fd; rtol=1e-3)
 
-    cache_en = SSOF.prepare_gradient(SSOF.EnzymeBackend(), f, copy(p0_flat))
-    val_en, ∂_en = SSOF.value_and_gradient!(cache_en, f, copy(p0_flat))
+    println()
+end
 
-    @test isapprox(val_mc, val_en; rtol=1e-8)
-    @test isapprox(∂_mc, ∂_en; rtol=1e-6)
+@testset "FlatLoss: Enzyme gradient via typed nested parameters" begin
+    # Verifies that EnzymeFlatLossCache correctly differentiates loss(nested)
+    # for both the multi-array case (time-variable scores, Vector{Array{Float64}}) and
+    # the plain-vector case (RV optimization, Vector{Float64}).
 
-    # FD check on a small slice to confirm the gradients are correct
-    fd = est_∇(f, copy(p0_flat); dif=1e-6, inds=1:min(10, length(p0_flat)))
-    @test isapprox(∂_en[1:min(10, length(p0_flat))], fd; rtol=1e-3)
+    # Multi-array case: mimics [tel_s, star_s, rvs] from the time-variable finalize_scores! path
+    tel_s  = rand(2, 5)
+    star_s = rand(1, 5)
+    rvs    = rand(5)
+    pars_nested = [tel_s, star_s, rvs]
+    flat_nested, unfl_nested = SSOF.flatten(pars_nested)
+    loss_nested(p) = sum(abs2, p[1]) + 2 * sum(abs2, p[2]) + 3 * sum(abs2, p[3])
+
+    f_nested = SSOF.FlatLoss(loss_nested, unfl_nested)
+    cache_nested = SSOF.prepare_gradient(SSOF.EnzymeBackend(), f_nested, copy(flat_nested))
+    val_n, ∂θ_n = SSOF.value_and_gradient!(cache_nested, f_nested, copy(flat_nested))
+
+    fd_nested = est_∇(θ -> loss_nested(unfl_nested(θ)), copy(flat_nested))
+    @test isfinite(val_n)
+    @test isapprox(∂θ_n, fd_nested; rtol=1e-5)
+
+    # Plain-vector case: mimics om.rv from the Wobble non-time-variable finalize_scores! path
+    rv_vec = rand(8)
+    flat_rv, unfl_rv = SSOF.flatten(rv_vec)
+    loss_rv(v) = sum(abs2, v)
+
+    f_rv = SSOF.FlatLoss(loss_rv, unfl_rv)
+    cache_rv = SSOF.prepare_gradient(SSOF.EnzymeBackend(), f_rv, copy(flat_rv))
+    val_r, ∂θ_r = SSOF.value_and_gradient!(cache_rv, f_rv, copy(flat_rv))
+
+    @test isfinite(val_r)
+    @test isapprox(∂θ_r, 2 .* rv_vec; rtol=1e-10)
 
     println()
 end

@@ -145,6 +145,39 @@ loss_funcs_telstar(mws::ModelWorkspace) = loss_funcs_telstar(mws.o, mws.om, mws.
 
 
 """
+	loss_funcs_telstar_v2(o, om, d)
+
+Wobble analog of the DPCA inline `l_total` pattern. Takes `θ = (tel_tuple, star_tuple)`
+where each element is a `_lm_tuple` (typed Tuple of arrays), so Enzyme's
+`EnzymeNestedCache` (`Const(l)` + `Duplicated(θ_copy, ∂θ)`) correctly tracks all
+active variables without `set_runtime_activity` on the outer unflatten step.
+
+For Wobble there is no separate Doppler basis; the stellar gradient flows through
+`spectra_interp(stellar_model, om.rv .+ om.bary_rvs, om.b2o)` natively.
+`om.rv` is captured as non-differentiable data (only the linear-model parameters in θ
+are differentiated).
+"""
+function loss_funcs_telstar_v2(o::Output, om::OrderModelWobble, d::Data)
+    # Use Val-dispatch instead of keyword-dispatch so Enzyme can statically track
+    # activity through the return value (Core.kwcall breaks activity analysis).
+    function _ev(v, log_val::Val)
+        length(v) == 3 && return _eval_lm_inner(v[1], v[2], v[3], log_val)
+        length(v) == 2 && return _eval_lm_inner(v[1], v[2], log_val)
+        return v[1] * ones(om.n)'  # TemplateModel (length-1)
+    end
+    function l_telstar_v2(telstar)
+        tel_lm  = telstar[1]
+        star_lm = telstar[2]
+        tel_o  = spectra_interp(_ev(tel_lm,  Val(log_lm(om.tel.lm))),  om.t2o)
+        star_o = spectra_interp(_ev(star_lm, Val(log_lm(om.star.lm))), om.rv .+ om.bary_rvs, om.b2o)
+        return sum(__loss_diagnostic(tel_o, star_o, d)) +
+               tel_prior(tel_lm, om) + star_prior(star_lm, om)
+    end
+    return l_telstar_v2
+end
+
+
+"""
 	loss_funcs_total(o, om, d)
 
 Create loss functions for changing
@@ -186,26 +219,27 @@ function loss_funcs_total(o::Output, om::OrderModelDPCA, d::Data)
     end
 	is_tel_time_variable = is_time_variable(om.tel)
 	is_star_time_variable = is_time_variable(om.star)
+	_tel_log_lm = Val(log_lm(om.tel.lm))
+	_star_log_lm = Val(log_lm(om.star.lm))
     function l_total_s(total_s)
 		prior = 0.
+		rv_s = total_s[1 + is_star_time_variable + is_tel_time_variable]
 		if is_tel_time_variable
-			tel = (om.tel.lm.M, total_s[1], om.tel.lm.μ)
-			prior += model_s_prior(total_s[1], om.reg_tel)
-			if is_star_time_variable
-				star = (om.star.lm.M, total_s[2], om.star.lm.μ)
-				prior += model_s_prior(total_s[2], om.reg_star)
-			else
-				star = nothing
-			end
-		elseif is_star_time_variable
-			tel = nothing
-			star = (om.star.lm.M, total_s[1], om.star.lm.μ)
-			prior += model_s_prior(total_s[1], om.reg_star)
+			s_tel = total_s[1]
+			tel_o = spectra_interp(_eval_lm_inner(om.tel.lm.M, s_tel, om.tel.lm.μ, _tel_log_lm), om.t2o)
+			prior += model_s_prior(s_tel, om.reg_tel)
 		else
-			tel = nothing
-			star = nothing
+			tel_o = o.tel
 		end
-		return _loss(o, om, d; tel=tel, star=star, rv=total_s[1+is_star_time_variable+is_tel_time_variable], use_var_s=true) + prior
+		if is_star_time_variable
+			s_star = total_s[1 + is_tel_time_variable]
+			star_o = spectra_interp(_eval_lm_inner(om.star.lm.M, s_star, om.star.lm.μ, _star_log_lm), om.b2o)
+			prior += model_s_prior(s_star, om.reg_star)
+		else
+			star_o = o.star
+		end
+		rv_o = spectra_interp(om.rv.lm.M * rv_s, om.b2o)
+		return sum(__loss_diagnostic(tel_o, star_o, rv_o, d; use_var_s=true)) + prior
     end
 
     return l_total, l_total_s
@@ -216,28 +250,43 @@ function loss_funcs_total(o::Output, om::OrderModelWobble, d::Data)
 		tel_prior(total[1], om) + star_prior(total[2], om)
 	is_tel_time_variable = is_time_variable(om.tel)
 	is_star_time_variable = is_time_variable(om.star)
-    function l_total_s(total_s)
-		prior = 0.
-		if is_tel_time_variable
-			tel = (om.tel.lm.M, total_s[1], om.tel.lm.μ)
-			prior += model_s_prior(total_s[1], om.reg_tel)
-			if is_star_time_variable
-				star = (om.star.lm.M, total_s[2], om.star.lm.μ)
-				prior += model_s_prior(total_s[2], om.reg_star)
-			else
-				star = nothing
-			end
-		elseif is_star_time_variable
-			tel = nothing
-			star = (om.star.lm.M, total_s[1], om.star.lm.μ)
-			prior += model_s_prior(total_s[1], om.reg_star)
-		else
-			tel = nothing
-			star = nothing
+	_tel_log_lm = Val(log_lm(om.tel.lm))
+	_star_log_lm = Val(log_lm(om.star.lm))
+	# Specialized l_total_s closures avoid Const/Active PHI nodes in the Enzyme trace.
+	# A single closure with `if is_tel_time_variable` compiles both branches and inserts
+	# a PHI merging Const o.tel with an Active spectra_interp result — even when the
+	# Const branch is dead at runtime. Lifting the branch outside the closure body means
+	# each anonymous function has an unconditional body; Enzyme sees no mixed PHI nodes.
+	l_total_s = if is_tel_time_variable && is_star_time_variable
+		function(total_s)
+			s_tel = total_s[1]; s_star = total_s[2]; rv = total_s[3]
+			tel_o = spectra_interp(_eval_lm_inner(om.tel.lm.M, s_tel, om.tel.lm.μ, _tel_log_lm), om.t2o)
+			star_o = spectra_interp(_eval_lm_inner(om.star.lm.M, s_star, om.star.lm.μ, _star_log_lm), _rv_shift(rv, om.bary_rvs), om.b2o)
+			sum(__loss_diagnostic(tel_o, star_o, d; use_var_s=true)) +
+				model_s_prior(s_tel, om.reg_tel) + model_s_prior(s_star, om.reg_star)
 		end
-		return _loss(o, om, d; tel=tel, star=star, rv=total_s[1+is_star_time_variable+is_tel_time_variable], use_var_s=true) + prior
-    end
-
+	elseif is_tel_time_variable
+		_const_star_flux = om.star.lm()
+		function(total_s)
+			s_tel = total_s[1]; rv = total_s[2]
+			tel_o = spectra_interp(_eval_lm_inner(om.tel.lm.M, s_tel, om.tel.lm.μ, _tel_log_lm), om.t2o)
+			star_o = spectra_interp(_const_star_flux, _rv_shift(rv, om.bary_rvs), om.b2o)
+			sum(__loss_diagnostic(tel_o, star_o, d; use_var_s=true)) + model_s_prior(s_tel, om.reg_tel)
+		end
+	elseif is_star_time_variable
+		function(total_s)
+			s_star = total_s[1]; rv = total_s[2]
+			star_o = spectra_interp(_eval_lm_inner(om.star.lm.M, s_star, om.star.lm.μ, _star_log_lm), _rv_shift(rv, om.bary_rvs), om.b2o)
+			sum(__loss_diagnostic(o.tel, star_o, d; use_var_s=true)) + model_s_prior(s_star, om.reg_star)
+		end
+	else
+		_const_star_flux = om.star.lm()
+		function(total_s)
+			rv = total_s[1]
+			star_o = spectra_interp(_const_star_flux, _rv_shift(rv, om.bary_rvs), om.b2o)
+			sum(__loss_diagnostic(o.tel, star_o, d; use_var_s=true))
+		end
+	end
     return l_total, l_total_s
 end
 loss_funcs_total(mws::ModelWorkspace) = loss_funcs_total(mws.o, mws.om, mws.d)
@@ -659,7 +708,7 @@ struct TotalWorkspace <: AdamWorkspace
 	only_s::Bool
 end
 
-function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def, backend::ADBackend=EnzymeBackend())
+function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def, kwargs...)
 	l_total, l_total_s = loss_funcs_total(o, om, d)
 	α_ratio = α * sqrt(length(om.tel.lm.μ)) # = α / rel_step_size(om.tel.lm.M) assuming M starts as L2 normalized basis vectors. Need to use this instead because TemplateModels don't have basis vectors
 	is_tel_time_variable = is_time_variable(om.tel)
@@ -687,7 +736,7 @@ function TotalWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, 
 		loss = l_total
 		build_l = (om2, o2, d2) -> loss_funcs_total(o2, om2, d2)[1]
 	end
-	total = AdamSubWorkspace(build_θ(om), loss; backend=backend, om=om, build_θ=build_θ, build_l=build_l, o=o, d=d)
+	total = AdamSubWorkspace(build_θ(om), loss; om=om, build_θ=build_θ, build_l=build_l, o=o, d=d, kwargs...)
 	if is_tel_time_variable || is_star_time_variable
 		scale_α_helper!(total.opt[1:(is_tel_time_variable+is_star_time_variable)], α_ratio, total.θ, α, scale_α)
 	end
@@ -720,7 +769,7 @@ struct FrozenTelWorkspace <: AdamWorkspace
 end
 
 
-function FrozenTelWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def, backend::ADBackend=EnzymeBackend())
+function FrozenTelWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=false, α::Real=α, scale_α::Bool=_scale_α_def, kwargs...)
 	l_frozen_tel, l_frozen_tel_s = loss_funcs_frozen_tel(o, om, d)
 	α_ratio = α * sqrt(length(om.tel.lm.μ)) # = α / rel_step_size(om.tel.lm.M) assuming M starts as L2 normalized basis vectors. Need to use this instead because TemplateModels don't have basis vectors
 	is_tel_time_variable = is_time_variable(om.tel)
@@ -750,7 +799,7 @@ function FrozenTelWorkspace(o::Output, om::OrderModel, d::Data; only_s::Bool=fal
 		loss = l_frozen_tel
 		build_l = (om2, o2, d2) -> loss_funcs_frozen_tel(o2, om2, d2)[1]
 	end
-	total = AdamSubWorkspace(build_θ(om), loss; backend=backend, om=om, build_θ=build_θ, build_l=build_l, o=o, d=d)
+	total = AdamSubWorkspace(build_θ(om), loss; om=om, build_θ=build_θ, build_l=build_l, o=o, d=d, kwargs...)
 	if is_tel_time_variable || is_star_time_variable
 		scale_α_helper!(total.opt[1:(is_tel_time_variable+is_star_time_variable)], α_ratio, total.θ, α, scale_α)
 	end
@@ -875,7 +924,7 @@ Create an objective object for Optim from `loss` that uses a flattened verison o
 """
 function opt_funcs(loss::Function, pars::AbstractVecOrMat; backend::ADBackend=EnzymeBackend())
     flat_initial_params, unflatten = flatten(pars)  # unflatten returns Vector of untransformed params
-    f = loss ∘ unflatten
+    f = FlatLoss(loss, unflatten)
 	cache = prepare_gradient(backend, f, flat_initial_params)
     function g!(G, θ)
         G .= value_and_gradient!(cache, f, θ)[2]
