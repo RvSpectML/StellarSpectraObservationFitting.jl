@@ -120,7 +120,7 @@ function aic(mws::ModelWorkspace)
 	return aic(mws, logdet_Σ, n)
 end
 "Akaike information criterion (corrected for small sample sizes)"
-aicc(k::Int, ℓ::Real, n::Int) = aic(k, ℓ) + (2k(k+1))/(n-k-1)
+aicc(k::Int, ℓ::Real, n::Int) = aic(k, ℓ) + (2 * k * (k + 1)) / (n - k - 1)
 aicc(mws::ModelWorkspace, logdet_Σ::Real, n::Int) =
 	aicc(total_length(mws), ℓ(_loss(mws), logdet_Σ, n), n)
 function aicc(mws::ModelWorkspace)
