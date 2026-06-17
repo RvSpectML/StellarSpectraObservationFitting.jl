@@ -38,6 +38,12 @@ function value_and_gradient! end
 
 import Enzyme
 
+"""
+    EnzymeBackend <: ADBackend
+
+AD backend that uses Enzyme.jl for reverse-mode differentiation.
+Default backend for all Wobble and DPCA optimization paths.
+"""
 struct EnzymeBackend <: ADBackend end
 
 # StellarInterpolationHelper holds precomputed interpolation indices and weights
@@ -62,6 +68,12 @@ Enzyme.EnzymeRules.inactive_type(::Type{<:Data}) = true
 # Cache for the flat-vector path. `∂l` is the shadow closure (preserves any
 # alias-into-captured-state structure via Enzyme.make_zero's IdDict tracking).
 # `∂θ` is pre-allocated; zeroed in-place each call.
+"""
+    EnzymeFlatCache{L, T}
+
+Gradient cache for the flat-vector Enzyme path (Optim and error-estimation callers).
+`∂l` is a pre-allocated shadow of the loss closure; `∂θ` accumulates the gradient.
+"""
 struct EnzymeFlatCache{L, T<:AbstractVector{<:Real}}
     ∂l::L
     ∂θ::T
@@ -109,12 +121,26 @@ end
 # (sih.log_λ_obs_m_model_log_λ_lo .+ rv_to_D(rvs)'), which Enzyme cannot prove
 # statically.  The gain vs. the original path is fewer checks overall.
 
+"""
+    FlatLoss{L, U}
+
+Wraps a nested-array loss function with its `ParameterHandling.unflatten` inverse so that
+Enzyme can differentiate `loss(nested)` w.r.t. the typed nested arrays directly, avoiding
+`set_runtime_activity` overhead from `Vector{Any}` element access in the `unflatten` path.
+"""
 struct FlatLoss{L,U}
     loss::L
     unflatten::U
 end
 (f::FlatLoss)(x::AbstractVector) = f.loss(f.unflatten(x))
 
+"""
+    EnzymeFlatLossCache{∂N, T}
+
+Gradient cache for the `FlatLoss` Enzyme path (used by `opt_funcs`).
+`∂nested` is a pre-allocated shadow of the nested parameter tuple; `∂θ` is the
+flattened gradient output aligned to the flat `θ` vector seen by Optim.
+"""
 struct EnzymeFlatLossCache{∂N, T<:AbstractVector{<:Real}}
     ∂nested::∂N
     ∂θ::T
@@ -176,6 +202,13 @@ _enzyme_zero_nested!(a::AbstractArray) = fill!(a, 0)
 # θ_copy is a fresh non-aliased copy allocated once; it is synced from the
 # live θ each call, so Enzyme sees no shared pointers between Const(l) and
 # Duplicated(θ_copy, ∂θ).
+"""
+    EnzymeNestedCache{T, ∂T}
+
+Gradient cache for the nested-Tuple Adam path.
+`θ_copy` is a non-aliased copy of `θ` synced each call so Enzyme sees no shared pointers
+between `Const(loss)` and the primal; `∂θ` accumulates the gradient in-place.
+"""
 struct EnzymeNestedCache{T, ∂T}
     θ_copy::T   # pre-allocated non-aliased copy of θ
     ∂θ::∂T      # gradient output

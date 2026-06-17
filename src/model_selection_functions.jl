@@ -28,6 +28,13 @@ function intra_night_std(rvs::AbstractVector, times::AbstractVector; thres::Int=
     return median(intra_night_stds)
 end
 
+"""
+    n_negligible(x)
+
+Count elements with absolute value below 1e-5 × ‖x‖₂ (i.e., effectively zero
+relative to the overall scale).  Used during model selection to detect feature
+vectors that contribute negligibly to the model.
+"""
 n_negligible(x::AbstractVecOrMat) = sum(abs.(x) .< (1e-5 * sqrt(sum(abs2, x))))
 function n_negligible(x::Submodel)
     n = n_negligible(x.lm.μ)

@@ -12,7 +12,7 @@ Use julia v1.11.2 for code in this repository.
 JULIA = /home/eford/.julia/juliaup/julia-1.11.2+0.x64.linux.gnu/bin/julia
 
 ```bash
-# Run tests (all tests live in test/runtests.jl; there is no runtests_slow.jl here)
+# Run tests (all tests live in test/runtests.jl)
 JULIA --project=. -e 'using Pkg; Pkg.test()'
 
 # Run only the tests that aren't slow:
