@@ -1373,6 +1373,7 @@ end
 model_prior(lm, om::OrderModel, key::Symbol) = model_prior(lm, getfield(om, Symbol(:reg_, key)), getfield(om, key))
 model_prior(lm::Union{FullLinearModel, TemplateModel}, om::OrderModel, key::Symbol) = model_prior(vec(lm), om, key)
 
+"Return `true` if `reg` contains `key` with a non-zero value."
 nonzero_key(reg, key) = haskey(reg, key) && reg[key] != 0
 
 """

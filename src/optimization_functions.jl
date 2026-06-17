@@ -1282,6 +1282,13 @@ function finalize_scores!(mws::ModelWorkspace; kwargs...)
 	return finalize_scores!(score_trainer, mws)
 end
 
+"""
+    is_time_variable(lm_or_sm)
+
+Return `true` if the model has time-varying components (i.e., is a `FullLinearModel` or
+`BaseLinearModel` rather than a `TemplateModel`).  Used throughout the codebase to skip
+score/feature-vector optimization for constant (template-only) submodels.
+"""
 is_time_variable(lm::LinearModel) = !(typeof(lm) <: TemplateModel)
 is_time_variable(sm::Submodel) = is_time_variable(sm.lm)
 

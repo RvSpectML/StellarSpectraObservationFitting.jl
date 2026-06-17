@@ -35,24 +35,46 @@ const H_k = SMatrix{1,3}(H .* sqrt(σ²_kernel))  # this is how we deal with ker
 
 _σ²_meas_def = 1e-12
 
-# Need one of these per timestep
-# They are constant if we have constant timestep
-# σ²_meas and H_k only inlcuded as kwargs to prevent errors with passing kwargs...
-# in SOAP_gp_ℓ(y, Δx::Real; kwargs...)
+"""
+    gp_sde_prediction_matrices(Δx, Δx_scaler; P∞=P∞, F=F, σ²_meas=_σ²_meas_def, H_k=H_k)
+
+Compute the Kalman-filter state-transition matrix `A_k = exp(F·Δx·Δx_scaler)` and
+process-noise covariance `Σ_k = P∞ - A_k·P∞·A_kᵀ` for a Matérn-5/2 LTISDE
+(eqs. 6.23 and 6.71 of Solin & Särkkä 2019).  Returns `(A_k, Σ_k)`.
+
+Constant across time steps when `Δx` is uniform.
+`σ²_meas` and `H_k` are accepted as kwargs only to absorb forwarded kwargs from callers.
+"""
 function gp_sde_prediction_matrices(Δx, Δx_scaler::Real; P∞::AbstractMatrix=P∞, F::AbstractMatrix=F, σ²_meas::Real=_σ²_meas_def, H_k::AbstractMatrix=H_k)
     A_k = SMatrix{3,3}(exp(F * Δx * Δx_scaler))  # State transition matrix eq 6.23 in [2]?
     Σ_k = SMatrix{3,3}(Symmetric(P∞) - A_k * Symmetric(P∞) * A_k')  # eq. 6.71 in [2], the process noise
     return A_k, Σ_k
 end
+"Specialization of `gp_sde_prediction_matrices` using the SOAP GP lengthscale `SOAP_gp_params.λ`."
 SOAP_gp_sde_prediction_matrices(Δx; Δx_scaler::Real=SOAP_gp_params.λ, kwargs...) =
     gp_sde_prediction_matrices(Δx, Δx_scaler; kwargs...)
+"Specialization of `gp_sde_prediction_matrices` using the LSF GP lengthscale `LSF_gp_params.λ`."
 LSF_gp_sde_prediction_matrices(Δx; Δx_scaler::Real=LSF_gp_params.λ, kwargs...) =
     gp_sde_prediction_matrices(Δx, Δx_scaler; kwargs...)
 
+"""
+    predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
+
+Kalman-filter **prediction step**: propagate state mean `m_k` and covariance `P_k`
+forward by one time step using transition matrix `A_k` and process noise `Σ_k`.
+Writes predicted mean `m_kbar` and covariance `P_kbar` in-place.
+"""
 function predict!(m_kbar, P_kbar, A_k, m_k, P_k, Σ_k)
     m_kbar .= A_k * m_k  # state prediction
     P_kbar .= A_k * P_k * A_k' + Σ_k  # covariance of state prediction
 end
+"""
+    update_sde!(K_k, m_k, P_k, y, H_k, m_kbar, P_kbar, σ²_meas) -> (v_k, S_k)
+
+Kalman-filter **update step**: assimilate observation `y` into the predicted state
+(`m_kbar`, `P_kbar`).  Computes innovation `v_k`, innovation variance `S_k`, and Kalman
+gain `K_k`; updates posterior mean `m_k` and covariance `P_k` in-place.
+"""
 function update_sde!(K_k, m_k, P_k, y, H_k, m_kbar, P_kbar, σ²_meas)
     v_k = y - only(H_k * m_kbar)  # difference btw meas and pred, scalar
     S_k = only(H_k * P_kbar * H_k') + σ²_meas  # P_kbar[1,1] * σ²_kernel + σ²_meas, scalar
@@ -61,6 +83,12 @@ function update_sde!(K_k, m_k, P_k, y, H_k, m_kbar, P_kbar, σ²_meas)
     P_k .= P_kbar - K_k * S_k * K_k'
     return v_k, S_k
 end
+"""
+    init_states(n_state) -> (m_k, P_k, m_kbar, P_kbar, K_k)
+
+Allocate and zero-initialize the mutable Kalman-filter state arrays for `n_state`-dimensional
+latent state.  `P_k` is initialized to `P∞` (steady-state prior covariance).
+"""
 function init_states(n_state)
     m_k = @MVector zeros(n_state)
     P_k = MMatrix{3,3}(P∞)
@@ -389,6 +417,13 @@ end
 #   gp_ℓ_precalc(Δℓ, x, A, Σ) → ∂/∂x = Δℓ_precalc(Δℓ, x, A, Σ, H_k, P∞)
 #   shared_attention(M) = sum(M'M) - sum(diag(M'M))
 #                      → ∂/∂M = 2*(row_sum(M)*ones' - M)  where row_sum = sum(M;dims=2)
+"""
+    _model_prior_∂lm!(∂lm, lm_val, reg, sm, dr)
+
+Accumulate `dr * ∂(model_prior)/∂lm` into `∂lm` in-place.
+Called by the native Enzyme reverse rule for `model_prior`; avoids Dict access
+inside Enzyme's tape (which triggers `EnzymeNonScalarReturnException`).
+"""
 function _model_prior_∂lm!(∂lm, lm_val, reg, sm, dr)
     isFullLinearModel = length(lm_val) > 2
     μ_idx = 1 + 2 * isFullLinearModel  # 3 for FullLinearModel, 1 otherwise
