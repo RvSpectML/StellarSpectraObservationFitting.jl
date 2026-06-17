@@ -422,6 +422,7 @@ vec(lm::TemplateModel) = [lm.μ]
 vec(lms::Vector{<:LinearModel}) = [vec(lm) for lm in lms]
 
 LinearModel(M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector; log_lm::Bool=_log_lm_default) = FullLinearModel(M, s, μ, log_lm)
+LinearModel(M::AbstractMatrix, s::AbstractMatrix, μ::AbstractVector, log_lm::Bool) = FullLinearModel(M, s, μ, log_lm)
 LinearModel(M::AbstractMatrix, s::AbstractMatrix; log_lm::Bool=_log_lm_default) = BaseLinearModel(M, s, log_lm)
 LinearModel(μ::AbstractVector, n::Int) = TemplateModel(μ, n)
 
