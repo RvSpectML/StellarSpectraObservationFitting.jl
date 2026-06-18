@@ -1362,8 +1362,9 @@ function model_prior(lm, reg::Dict, sm::Submodel) :: Float64
 		if haskey(reg, :L1_M); val += L1(lm[1]) * reg[:L1_M] end
 		# if haskey(reg, :GP_μ); val -= gp_ℓ_precalc(sm.Δℓ_coeff, view(lm[1], :, 1), sm.A_sde, sm.Σ_sde) * reg[:GP_μ] end
 		if haskey(reg, :GP_M)
+			gp_M = reg[:GP_M]
 			for i in 1:size(lm[1], 2)
-				val -= gp_ℓ_precalc(sm.Δℓ_coeff, lm[1][:, i], sm.A_sde, sm.Σ_sde) * reg[:GP_M]
+				val -= gp_ℓ_precalc(sm.Δℓ_coeff, view(lm[1], :, i), sm.A_sde, sm.Σ_sde) * gp_M
 			end
 		end
 		val += model_s_prior(lm[2], reg)
