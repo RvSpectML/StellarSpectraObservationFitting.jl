@@ -1,4 +1,4 @@
-# using LineSearches
+using LineSearches
 using ParameterHandling
 using Optim
 import Base.println
@@ -245,9 +245,22 @@ function loss_funcs_total(o::Output, om::OrderModelDPCA, d::Data)
     return l_total, l_total_s
 end
 function loss_funcs_total(o::Output, om::OrderModelWobble, d::Data)
-	l_total(total) =
-		_loss(o, om, d; tel=total[1], star=total[2], rv=total[3]) +
-		tel_prior(total[1], om) + star_prior(total[2], om)
+	_tel_log_lm  = Val(log_lm(om.tel.lm))
+	_star_log_lm = Val(log_lm(om.star.lm))
+	function _ev(v, log_val::Val)
+		length(v) == 3 && return _eval_lm_inner(v[1], v[2], v[3], log_val)
+		length(v) == 2 && return _eval_lm_inner(v[1], v[2], log_val)
+		return v[1] * ones(om.n)'
+	end
+	function l_total(total)
+		tel_lm  = total[1]
+		star_lm = total[2]
+		rv      = total[3]
+		tel_o  = spectra_interp(_ev(tel_lm, _tel_log_lm), om.t2o)
+		star_o = spectra_interp(_ev(star_lm, _star_log_lm), _rv_shift(rv, om.bary_rvs), om.b2o)
+		return sum(__loss_diagnostic(tel_o, star_o, d)) +
+			   tel_prior(tel_lm, om) + star_prior(star_lm, om)
+	end
 	is_tel_time_variable = is_time_variable(om.tel)
 	is_star_time_variable = is_time_variable(om.star)
 	_tel_log_lm = Val(log_lm(om.tel.lm))
@@ -955,11 +968,12 @@ struct OptimSubWorkspace
 	"Function to convert `p0` to `θ`"
     unflatten::Union{Function,DataType}
 end
-function OptimSubWorkspace(θ::AbstractVecOrMat, loss::Function; use_cg::Bool=true)
+function OptimSubWorkspace(θ::AbstractVecOrMat, loss::Function; use_cg::Bool=true, linesearch=LineSearches.HagerZhang())
 	p0, obj, unflatten = opt_funcs(loss, θ)
 	# opt = LBFGS(alphaguess = LineSearches.InitialHagerZhang(α0=NaN))
 	# use_cg ? opt = ConjugateGradient() : opt = LBFGS()
-	opt = LBFGS()
+	# LineSearches.MoreThuente() is worth trying: fewer gradient evals per step
+	opt = LBFGS(linesearch=linesearch)
 	# initial_state(method::LBFGS, ...) doesn't use the options for anything
 	return OptimSubWorkspace(θ, obj, opt, p0, unflatten)
 end
@@ -1033,7 +1047,7 @@ struct OptimTotalWorkspace <: OptimWorkspace
 	"Whether or not the templates and features should be fit"
     only_s::Bool
 end
-function OptimTotalWorkspace(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=false, only_s::Bool=false)
+function OptimTotalWorkspace(om::OrderModel, o::Output, d::Data; return_loss_f::Bool=false, only_s::Bool=false, linesearch=LineSearches.HagerZhang())
 	l_total, l_total_s = loss_funcs_total(o, om, d)
 	typeof(om) <: OrderModelDPCA ? rvs = om.rv.lm.s : rvs = om.rv
 	is_tel_time_variable = is_time_variable(om.tel)
@@ -1041,17 +1055,17 @@ function OptimTotalWorkspace(om::OrderModel, o::Output, d::Data; return_loss_f::
 	if only_s
 		if is_tel_time_variable
 			if is_star_time_variable
-				total = OptimSubWorkspace([om.tel.lm.s, om.star.lm.s, rvs], l_total_s; use_cg=true)
+				total = OptimSubWorkspace([om.tel.lm.s, om.star.lm.s, rvs], l_total_s; use_cg=true, linesearch=linesearch)
 			else
-				total = OptimSubWorkspace([om.tel.lm.s, rvs], l_total_s; use_cg=true)
+				total = OptimSubWorkspace([om.tel.lm.s, rvs], l_total_s; use_cg=true, linesearch=linesearch)
 			end
 		elseif is_star_time_variable
-			total = OptimSubWorkspace([om.star.lm.s, rvs], l_total_s; use_cg=true)
+			total = OptimSubWorkspace([om.star.lm.s, rvs], l_total_s; use_cg=true, linesearch=linesearch)
 		else
-			total = OptimSubWorkspace([rvs], l_total_s; use_cg=true)
+			total = OptimSubWorkspace([rvs], l_total_s; use_cg=true, linesearch=linesearch)
 		end
 	else
-		total = OptimSubWorkspace([vec(om.tel.lm), vec(om.star.lm), rvs], l_total)
+		total = OptimSubWorkspace([vec(om.tel.lm), vec(om.star.lm), rvs], l_total; linesearch=linesearch)
 	end
 	return OptimTotalWorkspace(total, om, o, d, only_s)
 end
