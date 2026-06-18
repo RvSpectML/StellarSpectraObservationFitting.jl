@@ -457,8 +457,9 @@ function _model_prior_∂lm!(∂lm, lm_val, reg, sm, dr)
             ∂lm[1] .+= (dr * reg[:L1_M]) .* sign.(M)
         end
         if haskey(reg, :GP_M)
+            gp_M = reg[:GP_M]
             for i in 1:size(M, 2)
-                ∂lm[1][:, i] .+= (dr * (-reg[:GP_M])) .* Δℓ_precalc(sm.Δℓ_coeff, M[:, i], sm.A_sde, sm.Σ_sde, H_k, P∞)
+                ∂lm[1][:, i] .+= (dr * (-gp_M)) .* Δℓ_precalc(sm.Δℓ_coeff, view(M, :, i), sm.A_sde, sm.Σ_sde, H_k, P∞)
             end
         end
         if nonzero_key(reg, :L1_M) || nonzero_key(reg, :L2_M) || nonzero_key(reg, :GP_M)
