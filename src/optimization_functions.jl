@@ -502,20 +502,20 @@ _g_L∞tol_def_s = 1e-8
 
 Holds a set of model parameters and the ADAM optimizer and functions used to optimize them
 """
-struct AdamSubWorkspace{T,C,L<:Function}
+struct AdamSubWorkspace{T,C,L<:Function,O}
 	"Model parameters to optimize"
 	θ::T
 	"Adam optimizer parameters"
-	opt#::Adam
+	opt::O
 	"Optimization state"
 	as::AdamState
 	"Loss function"
 	l::L
 	"AD gradient cache"
 	cache::C
-	function AdamSubWorkspace(θ::T, opt, as, l::L, cache::C) where {T,C,L<:Function}
+	function AdamSubWorkspace(θ::T, opt::O, as, l::L, cache::C) where {T,C,L<:Function,O}
 		@assert typeof(l(θ)) <: Real
-		return new{T,C,L}(θ, opt, as, l, cache)
+		return new{T,C,L,O}(θ, opt, as, l, cache)
 	end
 end
 function AdamSubWorkspace(θ, l::Function; backend::ADBackend=EnzymeBackend(), kwargs...)
@@ -956,7 +956,7 @@ end
 
 Holds a set of model parameters and the Optim optimizer and functions used to optimize them
 """
-struct OptimSubWorkspace
+struct OptimSubWorkspace{U}
 	"Model parameters to optimize"
     θ::AbstractVecOrMat
 	"Optim objective object"
@@ -966,7 +966,7 @@ struct OptimSubWorkspace
 	"Flattened version of `θ`"
     p0::Vector
 	"Function to convert `p0` to `θ`"
-    unflatten::Union{Function,DataType}
+    unflatten::U
 end
 function OptimSubWorkspace(θ::AbstractVecOrMat, loss::Function; use_cg::Bool=true, linesearch=LineSearches.HagerZhang())
 	p0, obj, unflatten = opt_funcs(loss, θ)

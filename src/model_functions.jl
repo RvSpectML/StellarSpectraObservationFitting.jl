@@ -85,13 +85,13 @@ A linear interpolation holding information to interpolate the stellar model shif
 """
 struct StellarInterpolationHelper{T1<:Real, T2<:Int}
 	"`log_λ_obs - model_log_λ[lower_inds]` precomputed for coefficient calculations"
-    log_λ_obs_m_model_log_λ_lo::AbstractMatrix{T1}
+    log_λ_obs_m_model_log_λ_lo::Matrix{T1}
 	"The stellar model log λ uniform step size"
 	model_log_λ_step::T1
 	"The lower indices"
-	lower_inds::AbstractMatrix{T2}
+	lower_inds::Matrix{T2}
 	"The lower indices plus 1"
-	lower_inds_p1::AbstractMatrix{T2}
+	lower_inds_p1::Matrix{T2}
 	function StellarInterpolationHelper(
 		log_λ_obs_m_model_log_λ_lo::AbstractMatrix{T1},
 		model_log_λ_step::T1,
