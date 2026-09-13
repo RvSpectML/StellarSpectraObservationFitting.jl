@@ -527,17 +527,18 @@ end
 
 Holds information on the wavelengths, LTISDE representaiton for the GP reguarlization term, and linear model for a SSOF model component
 """
-mutable struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:AbstractArray{T}}
+struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:AbstractArray{T},
+                LM<:LinearModel, SM1<:StaticMatrix, SM2<:StaticMatrix}
     "Uniform separation log wavelengths of the SSOF model component"
 	log_λ::AV1
 	"`exp.(log_λ)`"
     λ::AV2
 	"Linear model"
-	lm::LinearModel
+	lm::LM
 	"State transition matrix"
-	A_sde::StaticMatrix
+	A_sde::SM1
 	"Process noise"
-	Σ_sde::StaticMatrix
+	Σ_sde::SM2
 	"Coefficients that can be used to calculate the gradient of the GP regularization term"
 	Δℓ_coeff::AA
 	"Precomputed steady-state Kalman-filter quantities for the GP regularization term"
@@ -571,14 +572,16 @@ function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int, log_λ_gp::Real; in
 	gp_steady = steady_state_gp(A_sde, Σ_sde)
 	return Submodel(log_λ, λ, lm, A_sde, Σ_sde, Δℓ_coeff, gp_steady)
 end
-function Submodel(log_λ::AV1, λ::AV2, lm, A_sde::StaticMatrix, Σ_sde::StaticMatrix, Δℓ_coeff::AA, gp_steady::SteadyStateGP{T}) where {T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:AbstractArray{T}}
+function Submodel(log_λ::AV1, λ::AV2, lm::LM, A_sde::SM1, Σ_sde::SM2, Δℓ_coeff::AA, gp_steady::SteadyStateGP{T}) where
+		{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:AbstractArray{T},
+		 LM<:LinearModel, SM1<:StaticMatrix, SM2<:StaticMatrix}
 	if typeof(lm) <: TemplateModel
 		@assert length(log_λ) == length(λ) == length(lm.μ) == size(Δℓ_coeff, 1) == size(Δℓ_coeff, 2)
 	else
 		@assert length(log_λ) == length(λ) == size(lm.M, 1) == size(Δℓ_coeff, 1) == size(Δℓ_coeff, 2)
 	end
 	@assert size(A_sde) == size(Σ_sde)
-	return Submodel{T, AV1, AV2, AA}(log_λ, λ, lm, A_sde, Σ_sde, Δℓ_coeff, gp_steady)
+	return Submodel{T, AV1, AV2, AA, LM, SM1, SM2}(log_λ, λ, lm, A_sde, Σ_sde, Δℓ_coeff, gp_steady)
 end
 (sm::Submodel)(inds::AbstractVecOrMat) =
 	Submodel(sm.log_λ, sm.λ, LinearModel(sm.lm, inds), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff, sm.gp_steady)
@@ -688,21 +691,22 @@ undersamp_interp_helper(to_x::AbstractVector, from_x::AbstractMatrix) =
 
 SSOF model for a set of 1D spectra using Doppler-constrained PCA to measure the RVs (which are contained in the RV Submodel)
 """
-struct OrderModelDPCA{T<:Number} <: OrderModel
+struct OrderModelDPCA{T<:Number, STel<:Submodel, SStar<:Submodel, SRV<:Submodel,
+                      B2O<:AbstractVector{<:SparseMatrixCSC}, T2O<:AbstractVector{<:SparseMatrixCSC}} <: OrderModel
 	"Telluric submodel"
-    tel::Submodel
+    tel::STel
 	"Stellar submodel"
-    star::Submodel
+    star::SStar
 	"RV submodel with Doppler feature vector"
-	rv::Submodel
+	rv::SRV
 	"Telluric regularization coefficients"
 	reg_tel::Dict{Symbol, T}
 	"Stellar regularization coefficients"
 	reg_star::Dict{Symbol, T}
 	"Matrices to interpolate stellar model to observed wavelengths (barycenter 2 observed)"
-	b2o::AbstractVector{<:SparseMatrixCSC}
+	b2o::B2O
 	"Matrices to interpolate telluric model to observed wavelengths (telluric 2 observed)"
-	t2o::AbstractVector{<:SparseMatrixCSC}
+	t2o::T2O
 	"Holds the data on the instrument, star, and order of data being as well as whether the model has been optimized or regularized etc."
 	metadata::Dict{Symbol, Any}
 	"Number of spectra to be modeled"
@@ -714,23 +718,25 @@ end
 
 SSOF model for a set of 1D spectra using linear interpolation of the stellar model to measure the RVs
 """
-struct OrderModelWobble{T<:Number} <: OrderModel
+struct OrderModelWobble{T<:Number, STel<:Submodel, SStar<:Submodel, RV<:AbstractVector,
+                        SIH1<:Real, SIH2<:Int, BRV<:AbstractVector{<:Real},
+                        T2O<:AbstractVector{<:SparseMatrixCSC}} <: OrderModel
 	"Telluric submodel"
-    tel::Submodel
+    tel::STel
 	"Stellar submodel"
-    star::Submodel
+    star::SStar
 	"RVs"
-	rv::AbstractVector
+	rv::RV
 	"Telluric regularization coefficients"
 	reg_tel::Dict{Symbol, T}
 	"Stellar regularization coefficients"
 	reg_star::Dict{Symbol, T}
 	"Linear interpolation helper objects to interpolate stellar model to observed wavelengths (barycenter 2 observed)"
-	b2o::StellarInterpolationHelper
+	b2o::StellarInterpolationHelper{SIH1, SIH2}
 	"Approximate barycentric correction \"RVs\" (using `(λ1-λ0)/λ0 = λ1/λ0 - 1 = e^D - 1 ≈ β = v / c`)"
-	bary_rvs::AbstractVector{<:Real}
+	bary_rvs::BRV
 	"Matrices to interpolate telluric model to observed wavelengths (telluric 2 observed)"
-	t2o::AbstractVector{<:SparseMatrixCSC}
+	t2o::T2O
 	"Holds the data on the instrument, star, and order of data being as well as whether the model has been optimized or regularized etc."
 	metadata::Dict{Symbol, Any}
 	"Number of spectra to be modeled"
@@ -1367,7 +1373,7 @@ Calulate the model prior on `lm` with regularization coefficients `reg` and subm
 Taking `reg` and `sm` as direct arguments (rather than deriving them via dynamic getfield)
 keeps the argument types concrete so Mooncake can dispatch @from_rrule for gp_ℓ_precalc.
 """
-function model_prior(lm, reg::Dict, sm::Submodel) :: Float64
+function model_prior(lm, reg::Dict{Symbol,<:Real}, sm::Submodel)
 	isFullLinearModel = length(lm) > 2
 	val = 0.
 
