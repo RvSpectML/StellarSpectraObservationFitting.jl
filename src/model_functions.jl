@@ -560,8 +560,9 @@ function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int, log_λ_gp::Real; in
 	else
 		if n_comp > 0
 			lm = BaseLinearModel(zeros(len, n_comp), zeros(n_comp, n_obs), log_lm)
+		else
+			@error "you need a mean if you don't want any components"
 		end
-		@error "you need a mean if you don't want any components"
 	end
 	temporal_gps_λ = 1 / log_λ_gp
 	A_sde, Σ_sde = gp_sde_prediction_matrices(step(log_λ), temporal_gps_λ)
