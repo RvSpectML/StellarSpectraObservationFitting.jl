@@ -126,18 +126,42 @@ Profile.print(; format=:flat, mincount=5)
 version, before changing anything** — both the `bench_gradient.jl` numbers and a full
 `profile_example.jl` run. Write the full-run baseline into this file:
 
-| Baseline (`2fa1302`, Julia ____) | value |
+Recorded on `try_enzyme` @ `8776cf0` (prep commit `98d38f2` + RNG-seed fix `8776cf0`, on top of
+`2fa1302`; see note below on why the prep commit had to move ahead of `2fa1302`), Julia 1.12.7,
+`-t 4`, `OPENBLAS_NUM_THREADS=4`, `profiling/profile_example.jl profiling/baseline_seeded` and
+`profiling/bench_gradient.jl` (`profiling/bench_gradient_baseline.log`). Data simulation is
+seeded (`seed=20260913` in `profiling/_setup.jl`) — an unseeded first attempt
+(`profiling/baseline_98d38f2`, discarded) showed `calculate_initial_model`'s runtime_generic
+share can otherwise vary run-to-run because the AIC search path itself varies; the seeded rerun
+reproduced the same share to within 0.1pp, so the seed controls that confound adequately for
+this comparison.
+
+| Baseline (`8776cf0`, Julia 1.12.7) | value |
 |---|---|
-| `calculate_initial_model` wall | ____ s |
-| `fit_regularization` wall | ____ s |
-| `improve_model` wall | ____ s |
-| `typeinf` self-samples, `calculate_initial_model` | ____ |
-| `call_get_staged` self-samples, `calculate_initial_model` | ____ |
-| `EnzymeCreateAugmentedPrimal` self-samples, `calculate_initial_model` | ____ |
-| `EnzymeCreatePrimalAndGradient` self-samples, `calculate_initial_model` | ____ |
-| `check_ir!` self-samples, `calculate_initial_model` | ____ |
-| `@allocated` per `value_and_gradient!` | ____ |
-| `@btime` per `value_and_gradient!` | ____ |
+| `calculate_initial_model` wall | 464.5 s |
+| `fit_regularization` wall | 623.6 s |
+| `improve_model` wall | 98.8 s |
+| `typeinf` self-samples (Overhead col, summed), `calculate_initial_model` | 3512 |
+| `call_get_staged` self-samples, `calculate_initial_model` | 5876 |
+| `EnzymeCreateAugmentedPrimal` self-samples, `calculate_initial_model` | 5748 |
+| `EnzymeCreatePrimalAndGradient` self-samples, `calculate_initial_model` | 321 |
+| `check_ir!` self-samples, `calculate_initial_model` | 1839 |
+| `@allocated` per `value_and_gradient!` | 169,059,728 bytes (~161 MiB) |
+| `@btime` per `value_and_gradient!` | median 98.6 ms (range 92.3–218.5 ms), 158.88 MiB / 764 allocs |
+| `runtime_generic_{augfwd,rev}` / `enzyme_call`, `calculate_initial_model` | 3061/19617 = 15.6% |
+| `runtime_generic_{augfwd,rev}` / `enzyme_call`, `fit_regularization` | 46371/49824 = 93.1% |
+| `runtime_generic_{augfwd,rev}` / `enzyme_call`, `improve_model` | 47244/47356 = 99.8% |
+| `runtime_generic_{augfwd,rev}` / `enzyme_call`, 200-iter Adam (`bench_gradient.jl`) | 16414/16456 = 99.7% |
+
+Note on `calculate_initial_model`'s 15.6% (vs. PROFILING.md's original 85.2%): the prep commit
+(`98d38f2`) includes a previously-uncommitted `loss_funcs_frozen_tel(o, om::OrderModelWobble, d)`
+closure-specialization override (mirroring the already-committed `loss_funcs_total` Wobble
+override from `3513464`) that was **not** present when PROFILING.md's numbers were taken. Since
+`calculate_initial_model`'s AIC search evaluates several `n_tel=0` (no-tellurics ⇒
+`FrozenTelWorkspace`) candidates, that fix alone already closed most of Implication #1 for this
+stage before Step 1 started. `fit_regularization`/`improve_model` use `TotalWorkspace`
+(tellurics present in the winning model) and were unaffected by that fix — they are the stages
+Step 1 targets.
 
 Step 3's gate compares against **this table**, not against PROFILING.md's.
 
