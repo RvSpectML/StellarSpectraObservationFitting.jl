@@ -52,6 +52,13 @@ struct EnzymeBackend <: ADBackend end
 # declare it inactive so Enzyme skips MixedDuplicated construction for it.
 Enzyme.EnzymeRules.inactive_type(::Type{<:StellarInterpolationHelper}) = true
 
+# SteadyStateGP holds the precomputed steady-state Kalman gain for a Submodel's GP
+# prior (derived once from A_sde/Σ_sde, `steady_state_gp` in prior_gp_functions.jl).
+# It is never a function of the optimized parameters and holds non-isbits Vector
+# fields, so — like StellarInterpolationHelper — it is declared inactive rather than
+# left to Enzyme's shadow-construction machinery.
+Enzyme.EnzymeRules.inactive_type(::Type{<:SteadyStateGP}) = true
+
 # Regularization dicts (reg_tel, reg_star) hold constant Float64 coefficients
 # that are never a function of the optimized parameters. Declaring Dict as
 # inactive prevents Enzyme from attempting to construct shadows for dict

@@ -500,6 +500,29 @@ end
 
 
 """
+	SteadyStateGP{T}
+
+Precomputed steady-state Kalman-filter quantities for a `Submodel`'s time-invariant
+GP prior. The Riccati recursion for the gain and innovation variance depends only on
+the model's grid spacing and GP lengthscale (`A_sde`/`Σ_sde`), never on any scored
+vector, so it is computed once per `Submodel` (`steady_state_gp`,
+`prior_gp_functions.jl`) rather than once per loss evaluation. `n_warm` steps run
+with the general (data-independent but not-yet-converged) `Ks`/`Ss` gain before the
+recursion reaches its fixed point (`Φ`, `K`, `S`); see `profiling/GPU_FEASIBILITY.md`
+§3 for the warm-up lengths on SSOF's model grids (96-99.8% shorter than the grid).
+"""
+struct SteadyStateGP{T<:Real}
+	n_warm::Int
+	Ks::Vector{SVector{3,T}}
+	Ss::Vector{T}
+	A::SMatrix{3,3,T,9}
+	h::SVector{3,T}
+	Φ::SMatrix{3,3,T,9}
+	K::SVector{3,T}
+	S::T
+end
+
+"""
 	Submodel
 
 Holds information on the wavelengths, LTISDE representaiton for the GP reguarlization term, and linear model for a SSOF model component
@@ -517,6 +540,8 @@ mutable struct Submodel{T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T
 	Σ_sde::StaticMatrix
 	"Coefficients that can be used to calculate the gradient of the GP regularization term"
 	Δℓ_coeff::AA
+	"Precomputed steady-state Kalman-filter quantities for the GP regularization term"
+	gp_steady::SteadyStateGP{T}
 end
 function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int, log_λ_gp::Real; include_mean::Bool=true, log_lm::Bool=_log_lm_default, log_λ::Union{Nothing,AbstractRange}=nothing, kwargs...)
 	n_obs = size(log_λ_obs, 2)
@@ -542,20 +567,21 @@ function Submodel(log_λ_obs::AbstractVecOrMat, n_comp::Int, log_λ_gp::Real; in
 	A_sde, Σ_sde = gp_sde_prediction_matrices(step(log_λ), temporal_gps_λ)
 	sparsity = Int(round(0.5 / (step(log_λ) * temporal_gps_λ)))
 	Δℓ_coeff = gp_Δℓ_coefficients(length(log_λ), A_sde, Σ_sde; sparsity=sparsity)
-	return Submodel(log_λ, λ, lm, A_sde, Σ_sde, Δℓ_coeff)
+	gp_steady = steady_state_gp(A_sde, Σ_sde)
+	return Submodel(log_λ, λ, lm, A_sde, Σ_sde, Δℓ_coeff, gp_steady)
 end
-function Submodel(log_λ::AV1, λ::AV2, lm, A_sde::StaticMatrix, Σ_sde::StaticMatrix, Δℓ_coeff::AA) where {T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:AbstractArray{T}}
+function Submodel(log_λ::AV1, λ::AV2, lm, A_sde::StaticMatrix, Σ_sde::StaticMatrix, Δℓ_coeff::AA, gp_steady::SteadyStateGP{T}) where {T<:Number, AV1<:AbstractVector{T}, AV2<:AbstractVector{T}, AA<:AbstractArray{T}}
 	if typeof(lm) <: TemplateModel
 		@assert length(log_λ) == length(λ) == length(lm.μ) == size(Δℓ_coeff, 1) == size(Δℓ_coeff, 2)
 	else
 		@assert length(log_λ) == length(λ) == size(lm.M, 1) == size(Δℓ_coeff, 1) == size(Δℓ_coeff, 2)
 	end
 	@assert size(A_sde) == size(Σ_sde)
-	return Submodel{T, AV1, AV2}(log_λ, λ, lm, A_sde, Σ_sde, Δℓ_coeff)
+	return Submodel{T, AV1, AV2, AA}(log_λ, λ, lm, A_sde, Σ_sde, Δℓ_coeff, gp_steady)
 end
 (sm::Submodel)(inds::AbstractVecOrMat) =
-	Submodel(sm.log_λ, sm.λ, LinearModel(sm.lm, inds), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff)
-Base.copy(sm::Submodel) = Submodel(sm.log_λ, sm.λ, copy(sm.lm), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff)
+	Submodel(sm.log_λ, sm.λ, LinearModel(sm.lm, inds), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff, sm.gp_steady)
+Base.copy(sm::Submodel) = Submodel(sm.log_λ, sm.λ, copy(sm.lm), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff, sm.gp_steady)
 
 
 """
@@ -919,7 +945,7 @@ function downsize(lm::TemplateModel, n_comp::Int)
 	return TemplateModel(copy(lm.μ), lm.n)
 end
 downsize(sm::Submodel, n_comp::Int) =
-	Submodel(copy(sm.log_λ), copy(sm.λ), downsize(sm.lm, n_comp), copy(sm.A_sde), copy(sm.Σ_sde), copy(sm.Δℓ_coeff))
+	Submodel(copy(sm.log_λ), copy(sm.λ), downsize(sm.lm, n_comp), copy(sm.A_sde), copy(sm.Σ_sde), copy(sm.Δℓ_coeff), sm.gp_steady)
 downsize(m::OrderModelDPCA, n_comp_tel::Int, n_comp_star::Int) =
 	OrderModelDPCA(
 		downsize(m.tel, n_comp_tel),
@@ -951,7 +977,7 @@ function downsize_view(lm::TemplateModel, n_comp::Int)
 	return lm
 end
 downsize_view(sm::Submodel, n_comp::Int) =
-	Submodel(sm.log_λ, sm.λ, downsize_view(sm.lm, n_comp), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff)
+	Submodel(sm.log_λ, sm.λ, downsize_view(sm.lm, n_comp), sm.A_sde, sm.Σ_sde, sm.Δℓ_coeff, sm.gp_steady)
 downsize_view(m::OrderModelDPCA, n_comp_tel::Int, n_comp_star::Int) =
 	OrderModelDPCA(
 		downsize_view(m.tel, n_comp_tel),
@@ -1354,7 +1380,7 @@ function model_prior(lm, reg::Dict, sm::Submodel) :: Float64
 		end
 		# if haskey(reg, :GP_μ); val -= logpdf(SOAP_gp(getfield(om, key).log_λ), μ_mod) * reg[:GP_μ] end
 		# if haskey(reg, :GP_μ); val -= gp_ℓ_nabla(μ_mod, sm.A_sde, sm.Σ_sde) * reg[:GP_μ] end
-		if haskey(reg, :GP_μ); val -= gp_ℓ_precalc(sm.Δℓ_coeff, μ_mod, sm.A_sde, sm.Σ_sde) * reg[:GP_μ] end
+		if haskey(reg, :GP_μ); val -= gp_ℓ_precalc(sm.Δℓ_coeff, μ_mod, sm.gp_steady) * reg[:GP_μ] end
 	end
 	if isFullLinearModel
 		if haskey(reg, :shared_M); val += shared_attention(lm[1]) * reg[:shared_M] end
@@ -1364,7 +1390,7 @@ function model_prior(lm, reg::Dict, sm::Submodel) :: Float64
 		if haskey(reg, :GP_M)
 			gp_M = reg[:GP_M]
 			for i in 1:size(lm[1], 2)
-				val -= gp_ℓ_precalc(sm.Δℓ_coeff, view(lm[1], :, i), sm.A_sde, sm.Σ_sde) * gp_M
+				val -= gp_ℓ_precalc(sm.Δℓ_coeff, view(lm[1], :, i), sm.gp_steady) * gp_M
 			end
 		end
 		val += model_s_prior(lm[2], reg)

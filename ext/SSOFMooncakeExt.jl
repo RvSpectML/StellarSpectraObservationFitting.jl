@@ -3,7 +3,6 @@ module SSOFMooncakeExt
 import Mooncake
 import StellarSpectraObservationFitting as SSOF
 using SparseArrays: SparseMatrixCSC
-using StaticArrays: SMatrix
 
 # TwicePrecision is immutable (Julia's internal double-double for range() steps).
 # No copy() method exists for it, but Mooncake needs one when traversing OrderModel.
@@ -45,9 +44,8 @@ Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(SSOF._eval_lm), Vector{Flo
 
 # gp_ℓ_precalc — concrete-type and abstract-type fallback registrations.
 # The rrule is defined in prior_gp_functions.jl via ChainRulesCore.
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(SSOF.gp_ℓ_precalc), Matrix{Float64}, Vector{Float64}, Matrix{Float64}, Matrix{Float64}}
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(SSOF.gp_ℓ_precalc), Matrix{Float64}, Vector{Float64}, SMatrix{3,3,Float64,9}, SMatrix{3,3,Float64,9}}
-Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(SSOF.gp_ℓ_precalc), AbstractArray, AbstractVector, AbstractMatrix, AbstractMatrix}
+Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(SSOF.gp_ℓ_precalc), Matrix{Float64}, Vector{Float64}, SSOF.SteadyStateGP{Float64}}
+Mooncake.@from_rrule Mooncake.DefaultCtx Tuple{typeof(SSOF.gp_ℓ_precalc), AbstractArray, AbstractVector, SSOF.SteadyStateGP}
 
 # ── Tangent helpers ───────────────────────────────────────────────────────────
 #

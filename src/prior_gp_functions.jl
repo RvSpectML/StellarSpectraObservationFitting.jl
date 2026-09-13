@@ -230,6 +230,95 @@ end
 
 
 """
+    steady_state_gp(A_k, Σ_k; H_k=H_k, P∞=P∞, σ²_meas=_σ²_meas_def, tol=1e-14, max_warm=1000)
+
+Iterate the Riccati recursion for the Matérn-5/2 LTISDE prior to its fixed point and
+return a `SteadyStateGP` record. `A_k`/`Σ_k` fully determine the recursion (it never
+depends on any scored vector), so this is called once per `Submodel`
+(`model_functions.jl`) rather than once per loss evaluation: the general filter
+(`gp_ℓ`, `gp_Δℓ_helper_γ`) does two 3×3 matmuls per step, the steady-state filter
+one 3×3 matvec after warm-up, and on SSOF's model grids warm-up is 96-99.8% shorter
+than the grid itself (`profiling/GPU_FEASIBILITY.md` §3).
+"""
+function steady_state_gp(A_k::AbstractMatrix, Σ_k::AbstractMatrix; H_k::AbstractMatrix=H_k,
+		P∞::AbstractMatrix=P∞, σ²_meas::Real=_σ²_meas_def, tol::Real=1e-14, max_warm::Int=1000)
+    T = eltype(A_k)
+    A = SMatrix{3,3,T}(A_k)
+    Σ = SMatrix{3,3,T}(Σ_k)
+    h = SVector{3,T}(H_k[1], H_k[2], H_k[3])
+    P = SMatrix{3,3,T}(P∞)
+    Kprev = zero(SVector{3,T})
+    Ks = SVector{3,T}[]
+    Ss = T[]
+    n_warm = max_warm
+    for k in 1:max_warm
+        Pbar = A * P * A' + Σ
+        S = dot(h, Pbar * h) + σ²_meas
+        K = (Pbar * h) / S
+        P = Pbar - S * (K * K')
+        push!(Ks, K); push!(Ss, S)
+        if maximum(abs, K - Kprev) < tol
+            n_warm = k
+            break
+        end
+        Kprev = K
+    end
+    K = Ks[n_warm]; S = Ss[n_warm]
+    Φ = A - K * (h' * A)
+    return SteadyStateGP{T}(n_warm, Ks, Ss, A, h, Φ, K, S)
+end
+
+"""
+    gp_ℓ(y, ss::SteadyStateGP)
+
+Fast dispatch of `gp_ℓ` using the steady-state Kalman gain precomputed once per
+`Submodel` (`steady_state_gp`) instead of re-running the general Riccati recursion
+on every call. Matches the general filter (`gp_ℓ(y, A_k, Σ_k)`) to machine precision
+after warm-up (`mwe/verify_steady.log`) at ~8.5x less work.
+"""
+function gp_ℓ(y::AbstractVector{T}, ss::SteadyStateGP{T}) where {T<:Real}
+    n = length(y)
+    m = zero(SVector{3,T}); ℓ = zero(T)
+    logS = log(ss.S); invS = inv(ss.S)
+    @inbounds for k in 1:min(ss.n_warm, n)
+        mbar = ss.A * m
+        v = y[k] - dot(ss.h, mbar)
+        m = mbar + ss.Ks[k] * v
+        ℓ -= log(ss.Ss[k]) + v * v / ss.Ss[k]
+    end
+    @inbounds for k in (ss.n_warm + 1):n
+        v = y[k] - dot(ss.h, ss.A * m)
+        m = ss.Φ * m + ss.K * y[k]
+        ℓ -= logS + v * v * invS
+    end
+    return (ℓ - n * log(2 * T(π))) / 2
+end
+
+"""
+    gp_Δℓ_helper_γ(y, ss::SteadyStateGP)
+
+Fast dispatch of `gp_Δℓ_helper_γ` using the steady-state Kalman gain; see `gp_ℓ(y, ss)`.
+"""
+function gp_Δℓ_helper_γ(y::AbstractVector{T}, ss::SteadyStateGP{T}) where {T<:Real}
+    n = length(y)
+    m = zero(SVector{3,T}); γ = Vector{T}(undef, n)
+    invS = inv(ss.S)
+    @inbounds for k in 1:min(ss.n_warm, n)
+        mbar = ss.A * m
+        v = y[k] - dot(ss.h, mbar)
+        m = mbar + ss.Ks[k] * v
+        γ[k] = v / ss.Ss[k]
+    end
+    @inbounds for k in (ss.n_warm + 1):n
+        v = y[k] - dot(ss.h, ss.A * m)
+        m = ss.Φ * m + ss.K * y[k]
+        γ[k] = v * invS
+    end
+    return γ
+end
+
+
+"""
     gp_Δℓ(y, A_k, Σ_k, H_k, P∞; kwargs...)
 
 Calculate the gradient of `gp_ℓ()` w.r.t. `y`
@@ -289,27 +378,35 @@ end
 # Δℓ_coe_s = Δℓ_coefficients(y, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas, sparsity=100)
 
 """
-    gp_ℓ_precalc(ℓ_coeff, x, A_k, Σ_k; kwargs...)
+    gp_ℓ_precalc(Δℓ_coeff, x, gp_steady; kwargs...)
 
-A version of `gp_ℓ()` using the coefficients calculated by `gp_Δℓ_coefficients()`
+A version of `gp_ℓ()` using the coefficients calculated by `gp_Δℓ_coefficients()` and
+the steady-state Kalman gain precomputed once per `Submodel` (`steady_state_gp`).
 """
-gp_ℓ_precalc(Δℓ_coeff::AbstractMatrix, x::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix; kwargs...) =
-    gp_ℓ(x, A_k, Σ_k; kwargs...)
+gp_ℓ_precalc(Δℓ_coeff::AbstractMatrix, x::AbstractVector, gp_steady::SteadyStateGP; kwargs...) =
+    gp_ℓ(x, gp_steady)
 # No-kwargs overload: Enzyme requires a non-kwcall dispatch target for the native
 # augmented_primal rule below. Without this, Julia routes no-kwarg calls through the
 # kwfunc machinery (because the kwargs... method exists), causing Enzyme's custom-rule
 # lookup to use the kwfunc path and miss the native rule.
-gp_ℓ_precalc(Δℓ_coeff::AbstractMatrix, x::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix) :: Float64 =
-    gp_ℓ(x, A_k, Σ_k)
+gp_ℓ_precalc(Δℓ_coeff::AbstractMatrix, x::AbstractVector, gp_steady::SteadyStateGP) :: Float64 =
+    gp_ℓ(x, gp_steady)
 
 
 """
-    gp_ℓ_precalc(ℓ_coeff, x, A_k, Σ_k; kwargs...)
+    Δℓ_precalc(Δℓ_coeff, x, A_k, Σ_k, H_k, P∞; kwargs...)
 
-Calculate the gradient of `gp_ℓ_precalc()` w.r.t. `y`
+Calculate the gradient of `gp_ℓ_precalc()` w.r.t. `y`, via the general filter.
 """
 Δℓ_precalc(Δℓ_coeff::AbstractMatrix, x::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix, H_k::AbstractMatrix, P∞::AbstractMatrix; kwargs...) =
     Δℓ_coeff * gp_Δℓ_helper_γ(x, A_k, Σ_k, H_k, P∞; kwargs...)
+"""
+    Δℓ_precalc(Δℓ_coeff, x, gp_steady::SteadyStateGP)
+
+Fast dispatch of `Δℓ_precalc` using the steady-state Kalman gain; see `gp_ℓ(y, ss)`.
+"""
+Δℓ_precalc(Δℓ_coeff::AbstractMatrix, x::AbstractVector, gp_steady::SteadyStateGP) =
+    Δℓ_coeff * gp_Δℓ_helper_γ(x, gp_steady)
 
 
 
@@ -320,11 +417,11 @@ using ChainRulesCore
 # that Mooncake infers from Submodel's unparameterized Δℓ_coeff::AA field. The pullback returns
 # NoTangent() for Δℓ_coeff so it does not matter whether the actual value is a Matrix or Sparse.
 function ChainRulesCore.rrule(::typeof(gp_ℓ_precalc),
-        Δℓ_coeff::AbstractArray, x::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix)
-    y = gp_ℓ(x, A_k, Σ_k)
+        Δℓ_coeff::AbstractArray, x::AbstractVector, gp_steady::SteadyStateGP)
+    y = gp_ℓ(x, gp_steady)
     function gp_ℓ_precalc_pullback(ȳ)
-        x̄ = ChainRulesCore.unthunk(ȳ) .* Δℓ_precalc(Δℓ_coeff, x, A_k, Σ_k, H_k, P∞)
-        return NoTangent(), NoTangent(), x̄, NoTangent(), NoTangent()
+        x̄ = ChainRulesCore.unthunk(ȳ) .* Δℓ_precalc(Δℓ_coeff, x, gp_steady)
+        return NoTangent(), NoTangent(), x̄, NoTangent()
     end
     return y, gp_ℓ_precalc_pullback
 end
@@ -340,10 +437,9 @@ function Enzyme.EnzymeRules.augmented_primal(
     RT::Type,
     Δℓ_coeff::Enzyme.Annotation,
     x::Enzyme.Annotation,
-    A_k::Enzyme.Annotation,
-    Σ_k::Enzyme.Annotation,
+    gp_steady::Enzyme.Annotation,
 )
-    primal_val = gp_ℓ_precalc(Δℓ_coeff.val, x.val, A_k.val, Σ_k.val)::Float64
+    primal_val = gp_ℓ_precalc(Δℓ_coeff.val, x.val, gp_steady.val)::Float64
     shadow_val = Enzyme.EnzymeRules.needs_shadow(config) ? zero(primal_val) : nothing
     # gp_ℓ_precalc's untyped args cause Julia to infer Any, so Enzyme passes
     # RT=Duplicated{Any}. Override with Active{Float64} for a concrete isbits struct.
@@ -359,13 +455,12 @@ function Enzyme.EnzymeRules.reverse(
     ::Nothing,
     Δℓ_coeff::Enzyme.Annotation,
     x::Enzyme.Annotation,
-    A_k::Enzyme.Annotation,
-    Σ_k::Enzyme.Annotation,
+    gp_steady::Enzyme.Annotation,
 )
     if !(x isa Enzyme.Const)
-        x.dval .+= dret.val .* Δℓ_precalc(Δℓ_coeff.val, x.val, A_k.val, Σ_k.val, H_k, P∞)
+        x.dval .+= dret.val .* Δℓ_precalc(Δℓ_coeff.val, x.val, gp_steady.val)
     end
-    return (nothing, nothing, nothing, nothing)
+    return (nothing, nothing, nothing)
 end
 
 # Native Enzyme rule for model_prior: bypasses Dict access inside the function body.
@@ -414,7 +509,7 @@ end
 # Gradient derivations:
 #   L2(x) = sum(x²)      → ∂/∂x = 2x
 #   L1(x) = sum(|x|)     → ∂/∂x = sign(x)
-#   gp_ℓ_precalc(Δℓ, x, A, Σ) → ∂/∂x = Δℓ_precalc(Δℓ, x, A, Σ, H_k, P∞)
+#   gp_ℓ_precalc(Δℓ, x, ss) → ∂/∂x = Δℓ_precalc(Δℓ, x, ss)
 #   shared_attention(M) = sum(M'M) - sum(diag(M'M))
 #                      → ∂/∂M = 2*(row_sum(M)*ones' - M)  where row_sum = sum(M;dims=2)
 """
@@ -440,7 +535,7 @@ function _model_prior_∂lm!(∂lm, lm_val, reg, sm, dr)
             end
         end
         if haskey(reg, :GP_μ)
-            ∂lm[μ_idx] .+= (dr * (-reg[:GP_μ])) .* Δℓ_precalc(sm.Δℓ_coeff, μ_mod, sm.A_sde, sm.Σ_sde, H_k, P∞)
+            ∂lm[μ_idx] .+= (dr * (-reg[:GP_μ])) .* Δℓ_precalc(sm.Δℓ_coeff, μ_mod, sm.gp_steady)
         end
     end
 
@@ -459,7 +554,7 @@ function _model_prior_∂lm!(∂lm, lm_val, reg, sm, dr)
         if haskey(reg, :GP_M)
             gp_M = reg[:GP_M]
             for i in 1:size(M, 2)
-                ∂lm[1][:, i] .+= (dr * (-gp_M)) .* Δℓ_precalc(sm.Δℓ_coeff, view(M, :, i), sm.A_sde, sm.Σ_sde, H_k, P∞)
+                ∂lm[1][:, i] .+= (dr * (-gp_M)) .* Δℓ_precalc(sm.Δℓ_coeff, view(M, :, i), sm.gp_steady)
             end
         end
         if nonzero_key(reg, :L1_M) || nonzero_key(reg, :L2_M) || nonzero_key(reg, :GP_M)
