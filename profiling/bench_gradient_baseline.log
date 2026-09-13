@@ -1,0 +1,372 @@
+WARNING: Method definition rrule(Type{T}, Tuple) where {T<:(StaticArraysCore.SArray{S, T, N, L} where L where N where T where S<:Tuple)} in module StaticArraysChainRulesCoreExt at /home/eford/.julia/packages/StaticArrays/k7bbZ/ext/StaticArraysChainRulesCoreExt.jl:28 overwritten in module TemporalGPs at /home/eford/.julia/packages/TemporalGPs/swuDu/src/util/chainrules.jl:31.
+ERROR: Method overwriting is not permitted during Module precompilation. Use `__precompile__(false)` to opt-out of precompilation.
+WARNING: Method definition rrule(Type{T}, Tuple) where {T<:(StaticArraysCore.SArray{S, T, N, L} where L where N where T where S<:Tuple)} in module StaticArraysChainRulesCoreExt at /home/eford/.julia/packages/StaticArrays/k7bbZ/ext/StaticArraysChainRulesCoreExt.jl:28 overwritten in module TemporalGPs at /home/eford/.julia/packages/TemporalGPs/swuDu/src/util/chainrules.jl:31.
+ERROR: Method overwriting is not permitted during Module precompilation. Use `__precompile__(false)` to opt-out of precompilation.
+WARNING: method definition for calc_continuum_anchors at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:123 declares type variable T3 but does not use it.
+WARNING: method definition for calc_continuum_anchors at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:123 declares type variable T3 but does not use it.
+WARNING: method definition for calc_continuum_from_anchors at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:221 declares type variable T4 but does not use it.
+WARNING: method definition for calc_continuum_from_anchors at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:221 declares type variable T4 but does not use it.
+WARNING: method definition for calc_continuum_from_anchors_linear at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:227 declares type variable T4 but does not use it.
+WARNING: method definition for calc_continuum_from_anchors_linear at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:227 declares type variable T4 but does not use it.
+WARNING: method definition for calc_continuum_from_anchors_cubic at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:247 declares type variable T4 but does not use it.
+WARNING: method definition for calc_continuum_from_anchors_cubic at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:247 declares type variable T4 but does not use it.
+WARNING: method definition for calc_continuum_from_anchors_hybrid at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:255 declares type variable T4 but does not use it.
+WARNING: method definition for calc_continuum_from_anchors_hybrid at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:255 declares type variable T4 but does not use it.
+WARNING: method definition for #find_clean_anchors_by_slope#320 at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:284 declares type variable AV3 but does not use it.
+WARNING: method definition for find_clean_anchors_by_slope at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:284 declares type variable T3 but does not use it.
+WARNING: method definition for find_clean_anchors_by_slope at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:284 declares type variable T3 but does not use it.
+WARNING: method definition for #merge_nearby_anchors#321 at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:299 declares type variable AV3 but does not use it.
+WARNING: method definition for merge_nearby_anchors at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:299 declares type variable T3 but does not use it.
+WARNING: method definition for merge_nearby_anchors at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:299 declares type variable T3 but does not use it.
+WARNING: method definition for calc_continuum at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:367 declares type variable T4 but does not use it.
+WARNING: method definition for calc_continuum at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:367 declares type variable T4 but does not use it.
+WARNING: method definition for calc_continuum at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:421 declares type variable T4 but does not use it.
+WARNING: method definition for calc_continuum at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:421 declares type variable T4 but does not use it.
+WARNING: method definition for calc_continuum at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:440 declares type variable T4 but does not use it.
+WARNING: method definition for calc_continuum at /mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/src/rassine.jl:440 declares type variable T4 but does not use it.
+Julia: 1.12.7, threads: 4
+looking for time variability...
+n_comp: (-1,0) -> (0,0)
+aic   : 5.790959380284421e6 -> -2.257796995072876e6
+RV std: 9.344411526813422 -> 4.002435503043294
+n_comp: (0,0) -> (1,0)
+aic   : -2.257796995072876e6 -> -5.711152765657151e6
+RV std: 4.002435503043294 -> 1.3059779530189934
+n_comp: (1,0) -> (1,1)
+aic   : -5.711152765657151e6 -> -5.722567509541396e6
+RV std: 1.3059779530189934 -> 1.6949472959809322
+n_comp: (1,1) -> (1,2)
+aic   : -5.722567509541396e6 -> -5.701999793488555e6
+RV std: 1.6949472959809322 -> 1.8157436522523238
+n_comp: (1,2) -> (2,2)
+aic   : -5.701999793488555e6 -> -5.679454800101756e6
+RV std: 1.8157436522523238 -> 1.5967045394598038
+stopped at (2,2)
+(1,1) was the best at aic = -5.722567509541396e6
+best possible aic (k=0, χ²=0) = -6.543648103616821e6
+typeof(mws): StellarSpectraObservationFitting.TotalWorkspace
+typeof(aws): StellarSpectraObservationFitting.AdamSubWorkspace{Tuple{Tuple{Matrix{Float64}, Matrix{Float64}, Vector{Float64}}, Tuple{Matrix{Float64}, Matrix{Float64}, Vector{Float64}}, Vector{Float64}}, StellarSpectraObservationFitting.EnzymeNestedCache{Tuple{Tuple{Matrix{Float64}, Matrix{Float64}, Vector{Float64}}, Tuple{Matrix{Float64}, Matrix{Float64}, Vector{Float64}}, Vector{Float64}}, Tuple{Tuple{Matrix{Float64}, Matrix{Float64}, Vector{Float64}}, Tuple{Matrix{Float64}, Matrix{Float64}, Vector{Float64}}, Vector{Float64}}}, StellarSpectraObservationFitting.var"#l_total#loss_funcs_total##3"{StellarSpectraObservationFitting.OrderModelWobble{Float64}, StellarSpectraObservationFitting.LSFData{Float64, Matrix{Float64}, Matrix{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}}, StellarSpectraObservationFitting.var"#_ev#loss_funcs_total##2"{StellarSpectraObservationFitting.OrderModelWobble{Float64}}}, Tuple{Tuple{StellarSpectraObservationFitting.Adam{Matrix{Float64}}, StellarSpectraObservationFitting.Adam{Matrix{Float64}}, StellarSpectraObservationFitting.Adam{Vector{Float64}}}, Tuple{StellarSpectraObservationFitting.Adam{Matrix{Float64}}, StellarSpectraObservationFitting.Adam{Matrix{Float64}}, StellarSpectraObservationFitting.Adam{Vector{Float64}}}, StellarSpectraObservationFitting.Adam{Vector{Float64}}}}
+─── value_and_gradient! (@btime) ─────────────────────────────
+BenchmarkTools.Trial: 40 samples with 1 evaluation per sample.
+ Range (min … max):   92.431 ms … 221.693 ms  ┊ GC (min … max):  0.00% … 56.71%
+ Time  (median):      96.002 ms               ┊ GC (median):     2.77%
+ Time  (mean ± σ):   127.109 ms ±  47.975 ms  ┊ GC (mean ± σ):  26.18% ± 23.11%
+
+  █                                                              
+  █▆▅▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▆▅▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▆▅ ▁
+  92.4 ms          Histogram: frequency by time          222 ms <
+
+ Memory estimate: 158.88 MiB, allocs estimate: 764.
+allocs/call (single @allocated sample): 169059728 bytes
+  Activating project at `/mnt/c/Users/eford/Code/StellarSpectraObservationFitting.jl/examples`
+Precompiling packages...
+   2152.2 ms  ? TemporalGPs
+   4258.5 ms  ? StellarSpectraObservationFitting
+Precompiling packages...
+   2236.4 ms  ? TemporalGPs
+Info Given StellarSpectraObservationFitting was explicitly requested, output will be shown live [0K
+[0KWARNING: Method definition rrule(Type{T}, Tuple) where {T<:(StaticArraysCore.SArray{S, T, N, L} where L where N where T where S<:Tuple)} in module StaticArraysChainRulesCoreExt at /home/eford/.julia/packages/StaticArrays/k7bbZ/ext/StaticArraysChainRulesCoreExt.jl:28 overwritten in module TemporalGPs at /home/eford/.julia/packages/TemporalGPs/swuDu/src/util/chainrules.jl:31.
+[0KERROR: Method overwriting is not permitted during Module precompilation. Use `__precompile__(false)` to opt-out of precompilation.
+   4243.0 ms  ? StellarSpectraObservationFitting
+Precompiling packages...
+Info Given TemporalGPs was explicitly requested, output will be shown live [0K
+[0KWARNING: Method definition rrule(Type{T}, Tuple) where {T<:(StaticArraysCore.SArray{S, T, N, L} where L where N where T where S<:Tuple)} in module StaticArraysChainRulesCoreExt at /home/eford/.julia/packages/StaticArrays/k7bbZ/ext/StaticArraysChainRulesCoreExt.jl:28 overwritten in module TemporalGPs at /home/eford/.julia/packages/TemporalGPs/swuDu/src/util/chainrules.jl:31.
+[0KERROR: Method overwriting is not permitted during Module precompilation. Use `__precompile__(false)` to opt-out of precompilation.
+   2209.6 ms  ? TemporalGPs
+─── 200 Adam iterations, profiled ────────────────────────────
+ Count  Overhead File                    Line Function
+ =====  ======== ====                    ==== ========
+  4415         0 @Base/Base.jl           352 (::Base.var"#start_profile_listen…
+  4403         0 @Base/Base.jl           306 include(mod::Module, _path::Strin…
+  4415         0 @Base/Base.jl           332 profile_printing_listener(cond::B…
+   204         0 @Base/abstractarray.jl 1371 _getindex
+   285         0 @Base/abstractarray.jl 1383 _getindex
+     7         0 @Base/abstractarray.jl 1466 _setindex!
+    12         0 @Base/abstractarray.jl 3052 _sub2ind
+    12         0 @Base/abstractarray.jl 3068 _sub2ind
+    12         0 @Base/abstractarray.jl 3084 _sub2ind_recurse
+    12         0 @Base/abstractarray.jl 1377 _to_linear_index
+    33         0 @Base/abstractarray.jl  689 checkbounds
+    33         0 @Base/abstractarray.jl  699 checkbounds
+    20         0 @Base/abstractarray.jl    ? checkindex
+     5         0 @Base/abstractarray.jl  767 checkindex
+     8         0 @Base/abstractarray.jl  768 checkindex
+   491         0 @Base/abstractarray.jl 1342 getindex
+     7         0 @Base/abstractarray.jl 1443 setindex!
+   757         0 @Base/abstractarray.jl  866 similar
+   757         0 @Base/abstractarray.jl  867 similar
+    33         0 @Base/abstractarray.jl 1205 zero
+    59         0 @Base/array.jl          333 _fill!
+    29         0 @Base/array.jl          334 _fill!
+   183       180 @Base/array.jl          991 _setindex!
+    53        52 @Base/array.jl         1003 _setindex!
+    88         0 @Base/array.jl          329 fill!
+   253         0 @Base/array.jl          929 getindex
+    28        20 @Base/array.jl          901 iterate
+   183         0 @Base/array.jl          986 setindex!
+    53         0 @Base/array.jl          997 setindex!
+    12         0 @Base/array.jl          375 similar
+   292         0 @Base/array.jl          377 similar
+   320         0 @Base/arraymath.jl       16 +
+  4415         0 @Base/asyncevent.jl     185 _trywait(t::Base.AsyncCondition)
+    11         0 @Base/boot.jl           647 Array
+  1107         0 @Base/boot.jl           651 Array
+    11         0 @Base/boot.jl           660 Array
+  1039         0 @Base/boot.jl           661 Array
+  1118      1118 @Base/boot.jl           588 GenericMemory
+  4403         0 @Base/boot.jl           489 eval(m::Module, e::Any)
+  1107         0 @Base/boot.jl           604 new_as_memoryref
+   573         0 @Base/broadcast.jl      665 _broadcast_getindex
+   778         0 @Base/broadcast.jl      671 _broadcast_getindex
+   216         0 @Base/broadcast.jl      672 _broadcast_getindex
+   264        12 @Base/broadcast.jl      699 _broadcast_getindex_evalf
+     8         0 @Base/broadcast.jl      620 _getindex
+   778         0 @Base/broadcast.jl      695 _getindex
+   566         0 @Base/broadcast.jl      696 _getindex
+   320         0 @Base/broadcast.jl      883 broadcast_preserving_zero_d
+    14         0 @Base/broadcast.jl      919 copy
+    26         0 @Base/broadcast.jl      947 copyto!
+    18         0 @Base/broadcast.jl      955 copyto!
+    12         0 @Base/broadcast.jl      994 copyto!
+     8         0 @Base/broadcast.jl      616 getindex
+    12         0 @Base/broadcast.jl      995 macro expansion
+    15         0 @Base/broadcast.jl      894 materialize
+    40         0 @Base/broadcast.jl      902 materialize!
+    40         0 @Base/broadcast.jl      905 materialize!
+   757         0 @Base/broadcast.jl      227 similar
+   757         0 @Base/broadcast.jl      228 similar
+  4403         0 @Base/client.jl         550 _start()
+  4403         0 @Base/client.jl         317 exec_options(opts::Base.JLOptions)
+  4415         0 @Base/condition.jl      141 wait(c::Base.GenericCondition{Bas…
+  4415         0 @Base/condition.jl      136 wait
+    15        15 @Base/essentials.jl       ? OverrideBCMaterialize
+  1909      1909 @Base/essentials.jl     920 getindex
+    13        13 @Base/essentials.jl       ? macro expansion
+     9         9 @Base/essentials.jl       ? overload_broadcast_getindex
+    85        85 @Base/essentials.jl     930 setindex!
+    42        42 @Base/float.jl          497 *
+    52        52 @Base/float.jl          495 +
+    22        22 @Base/float.jl          496 -
+    25        25 @Base/float.jl          498 /
+   116       116 @Base/float.jl          500 muladd
+    50        50 @Base/int.jl            353 &
+    25         0 @Base/int.jl           1015 &
+    54        54 @Base/int.jl             87 +
+    10        10 @Base/int.jl             86 -
+     7         0 @Base/intfuncs.jl       437 literal_pow
+  4403         0 @Base/loading.jl       3012 _include(mapexpr::Function, mod::…
+  4403         0 @Base/loading.jl       2952 include_string(mapexpr::typeof(id…
+    30         0 @Base/math.jl            94 evalpoly
+    30         0 @Base/math.jl            95 macro expansion
+     6         0 @Base/multidimensional.jl 1185 fill!
+     7         0 @Base/multidimensional.jl 1186 fill!
+   205         0 @Base/multidimensional.jl  743 getindex
+     5         0 @Base/multidimensional.jl  745 setindex!
+  1164         0 none                      ? macro expansion
+  1164         0 none                      ? overload_broadcast_getindex
+     9         0 @Base/operators.jl     1194 #_#58
+     9         0 @Base/operators.jl     1194 Fix
+     5         5 @Base/pointer.jl        151 unsafe_load
+     8         8 @Base/pointer.jl        178 unsafe_store!
+    10         0 @Base/promotion.jl      435 -
+   131       131 @Base/promotion.jl      637 ==
+     8         0 @Base/range.jl            5 Colon
+     8         0 @Base/range.jl          415 UnitRange
+   114        20 @Base/range.jl          921 iterate
+     8         8 @Base/range.jl          426 unitrange_last
+    90         0 @Base/reducedim.jl      983 #_sum#759
+    91         0 @Base/reducedim.jl      984 #_sum#760
+    91         0 @Base/reducedim.jl      326 #mapreduce#750
+    90         0 @Base/reducedim.jl      979 #sum#757
+    91         0 @Base/reducedim.jl      334 _mapreduce_dim
+    90         0 @Base/reducedim.jl      983 _sum
+    91         0 @Base/reducedim.jl      984 _sum
+     5         1 @Base/reducedim.jl        ? augmented_julia_sum_59226wrap
+    86         0 @Base/reducedim.jl        ? diffejulia_sum_59226wrap
+    91         0 @Base/reducedim.jl      326 mapreduce
+    90         0 @Base/reducedim.jl      979 sum
+    14         0 @Base/simdloop.jl        77 macro expansion
+   182        55 @Base/special/exp.jl    329 exp
+    55         0 @Base/special/exp.jl    215 exp_impl
+    39         0 @Base/special/exp.jl    216 exp_impl
+    26        23 @Base/special/exp.jl    218 exp_impl
+    33         0 @Base/special/exp.jl     78 expm1b_kernel
+    25         0 @Base/special/exp.jl    179 table_unpack
+     5         5 @Base/special/exp.jl    180 table_unpack
+    24         0 @Base/special/exp.jl    181 table_unpack
+    10         0 @Base/special/log.jl    289 _log
+    12         0 @Base/special/log.jl    261 log(x::Float64)
+     5         0 @Base/special/log.jl    186 log_proc1
+    10         0 @Base/subarray.jl       348 _reindexlinear
+   286         0 @Base/subarray.jl       316 getindex
+    11         0 @Base/subarray.jl       339 getindex
+    48         0 @Base/subarray.jl       298 reindex
+    13         0 @Base/subarray.jl       398 setindex!
+    33         0 @Base/subarray.jl       214 view
+ 17660     17659 @Base/task.jl          1216 poptask(W::Base.IntrusiveLinkedLi…
+ 13245         0 @Base/task.jl           868 task_done_hook(t::Task)
+ 17660         0 @Base/task.jl          1228 wait()
+     9         0 @Base/tuple.jl          359 map
+   193         0 @LinearAlgebra/src/adjtrans.jl  342 getindex
+    68        68 @LinearAlgebra/src/blas.jl 1642 gemm!
+    62         0 @LinearAlgebra/src/generic.jl  169 _rmul_or_fill!
+    24         0 @LinearAlgebra/src/matmul.jl   60 *
+   469         0 @LinearAlgebra/src/matmul.jl  114 *
+   266         0 @LinearAlgebra/src/matmul.jl  136 *
+    59         0 @LinearAlgebra/src/matmul.jl 1269 *
+    82         0 @LinearAlgebra/src/matmul.jl   74 _mul!
+   444         0 @LinearAlgebra/src/matmul.jl  328 _mul!
+    68         0 @LinearAlgebra/src/matmul.jl  533 _syrk_herk_gemm_wrapper!
+    59         0 @LinearAlgebra/src/matmul.jl 1273 _tri_matmul
+    58         0 @LinearAlgebra/src/matmul.jl 1281 _tri_matmul(A::StaticArraysCore.S…
+    68         0 @LinearAlgebra/src/matmul.jl  806 gemm_wrapper!
+   376         0 @LinearAlgebra/src/matmul.jl  343 generic_matmatmul_wrapper!
+    68         0 @LinearAlgebra/src/matmul.jl  507 generic_matmatmul_wrapper!
+    93         0 @LinearAlgebra/src/matmul.jl  129 matprod_dest
+   469         0 @LinearAlgebra/src/matmul.jl  118 mul
+    57         0 @LinearAlgebra/src/matmul.jl   71 mul!
+    25         0 @LinearAlgebra/src/matmul.jl   71 mul!
+   526         0 @LinearAlgebra/src/matmul.jl  265 mul!
+   260         0 @LinearAlgebra/src/matmul.jl  297 mul!
+   184         0 @LinearAlgebra/src/matmul.jl  297 mul!
+    30         0 @SparseArrays/src/linalg.jl  184 _At_or_Ac_mul_B!
+    28        10 @SparseArrays/src/linalg.jl  194 _At_or_Ac_mul_B!
+   113         0 @SparseArrays/src/linalg.jl  195 _At_or_Ac_mul_B!
+    51        22 @SparseArrays/src/linalg.jl  196 _At_or_Ac_mul_B!
+    26         0 @SparseArrays/src/linalg.jl  197 _At_or_Ac_mul_B!
+    10         0 @SparseArrays/src/linalg.jl  198 _At_or_Ac_mul_B!
+     9         9 @SparseArrays/src/linalg.jl    ? _spmatmul!
+    32         0 @SparseArrays/src/linalg.jl  161 _spmatmul!
+    14         4 @SparseArrays/src/linalg.jl  170 _spmatmul!
+     5         0 @SparseArrays/src/linalg.jl  171 _spmatmul!
+   179         0 @SparseArrays/src/linalg.jl  172 _spmatmul!
+    34         4 @SparseArrays/src/linalg.jl  173 _spmatmul!(C::Vector{Float64}, A:…
+   376         0 @SparseArrays/src/linalg.jl   85 generic_matmatmul!
+    82         0 @SparseArrays/src/linalg.jl   89 generic_matvecmul!
+    26         0 @SparseArrays/src/linalg.jl   21 getindex
+    85         0 @SparseArrays/src/linalg.jl   23 setindex!
+   274         0 @SparseArrays/src/linalg.jl   95 spdensemul!
+   184         0 @SparseArrays/src/linalg.jl   97 spdensemul!
+    25         0 @SparseArrays/src/sparsematrix.jl  311 nzrange
+  1911         0 @Enzyme/src/Enzyme.jl   430 autodiff
+  2449         0 @Enzyme/src/Enzyme.jl   433 autodiff
+  2449         0 @Enzyme/src/compiler.jl 6389 AdjointThunk
+  1911         0 @Enzyme/src/compiler.jl 6421 AugmentedForwardThunk
+  4360         0 @Enzyme/src/compiler.jl 6473 enzyme_call
+  4360       176 @Enzyme/src/compiler.jl 7003 macro expansion
+   755         0 @Enzyme/…mpiler/interpreter.jl  979 OverrideBCMaterialize
+  1164         0 @Enzyme/…mpiler/interpreter.jl  983 OverrideBCMaterialize
+   108         0 @Enzyme/…mpiler/interpreter.jl  984 OverrideBCMaterialize
+    11         6 @Enzyme/…mpiler/interpreter.jl  986 OverrideBCMaterialize
+   861         0 @Enzyme/…mpiler/interpreter.jl  992 OverrideBCMaterialize
+   862         0 @Enzyme/…mpiler/interpreter.jl  586 lindex_v1
+    11         0 @Enzyme/…mpiler/interpreter.jl  672 lindex_v2
+   875         0 @Enzyme/…mpiler/interpreter.jl  764 lindex_v3
+     9         0 @Enzyme/…mpiler/interpreter.jl  666 linear_getindex
+     9         0 @Enzyme/…mpiler/interpreter.jl  667 linear_getindex
+     9         0 @Enzyme/…mpiler/interpreter.jl  668 linear_getindex
+   821         0 @Enzyme/…mpiler/interpreter.jl  609 macro expansion
+    38         1 @Enzyme/…mpiler/interpreter.jl  619 macro expansion
+    11         0 @Enzyme/…mpiler/interpreter.jl  711 macro expansion
+    11         0 @Enzyme/…mpiler/interpreter.jl  825 macro expansion
+   862         0 @Enzyme/…mpiler/interpreter.jl  833 macro expansion
+  1154         0 @Enzyme/…mpiler/interpreter.jl  962 macro expansion
+  1097         0 @Enzyme/…mpiler/interpreter.jl  966 overload_broadcast_getindex
+    14         0 @Enzyme/…mpiler/interpreter.jl  866 override_bc_copyto!
+    90         0 @Enzyme/…mpiler/interpreter.jl 1051 override_bc_mapreduce
+  1905         0 @Enzyme/src/rules/jitrules.jl  467 macro expansion
+  2445         0 @Enzyme/src/rules/jitrules.jl  700 macro expansion
+  1905         0 @Enzyme/src/rules/jitrules.jl  600 runtime_generic_augfwd(::Type{Val…
+  2445         0 @Enzyme/src/rules/jitrules.jl  824 runtime_generic_rev(::Type{Val{(t…
+     5         0 @StaticArrays/src/MArray.jl   25 getindex
+     8         0 @StaticArrays/src/MArray.jl   35 setindex!
+     8         0 @StaticArrays/src/broadcast.jl  143 _broadcast!
+     8         0 @StaticArrays/src/broadcast.jl   70 _copyto!
+     8         0 @StaticArrays/src/broadcast.jl   63 copyto!
+     8         0 @StaticArrays/src/broadcast.jl  159 macro expansion
+    16         0 @StaticArrays/src/linalg.jl   24 #/##0
+    16         0 @StaticArrays/src/linalg.jl   12 +
+    16         0 @StaticArrays/src/linalg.jl   24 /
+    35         0 @StaticArrays/src/mapreduce.jl   42 _map
+    35         0 @StaticArrays/src/mapreduce.jl   77 macro expansion
+    16         0 @StaticArrays/src/mapreduce.jl   33 map
+    19         0 @StaticArrays/src/mapreduce.jl   39 map
+    62         0 @StaticArrays/…rc/matrix_multiply.jl   11 *
+    62         0 @StaticArrays/…rc/matrix_multiply.jl  130 _mul
+    62         5 @StaticArrays/…rc/matrix_multiply.jl  139 macro expansion
+    14         0 @StaticArrays/…rc/matrix_multiply.jl  218 macro expansion
+    43         0 @StaticArrays/…rc/matrix_multiply.jl  221 macro expansion
+    57         0 @StaticArrays/…rc/matrix_multiply.jl  188 mul_loop
+  4403         2 @StellarSpectraObservationFitting/…ing/bench_gradient.jl   55 top-level scope
+   201         0 @StellarSpectraObservationFitting/src/ad_backend.jl  300 augmented_primal
+    33         0 @StellarSpectraObservationFitting/src/ad_backend.jl  301 augmented_primal
+   271         0 @StellarSpectraObservationFitting/src/ad_backend.jl  314 reverse
+    18         0 @StellarSpectraObservationFitting/src/ad_backend.jl  315 reverse
+  4360         0 @StellarSpectraObservationFitting/src/ad_backend.jl  238 value_and_gradient!
+  1059         0 @StellarSpectraObservationFitting/…rc/model_functions.jl  888 _eval_lm_inner
+   551         0 @StellarSpectraObservationFitting/…rc/model_functions.jl    ? augmented_julia_spectra_interp_55…
+   835         0 @StellarSpectraObservationFitting/…rc/model_functions.jl    ? diffejulia_spectra_interp_55014_i…
+    35         1 @StellarSpectraObservationFitting/…rc/model_functions.jl 1357 model_prior
+    36         0 @StellarSpectraObservationFitting/…rc/model_functions.jl 1367 model_prior
+  1386         0 @StellarSpectraObservationFitting/…rc/model_functions.jl    ? spectra_interp
+   327         0 @StellarSpectraObservationFitting/…rc/model_functions.jl  147 spectra_interp
+  1059         0 @StellarSpectraObservationFitting/…rc/model_functions.jl  150 spectra_interp
+     6         0 @StellarSpectraObservationFitting/…rc/model_functions.jl  150 spectra_interp(model_flux::Matrix…
+   201         0 @StellarSpectraObservationFitting/…rc/model_functions.jl  971 spectra_interp
+     8         0 @StellarSpectraObservationFitting/…rc/model_functions.jl  971 spectra_interp
+    56         0 @StellarSpectraObservationFitting/…rc/model_functions.jl  975 spectra_interp
+    59         0 @StellarSpectraObservationFitting/…rc/model_functions.jl  977 spectra_interp
+   360         0 @StellarSpectraObservationFitting/…rc/model_functions.jl 1416 total_model
+  1293         0 @StellarSpectraObservationFitting/…mization_functions.jl   25 #__loss_diagnostic#76
+   401         0 @StellarSpectraObservationFitting/…mization_functions.jl   16 #_χ²_loss#72
+    27         0 @StellarSpectraObservationFitting/…mization_functions.jl  639 first_iterate!(l::StellarSpectraO…
+    30         0 @StellarSpectraObservationFitting/…mization_functions.jl  657 first_iterate!(l::Function, l0::F…
+  4361         0 @StellarSpectraObservationFitting/…mization_functions.jl  598 update!(aws::StellarSpectraObserv…
+    30         0 @StellarSpectraObservationFitting/…mization_functions.jl  603 update!(aws::StellarSpectraObserv…
+     8         0 @StellarSpectraObservationFitting/…mization_functions.jl  608 update!(aws::StellarSpectraObserv…
+  1282         0 @StellarSpectraObservationFitting/…mization_functions.jl    ? __loss_diagnostic
+  1282         0 @StellarSpectraObservationFitting/…mization_functions.jl   25 __loss_diagnostic
+    11         0 @StellarSpectraObservationFitting/…mization_functions.jl   25 __loss_diagnostic(tel::Matrix{Flo…
+  1051         0 @StellarSpectraObservationFitting/…mization_functions.jl    ? _ev
+  1051         0 @StellarSpectraObservationFitting/…mization_functions.jl  251 _ev
+     8         0 @StellarSpectraObservationFitting/…mization_functions.jl  251 (::StellarSpectraObservationFitti…
+   172         0 @StellarSpectraObservationFitting/…mization_functions.jl   14 _χ²_loss
+   401         0 @StellarSpectraObservationFitting/…mization_functions.jl   15 _χ²_loss
+   401         0 @StellarSpectraObservationFitting/…mization_functions.jl   16 _χ²_loss
+   592         0 @StellarSpectraObservationFitting/…mization_functions.jl    ? augmented_julia___loss_diagnostic…
+   529         0 @StellarSpectraObservationFitting/…mization_functions.jl    ? augmented_julia__ev_70301_inner_1…
+  1911         0 @StellarSpectraObservationFitting/…mization_functions.jl    ? augmented_julia_l_total_80774_inn…
+   690         0 @StellarSpectraObservationFitting/…mization_functions.jl    ? diffejulia___loss_diagnostic_6852…
+   522         0 @StellarSpectraObservationFitting/…mization_functions.jl    ? diffejulia__ev_70301_inner_19wrap
+  2449         0 @StellarSpectraObservationFitting/…mization_functions.jl    ? diffejulia_l_total_80774_inner_1w…
+    30         0 @StellarSpectraObservationFitting/…mization_functions.jl  619 kwcall(::@NamedTuple{ind::Vector{…
+    30         0 @StellarSpectraObservationFitting/…mization_functions.jl  655 first_iterate!(l::Function, l0::F…
+     8         0 @StellarSpectraObservationFitting/…mization_functions.jl  504 iterate!(θs::Tuple{Tuple{Matrix{F…
+     6         0 @StellarSpectraObservationFitting/…mization_functions.jl  526 iterate!(θ::Matrix{Float64}, ∇θ::…
+  4360         0 @StellarSpectraObservationFitting/…mization_functions.jl    ? l_total
+   905         0 @StellarSpectraObservationFitting/…mization_functions.jl  259 l_total
+     5         0 @StellarSpectraObservationFitting/…mization_functions.jl  259 (::StellarSpectraObservationFitti…
+  1903         6 @StellarSpectraObservationFitting/…mization_functions.jl  260 l_total
+    11         0 @StellarSpectraObservationFitting/…mization_functions.jl  260 (::StellarSpectraObservationFitti…
+  1552         3 @StellarSpectraObservationFitting/…mization_functions.jl  261 l_total
+    14         0 @StellarSpectraObservationFitting/…mization_functions.jl  261 (::StellarSpectraObservationFitti…
+  4401         0 @StellarSpectraObservationFitting/…mization_functions.jl  596 update!(aws::StellarSpectraObserv…
+    24         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl  221 gp_Δℓ_helper_γ(y::SubArray{Float6…
+    36         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl  224 gp_Δℓ_helper_γ(y::Vector{Float64}…
+    21         1 @StellarSpectraObservationFitting/…prior_gp_functions.jl  130 gp_ℓ(y::SubArray{Float64, 1, Matr…
+    34         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl  133 gp_ℓ(y::SubArray{Float64, 1, Matr…
+    12         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl  135 gp_ℓ(y::SubArray{Float64, 1, Matr…
+    85         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl  311 #Δℓ_precalc#305
+    11         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl  432 _model_prior_∂lm!
+    47         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl  443 _model_prior_∂lm!
+    40         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl  462 _model_prior_∂lm!
+    61         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl  214 gp_Δℓ_helper_γ(y::Vector{Float64}…
+    70         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl  121 gp_ℓ(y::SubArray{Float64, 1, Matr…
+    70         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl  302 gp_ℓ_precalc(Δℓ_coeff::SparseArra…
+    43         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl   69 predict!(m_kbar::StaticArraysCore…
+    30         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl   80 update_sde!(K_k::StaticArraysCore…
+    22         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl   81 update_sde!(K_k::StaticArraysCore…
+     5         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl   82 update_sde!(K_k::StaticArraysCore…
+     7         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl   83 update_sde!(K_k::StaticArraysCore…
+    85         0 @StellarSpectraObservationFitting/…prior_gp_functions.jl  311 Δℓ_precalc(Δℓ_coeff::SparseArrays…
+Total snapshots: 35320. Utilization: 50% across all threads and tasks. Use the `groupby` kwarg to break down by thread and/or task.
