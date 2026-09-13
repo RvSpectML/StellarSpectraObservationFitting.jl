@@ -34,6 +34,12 @@ import StellarSpectraObservationFitting as SSOF
 using JLD2, Statistics, KernelDensity, Distributions, StatsBase
 using Profile  # stdlib; resolved via @stdlib regardless of Project.toml
 
+# Default buffer (1e6 samples) overflows silently on stages this long/deep
+# (calculate_initial_model, fit_regularization each ran ~500-700s and overflowed
+# it in practice) -- Profile.clear() does not resize it, so this must run once
+# up front. Coarsen delay to 5ms so 10-15 min stages still fit comfortably.
+Profile.init(n = 10^8, delay = 0.005)
+
 include(joinpath(@__DIR__, "_setup.jl"))
 
 timings_file = joinpath(outdir, "timings.txt")

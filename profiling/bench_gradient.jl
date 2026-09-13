@@ -25,6 +25,7 @@ import StellarSpectraObservationFitting as SSOF
 using JLD2, Statistics, KernelDensity, Distributions, StatsBase
 using BenchmarkTools
 using Profile  # stdlib; resolved via @stdlib regardless of Project.toml
+Profile.init(n = 10^8, delay = 0.005)  # see profile_example.jl for why
 
 include(joinpath(@__DIR__, "_setup.jl"))
 

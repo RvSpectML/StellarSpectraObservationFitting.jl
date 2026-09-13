@@ -46,6 +46,17 @@ Default backend for all Wobble and DPCA optimization paths.
 """
 struct EnzymeBackend <: ADBackend end
 
+# Concretizing Submodel/OrderModel field types (so Enzyme can statically resolve
+# the loss closures instead of falling back to its boxed runtime-generic path)
+# exposed a real Enzyme limitation: differentiating through a FullLinearModel
+# whose `s` field is a SubArray (the train/test-split views used by
+# fit_regularization!'s only_s=true test workspace) throws
+# IllegalTypeAnalysisException under Enzyme's default strict-aliasing
+# assumption. Enzyme's own error message recommends this exact toggle; it's a
+# conservative fallback (drops an optimization assumption), not a correctness
+# concession — see IllegalTypeAnalysisException's message for the mechanism.
+Enzyme.API.strictAliasing!(false)
+
 # StellarInterpolationHelper holds precomputed interpolation indices and weights
 # derived from the fixed observational and model wavelength grids.  It is never
 # a function of the optimized parameters, so its tangent is always zero —
