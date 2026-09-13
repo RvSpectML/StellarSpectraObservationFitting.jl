@@ -346,6 +346,67 @@ function loss_funcs_frozen_tel(o::Output, om::OrderModel, d::Data)
     end
     return l_frozen_tel, l_frozen_tel_s
 end
+# Wobble override: same rationale as `loss_funcs_total(o, om::OrderModelWobble, d)` above.
+# `total[1+is_tel_time_variable]`-style runtime tuple indexing over a heterogeneous tuple
+# infers as a Union, and the `tel = ... : tel = nothing` ternary plus routing `tel=`/`star=`
+# through `_loss`'s kwargs adds another Union + breaks Enzyme's activity tracking through
+# `Core.kwcall`. As in `l_total_s`, the `is_tel_time_variable`/`is_star_time_variable`
+# branch is hoisted to closure-construction time so each returned closure has literal
+# indices and an unconditional, concretely-typed body.
+function loss_funcs_frozen_tel(o::Output, om::OrderModelWobble, d::Data)
+	_tel_log_lm = Val(log_lm(om.tel.lm))
+	_star_log_lm = Val(log_lm(om.star.lm))
+	function _ev_star(v)
+		length(v) == 3 && return _eval_lm_inner(v[1], v[2], v[3], _star_log_lm)
+		length(v) == 2 && return _eval_lm_inner(v[1], v[2], _star_log_lm)
+		return v[1] * ones(om.n)'
+	end
+	is_tel_time_variable = is_time_variable(om.tel)
+	is_star_time_variable = is_time_variable(om.star)
+	l_frozen_tel = if is_tel_time_variable
+		function(total)
+			s_tel = total[1]; star_lm = total[2]; rv = total[3]
+			tel_o = spectra_interp(_eval_lm_inner(om.tel.lm.M, s_tel, om.tel.lm.μ, _tel_log_lm), om.t2o)
+			star_o = spectra_interp(_ev_star(star_lm), _rv_shift(rv, om.bary_rvs), om.b2o)
+			sum(__loss_diagnostic(tel_o, star_o, d)) + star_prior(star_lm, om)
+		end
+	else
+		function(total)
+			star_lm = total[1]; rv = total[2]
+			star_o = spectra_interp(_ev_star(star_lm), _rv_shift(rv, om.bary_rvs), om.b2o)
+			sum(__loss_diagnostic(o.tel, star_o, d)) + star_prior(star_lm, om)
+		end
+	end
+	_const_star_flux = om.star.lm()
+	l_frozen_tel_s = if is_tel_time_variable && is_star_time_variable
+		function(total_s)
+			s_tel = total_s[1]; s_star = total_s[2]; rv = total_s[3]
+			tel_o = spectra_interp(_eval_lm_inner(om.tel.lm.M, s_tel, om.tel.lm.μ, _tel_log_lm), om.t2o)
+			star_o = spectra_interp(_eval_lm_inner(om.star.lm.M, s_star, om.star.lm.μ, _star_log_lm), _rv_shift(rv, om.bary_rvs), om.b2o)
+			sum(__loss_diagnostic(tel_o, star_o, d; use_var_s=true)) + model_s_prior(s_star, om.reg_star)
+		end
+	elseif is_tel_time_variable
+		function(total_s)
+			s_tel = total_s[1]; rv = total_s[2]
+			tel_o = spectra_interp(_eval_lm_inner(om.tel.lm.M, s_tel, om.tel.lm.μ, _tel_log_lm), om.t2o)
+			star_o = spectra_interp(_const_star_flux, _rv_shift(rv, om.bary_rvs), om.b2o)
+			sum(__loss_diagnostic(tel_o, star_o, d; use_var_s=true))
+		end
+	elseif is_star_time_variable
+		function(total_s)
+			s_star = total_s[1]; rv = total_s[2]
+			star_o = spectra_interp(_eval_lm_inner(om.star.lm.M, s_star, om.star.lm.μ, _star_log_lm), _rv_shift(rv, om.bary_rvs), om.b2o)
+			sum(__loss_diagnostic(o.tel, star_o, d; use_var_s=true)) + model_s_prior(s_star, om.reg_star)
+		end
+	else
+		function(total_s)
+			rv = total_s[1]
+			star_o = spectra_interp(_const_star_flux, _rv_shift(rv, om.bary_rvs), om.b2o)
+			sum(__loss_diagnostic(o.tel, star_o, d; use_var_s=true))
+		end
+	end
+	return l_frozen_tel, l_frozen_tel_s
+end
 loss_funcs_frozen_tel(mws::ModelWorkspace) = loss_funcs_frozen_tel(mws.o, mws.om, mws.d)
 
 
