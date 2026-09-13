@@ -4,9 +4,18 @@
 # defined (repo root) and `SSOF`, `JLD2`, `Statistics`, `KernelDensity`,
 # `Distributions`, `StatsBase` loaded.
 
+using Random
+
 include(joinpath(REPO, "examples", "_lsf.jl"))  # defines NEIDLSF.neid_lsf
 
-function build_simulated_data(; n_simulated_observations::Int=50, desired_max_snr::Real=500)
+# example.jl doesn't seed the RNG, so every run resamples different stellar/
+# telluric scores and noise, which can shift calculate_initial_model's AIC
+# search path (and hence how much of its Enzyme time is genuine
+# runtime_generic dispatch vs. one-off type inference for a newly-encountered
+# candidate). Fix a seed so baseline/before-after profiling runs are
+# comparable, per profiling/HANDOFF_PERF.md Step 0/Step 3.
+function build_simulated_data(; n_simulated_observations::Int=50, desired_max_snr::Real=500, seed::Int=20260913)
+	Random.seed!(seed)
 	data_dir = joinpath(REPO, "examples", "data")
 	@load joinpath(data_dir, "results.jld2") model
 	@load joinpath(data_dir, "data.jld2") data
