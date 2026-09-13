@@ -1,0 +1,6 @@
+stage,seconds
+setup_simulate_data,4.930906772613525
+calculate_initial_model,461.11556601524353
+ModelWorkspace_construction,0.13068008422851562
+fit_regularization,667.1872310638428
+improve_model,112.42518210411072

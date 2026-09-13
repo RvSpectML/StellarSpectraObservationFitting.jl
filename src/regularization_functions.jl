@@ -117,6 +117,7 @@ function fit_regularization_helper!(reg_fields::Vector{Symbol}, reg_key::Symbol,
 
         println("$(reg_fields[1])[:$reg_key] χ²: $start_ℓ -> $end_ℓ (" * ratio_clarifier_string(end_ℓ/start_ℓ) * ")")
         println("overall χ² change: $before_ℓ -> $end_ℓ (" * ratio_clarifier_string(end_ℓ/before_ℓ) * ")")
+        flush(stdout)
 
         # removing the regularization term if it is significantly bad
         if end_ℓ > ((1 + thres/100) * before_ℓ)
@@ -203,6 +204,7 @@ function fit_regularization!(mws::ModelWorkspace, testing_inds::AbstractVecOrMat
     println("starting regularization searches")
     before_ℓ = _eval_regularization(copy(mws.om), mws, training_inds, testing_inds)
     println("initial training χ²: $before_ℓ")
+    flush(stdout)
     for key in key_list
         if key == :L1_μ₊_factor
             test_factor, reg_min, reg_max = 1.2, 1e-1, 1e1

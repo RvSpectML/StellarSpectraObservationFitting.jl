@@ -1,4 +1,5 @@
 total_length(x::Vector{<:AbstractArray}) = sum(total_length.(x))
+total_length(x::Tuple) = sum(total_length.(x))
 total_length(x::AbstractArray) = length(x)
 """
     total_length(mws)
