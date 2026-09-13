@@ -1,6 +1,0 @@
-stage,wall_seconds
-setup_simulate_data,9.373265593
-calculate_initial_model,464.514612594
-ModelWorkspace_construction,0.129252097
-fit_regularization,623.646335237
-improve_model,98.820171746
