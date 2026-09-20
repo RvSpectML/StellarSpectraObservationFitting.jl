@@ -17,9 +17,20 @@ include("_plots.jl")  # some plotting functions
 _plot(; dpi = 100, size = (960, 540), thickness_scaling=1., margin=4Plots.mm, kwargs...) =
     plot(; dpi=dpi, size=size, thickness_scaling=thickness_scaling, margin=margin, kwargs...)
 
-# load in a prefit SSOF model and the data that it was fit to
-@load "examples/data/results.jld2" model
-@load "examples/data/data.jld2" data  # only used for LSF and blaze function
+# load the data, and a prefit SSOF model if one has been cached locally
+# (results.jld2 is git-ignored since saved models break whenever the struct layout changes)
+@load "examples/data/data.jld2" data  # used to fit the model, and for LSF and blaze function
+if isfile("examples/data/results.jld2")
+    @load "examples/data/results.jld2" model
+else
+    n_data = size(data.flux, 2)
+    model = SSOF.calculate_initial_model(data; instrument="NEID", desired_order=81, star="26965",
+        times=collect(LinRange(2459580., 2459580. + 365., n_data)), max_n_tel=2, max_n_star=2)
+    mws_data = SSOF.ModelWorkspace(model, data)
+    SSOF.fit_regularization!(mws_data)
+    SSOF.improve_model!(mws_data; iter=500, verbose=true, careful_first_step=true, speed_up=false)
+    @save "examples/data/results.jld2" model
+end
 
 # how many observations we want
 n_simulated_observations = 50

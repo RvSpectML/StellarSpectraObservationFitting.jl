@@ -5,6 +5,7 @@ good_run
 lines
 old
 examples/generate_example_data.jl
+examples/data/results.jld2
 *.png
 *.gif
 *data_locs.jl
