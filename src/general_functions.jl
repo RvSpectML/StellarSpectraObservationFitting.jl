@@ -2,8 +2,8 @@ using UnitfulAstro, Unitful
 using Statistics
 using LinearAlgebra
 
-light_speed = uconvert(u"m/s", 1u"c")
-light_speed_nu = ustrip(light_speed)
+const light_speed = uconvert(u"m/s", 1u"c")
+const light_speed_nu = ustrip(light_speed)
 
 
 """

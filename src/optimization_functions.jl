@@ -429,6 +429,7 @@ function println(as::AdamState)
     println("ℓ:     ", as.ℓ,    "  ℓ_$(as.iter)/ℓ_$(as.iter-1):       ", as.δ_ℓ)
 	println("L2_Δ:  ", as.L2_Δ, "  L2_Δ_$(as.iter)/L2_Δ_$(as.iter-1): ", as.δ_L2_Δ)
 	println()
+	flush(stdout)
 end
 
 function iterate!(θs::Vector{<:AbstractArray}, ∇θs::Vector{<:AbstractArray}, opts::Vector)
@@ -1088,9 +1089,10 @@ end
 
 function optim_print(x)
 	println()
-	println("ℓ:     ", x.f_x)
-	println("L∞(∇): ", maximum(abs, x.g_x))
+	println("ℓ:     ", x.value)
+	println("L∞(∇): ", x.g_norm)
 	println()
+	flush(stdout)
 	# ends optimization if true
 	return false
 end
@@ -1725,6 +1727,7 @@ function calculate_initial_model(data::Data;
 	
 	add_comp = true
 	println("looking for time variability...")
+	flush(stdout)
 
 	# while we are looking to add new model components
 	while add_comp
@@ -1740,6 +1743,7 @@ function calculate_initial_model(data::Data;
 			println("n_comp: ($n_tel_cur,$n_star_cur) -> ($n_tel_next,$n_star_next)")
 			println("aic   : $(aics[comp2ind(n_tel_cur, n_star_cur)...]) -> $(aics[comp2ind(n_tel_next, n_star_next)...])")
 			println("RV std: $(rv_stds[comp2ind(n_tel_cur, n_star_cur)...]) -> $(rv_stds[comp2ind(n_tel_next, n_star_next)...])")
+			flush(stdout)
 		end
 		n_tel_cur, n_star_cur = n_tel_next, n_star_next
 		search_new_tel = n_tel_cur+1 <= max_n_tel
@@ -1808,6 +1812,7 @@ function calculate_initial_model(data::Data;
 	best_aic = argmin(aics)
 	println("($(test_n_comp_tel[best_aic[1]]),$(test_n_comp_star[best_aic[2]])) was the best at aic = $(aics[best_aic])")
 	println("best possible aic (k=0, χ²=0) = $(logdet_Σ + n * _log2π)")
+	flush(stdout)
 
 	if return_full_path
 		return oms, ℓs, aics, bics, rv_stds, rv_stds_intra, comp2ind, n_tel_cur, n_star_cur
