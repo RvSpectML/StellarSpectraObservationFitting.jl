@@ -20,6 +20,7 @@ function estimate_σ_curvature_helper(x::AbstractVecOrMat, ℓ::Function; n::Int
 
 	# use this to scale size of curvature probe
 	_std = std(x)
+	if !(_std > 0); _std = one(_std) end  # all-equal (e.g. all-zero) parameters would otherwise probe a single point
 
 	# collect a sample of `ℓ` evaluations around each `x` value and calculate uncertanties
 	if multithread

@@ -638,7 +638,8 @@ function first_iterate!(l::Function, l0::Real, θs, θ::AbstractArray{Float64}, 
 	# keep reducing `opt.α` until `l1` is less than `l0`
 	l1 = l(θs)
 	factor = 1
-	while l1 > l0
+	# (bounded so a degenerate problem where no step can help ends with a ~zero step instead of looping forever)
+	while l1 > l0 && factor < 2^50
 		factor *= 2 
 		opt.α /= 2
 		θ .+= opt.α * θ_step
@@ -1150,8 +1151,14 @@ end
 
 function optim_print(x)
 	println()
-	println("ℓ:     ", x.value)
-	println("L∞(∇): ", x.g_norm)
+	# Optim 1 passes an OptimizationState (value, g_norm); Optim 2 passes the method's raw state (f_x, g_x)
+	if hasproperty(x, :value)
+		println("ℓ:     ", x.value)
+		println("L∞(∇): ", x.g_norm)
+	else
+		println("ℓ:     ", x.f_x)
+		println("L∞(∇): ", maximum(abs, x.g_x))
+	end
 	println()
 	flush(stdout)
 	# ends optimization if true

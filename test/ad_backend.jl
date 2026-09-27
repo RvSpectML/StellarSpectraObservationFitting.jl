@@ -3,7 +3,8 @@
     @test SSOF.EnzymeBackend() isa SSOF.ADBackend
 end
 
-if !SKIP_SLOW; @testset "MooncakeBackend gradient correctness" begin
+# Mooncake is a weak dependency; the backend only exists when its extension is loaded
+if !SKIP_SLOW && Base.get_extension(SSOF, :SSOFMooncakeExt) !== nothing; @testset "MooncakeBackend gradient correctness" begin
     f(x) = sum(x .^ 2)
     x0 = randn(8)
     cache = SSOF.prepare_gradient(SSOF.MooncakeBackend(), f, copy(x0))
@@ -11,7 +12,7 @@ if !SKIP_SLOW; @testset "MooncakeBackend gradient correctness" begin
     @test isapprox(val_mk, sum(x0 .^ 2); rtol=1e-10)
     @test isapprox(∂_mk, 2 .* x0; rtol=1e-4)
     println()
-end; end  # if !SKIP_SLOW
+end; end  # if !SKIP_SLOW && extension loaded
 
 @testset "EnzymeBackend nested-tuple θ with aliasing into captured om" begin
     # Phase 3: the Adam path. Production calls look like:
