@@ -8,8 +8,8 @@ StellarSpectraObservationFitting.jl (SSOF, pronounced like "soufflé") measures 
 
 ## Commands
 
-Use julia v1.11.2 for code in this repository.  
-JULIA = /home/eford/.julia/juliaup/julia-1.11.2+0.x64.linux.gnu/bin/julia
+Use julia v1.12.7 for code in this repository.
+JULIA = /home/eford/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/bin/julia
 
 ```bash
 # Run tests (all tests live in test/runtests.jl)
