@@ -1386,7 +1386,7 @@ function model_s_prior(s, reg::Dict)
 	if (nonzero_key(reg, :L1_M) || nonzero_key(reg, :L2_M) || nonzero_key(reg, :GP_M))
 		return L2(s)
 	end
-	return 0
+	return 0.
 end
 
 

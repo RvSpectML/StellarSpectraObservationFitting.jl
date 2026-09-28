@@ -289,16 +289,18 @@ end
 # Δℓ_coe_s = Δℓ_coefficients(y, A_k, Σ_k, H_k, P∞; σ²_meas=σ²_meas, sparsity=100)
 
 """
-    gp_ℓ_precalc(ℓ_coeff, x, A_k, Σ_k; kwargs...)
+    gp_ℓ_precalc(ℓ_coeff, x, A_k, Σ_k)
 
 A version of `gp_ℓ()` using the coefficients calculated by `gp_Δℓ_coefficients()`
+
+No callers pass kwargs here, so there is a single, no-kwargs method (Enzyme requires
+a non-kwcall dispatch target for the native augmented_primal rule below: a second,
+kwargs-accepting method would make Julia route no-kwarg calls through the kwfunc
+machinery, causing Enzyme's custom-rule lookup to use the kwfunc path and miss the
+native rule - and, on Julia 1.12, would also collide with this method's own
+auto-generated no-kwargs forwarder, erroring "Method overwriting is not permitted
+during Module precompilation").
 """
-gp_ℓ_precalc(Δℓ_coeff::AbstractMatrix, x::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix; kwargs...) =
-    gp_ℓ(x, A_k, Σ_k; kwargs...)
-# No-kwargs overload: Enzyme requires a non-kwcall dispatch target for the native
-# augmented_primal rule below. Without this, Julia routes no-kwarg calls through the
-# kwfunc machinery (because the kwargs... method exists), causing Enzyme's custom-rule
-# lookup to use the kwfunc path and miss the native rule.
 gp_ℓ_precalc(Δℓ_coeff::AbstractMatrix, x::AbstractVector, A_k::AbstractMatrix, Σ_k::AbstractMatrix) :: Float64 =
     gp_ℓ(x, A_k, Σ_k)
 

@@ -8,8 +8,8 @@ StellarSpectraObservationFitting.jl (SSOF, pronounced like "soufflé") measures 
 
 ## Commands
 
-Use julia v1.11.2 for code in this repository.  
-JULIA = /home/eford/.julia/juliaup/julia-1.11.2+0.x64.linux.gnu/bin/julia
+Use julia v1.12.7 for code in this repository.
+JULIA = /home/eford/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/bin/julia
 
 ```bash
 # Run tests (all tests live in test/runtests.jl)
@@ -48,7 +48,7 @@ Key types:
 ## Constraints worth knowing
 
 - The default for Automatic differentiation recently changed to Enzyme.jl. The AD seam is `src/ad_backend.jl`: `prepare_gradient(b, l, θ)` + `value_and_gradient!(cache, l, θ)`.  `src/Nabla_extension.jl` is an orphaned file (no longer included in the module) pending deletion.
-- `TemporalGPs = "0.5 - 0.6.7"` is pinned to avoid precompilation warnings (see commit dd34be2). `prior_gp_functions.jl` reimplements the state-space GP likelihood (and analytic gradients, optionally sparse/precalculated) rather than calling TemporalGPs directly, for speed.
+- `TemporalGPs = "0.7"` (bumped from the old `"0.5 - 0.6.7"` pin): versions through 0.6.8 defined an `rrule` that pirates a method StaticArrays' own `StaticArraysChainRulesCoreExt` has defined since ~Dec 2023, which throws a "Method overwriting is not permitted during Module precompilation" error on Julia 1.12; 0.7.0 dropped Zygote/that file entirely. `prior_gp_functions.jl` reimplements the state-space GP likelihood (and analytic gradients, optionally sparse/precalculated) rather than calling TemporalGPs directly, for speed.
 - `continuum_functions.jl` and `rassine.jl` (a port of RASSINE) handle continuum normalization; `mask_functions.jl` handles bad-pixel/edge masking (e.g. `mask_bad_edges!`).
 - Wavelengths are handled as log-wavelength almost everywhere (`log_λ`), and Doppler shifts as `rv_to_D` factors.
 - This is Christian Gilbertson's package; docs deploy from `master` via GitHub Actions to christiangil.github.io. Docstring markdown pages live in `docs/src/` and are organized by source file (e.g. `opt.md` ↔ `optimization_functions.jl`).
